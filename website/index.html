@@ -5,46 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b0d10">
   <title>DarkLoot</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/src/styles.css">
 </head>
 <body>
   <header class="app-header">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">DL</div>
-      <h1>DarkLoot</h1>
+      <div>
+        <h1>DarkLoot</h1>
+        <p id="dataStatus">Loading loot data...</p>
+      </div>
     </div>
+    <div class="header-updated" aria-label="Data updated">
+      <span>Updated</span>
+      <strong id="updatedAt">-</strong>
+    </div>
+  </header>
+
+  <main>
     <nav class="tabs app-nav" aria-label="Primary">
       <button class="tab active" data-tab="items">Items</button>
       <button class="tab" data-tab="sources">Sources</button>
       <button class="tab" data-tab="favorites">Favorites</button>
     </nav>
-    <p id="dataStatus" class="nav-status">Loading loot data...</p>
-  </header>
 
-  <main>
-    <section class="summary-band" aria-label="Data summary">
-      <div>
-        <span>Items</span>
-        <strong id="itemTotal">0</strong>
-      </div>
-      <div>
-        <span>Sources</span>
-        <strong id="sourceTotal">0</strong>
-      </div>
+    <section class="control-band" aria-label="Controls">
       <div>
         <span>Luck</span>
         <input id="luckInput" type="number" min="0" max="500" step="1" value="500" aria-label="Luck">
-      </div>
-      <div>
-        <span>Updated</span>
-        <strong id="updatedAt">-</strong>
       </div>
     </section>
 
     <section id="itemsView" class="view active">
       <div class="view-head">
         <h2>Item Drops</h2>
-        <span id="itemCount" class="result-count">0 results</span>
       </div>
       <div class="filters">
         <label class="wide">Search item or source
@@ -68,24 +63,25 @@
           <thead>
             <tr>
               <th class="fav-col">Fav</th>
-              <th>Item</th>
-              <th>Rarity</th>
-              <th>Category</th>
-              <th>Maps</th>
-              <th>Difficulties</th>
-              <th class="num">Sources</th>
+              <th><button class="sort-button" data-sort-list="items" data-sort-key="item">Item</button></th>
+              <th><button class="sort-button" data-sort-list="items" data-sort-key="rarity">Rarity</button></th>
+              <th><button class="sort-button" data-sort-list="items" data-sort-key="category">Category</button></th>
+              <th><button class="sort-button" data-sort-list="items" data-sort-key="maps">Maps</button></th>
+              <th><button class="sort-button" data-sort-list="items" data-sort-key="difficulties">Difficulties</button></th>
+              <th class="num"><button class="sort-button num" data-sort-list="items" data-sort-key="chance">Best Chance</button></th>
+              <th class="num"><button class="sort-button num" data-sort-list="items" data-sort-key="sources">Sources</button></th>
               <th class="action-col">Open</th>
             </tr>
           </thead>
           <tbody id="itemRows"></tbody>
         </table>
       </div>
+      <div id="itemTableMeta" class="table-meta" aria-live="polite"></div>
     </section>
 
     <section id="sourcesView" class="view">
       <div class="view-head">
         <h2>Loot Sources</h2>
-        <span id="sourceCount" class="result-count">0 results</span>
       </div>
       <div class="filters source-filters">
         <label class="wide">Search source or item
@@ -106,17 +102,20 @@
           <thead>
             <tr>
               <th class="fav-col">Fav</th>
-              <th>Source</th>
-              <th>Kind</th>
-              <th>Maps</th>
-              <th>Difficulties</th>
-              <th class="num">Items</th>
+              <th><button class="sort-button" data-sort-list="sources" data-sort-key="source">Source</button></th>
+              <th><button class="sort-button" data-sort-list="sources" data-sort-key="kind">Kind</button></th>
+              <th><button class="sort-button" data-sort-list="sources" data-sort-key="maps">Maps</button></th>
+              <th><button class="sort-button" data-sort-list="sources" data-sort-key="difficulties">Difficulties</button></th>
+              <th class="num"><button class="sort-button num" data-sort-list="sources" data-sort-key="items">Items</button></th>
+              <th class="num"><button class="sort-button num" data-sort-list="sources" data-sort-key="chance">Best Chance</button></th>
+              <th><button class="sort-button" data-sort-list="sources" data-sort-key="topItem">Top Item</button></th>
               <th class="action-col">Open</th>
             </tr>
           </thead>
           <tbody id="sourceRows"></tbody>
         </table>
       </div>
+      <div id="sourceTableMeta" class="table-meta" aria-live="polite"></div>
     </section>
 
     <section id="favoritesView" class="view">

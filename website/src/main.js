@@ -10,10 +10,20 @@
   detailCache: new Map(),
   currentLuck: 500,
   activeDetail: null,
+  sort: {
+    items: { key: "chance", direction: "desc" },
+    sources: { key: "chance", direction: "desc" },
+  },
 };
 
 const FAVORITES_KEY = "darkloot:favorites:v1";
-const MAX_ROWS = 350;
+const MAX_ROWS = 500;
+const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
+const DEFAULT_SORT_DIRECTION = {
+  chance: "desc",
+  sources: "desc",
+  items: "desc",
+};
 const LUCK_500_SCALARS = [0.5, 0.5, 0.75, 1.0, 1.752, 2.584, 3.28, 3.705, 4.213];
 const GRADE4_ANCHORS = [
   [0, 1.000],
@@ -202,9 +212,7 @@ async function loadData() {
   state.rateWeights = rates.rows || {};
   state.itemByAsset = new Map(state.items.map((row) => [row.itemAsset, row]));
   state.sourceByKey = new Map(state.sources.map((row) => [sourceKey(row.source, row.sourceKind), row]));
-  $("dataStatus").textContent = `Current data for darkloot.net`;
-  $("itemTotal").textContent = state.items.length.toLocaleString();
-  $("sourceTotal").textContent = state.sources.length.toLocaleString();
+  $("dataStatus").textContent = "";
   $("luckInput").value = String(state.currentLuck);
   $("updatedAt").textContent = formatDate(state.manifest.generatedAt);
   fillFilters();
@@ -319,14 +327,125 @@ function sourceLookupKey(row) {
   return direct;
 }
 
+function listText(value) {
+  return splitValues(value).join(", ");
+}
+
+function rarityRank(value) {
+  const index = RARITY_ORDER.indexOf(value);
+  return index === -1 ? RARITY_ORDER.length : index;
+}
+
+function compareSortValues(left, right) {
+  if (typeof left === "number" && typeof right === "number") {
+    return left - right;
+  }
+  return String(left ?? "").localeCompare(String(right ?? ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function itemSortValue(row, key) {
+  switch (key) {
+    case "item":
+      return row.item;
+    case "rarity":
+      return rarityRank(row.rarity);
+    case "category":
+      return row.category;
+    case "maps":
+      return listText(row.maps || row.map);
+    case "difficulties":
+      return listText(row.diffs || row.diff);
+    case "sources":
+      return Number(row.sourceCount || 0);
+    case "chance":
+    default:
+      return chanceValue(row);
+  }
+}
+
+function sourceSortValue(row, key) {
+  switch (key) {
+    case "source":
+      return row.source;
+    case "kind":
+      return row.sourceKind;
+    case "maps":
+      return listText(row.mapValues || row.maps);
+    case "difficulties":
+      return listText(row.diffValues || row.diffs);
+    case "items":
+      return Number(row.itemCount || 0);
+    case "topItem":
+      return row.topItem;
+    case "chance":
+    default:
+      return chanceValue(row, "bestDynValue");
+  }
+}
+
+function sortedRows(rows, list) {
+  const sort = state.sort[list];
+  const getter = list === "items" ? itemSortValue : sourceSortValue;
+  const direction = sort.direction === "desc" ? -1 : 1;
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => {
+      const result = compareSortValues(getter(left.row, sort.key), getter(right.row, sort.key));
+      if (result) return result * direction;
+      return left.index - right.index;
+    })
+    .map((entry) => entry.row);
+}
+
+function setSort(list, key) {
+  const current = state.sort[list];
+  const direction = current.key === key
+    ? (current.direction === "asc" ? "desc" : "asc")
+    : (DEFAULT_SORT_DIRECTION[key] || "asc");
+  state.sort[list] = { key, direction };
+  render();
+}
+
+function updateSortButtons() {
+  document.querySelectorAll(".sort-button").forEach((button) => {
+    const sort = state.sort[button.dataset.sortList];
+    const active = sort?.key === button.dataset.sortKey;
+    button.classList.toggle("active", active);
+    button.dataset.direction = active ? sort.direction : "";
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.closest("th")?.setAttribute("aria-sort", active ? (sort.direction === "asc" ? "ascending" : "descending") : "none");
+  });
+}
+
+function metaPill(label, value) {
+  return `<span><b>${escapeHtml(label)}</b>${escapeHtml(value)}</span>`;
+}
+
+function tableMeta(rows, selectedRows) {
+  const hidden = Math.max(0, rows.length - selectedRows.length);
+  const hiddenLabel = hidden > 0 ? `${hidden.toLocaleString()} more` : "none";
+  const shownLabel = hidden > 0 ? `top ${selectedRows.length.toLocaleString()}` : selectedRows.length.toLocaleString();
+  return [
+    metaPill("Matches", rows.length.toLocaleString()),
+    metaPill("Shown", shownLabel),
+    metaPill("Not shown", hiddenLabel),
+    metaPill("All items", state.items.length.toLocaleString()),
+    metaPill("All sources", state.sources.length.toLocaleString()),
+    hidden > 0 ? `<span class="limit-note">Only the top ${MAX_ROWS.toLocaleString()} rows are shown right now.</span>` : "",
+  ].join("");
+}
+
 function favoriteButton(active, type, key, label) {
   return `<button class="favorite ${active ? "active" : ""}" data-fav-type="${type}" data-fav-key="${escapeHtml(key)}" title="${escapeHtml(label)}">&#9733;</button>`;
 }
 
 function renderItems() {
-  const rows = filteredItems().sort((a, b) => chanceValue(b) - chanceValue(a));
-  $("itemCount").textContent = `${rows.length.toLocaleString()} results`;
+  const rows = sortedRows(filteredItems(), "items");
   const selectedRows = rows.slice(0, MAX_ROWS);
+  $("itemTableMeta").innerHTML = tableMeta(rows, selectedRows);
   $("itemRows").innerHTML = selectedRows.length
     ? selectedRows.map((row) => `
       <tr>
@@ -336,17 +455,18 @@ function renderItems() {
         <td>${categoryChip(row.category)}</td>
         <td>${chips(row.maps || row.map, "map-chip")}</td>
         <td>${chips(row.diffs || row.diff, "diff-chip")}</td>
+        <td class="num">${escapeHtml(chanceText(row))}</td>
         <td class="num">${escapeHtml(row.sourceCount)}</td>
-        <td><button data-open-item="${escapeHtml(row.itemAsset)}">Sources</button></td>
+        <td class="action-cell"><button data-open-item="${escapeHtml(row.itemAsset)}">Sources</button></td>
       </tr>
     `).join("")
-    : `<tr><td class="message-row" colspan="8">No items match these filters.</td></tr>`;
+    : `<tr><td class="message-row" colspan="9">No items match these filters.</td></tr>`;
 }
 
 function renderSources() {
-  const rows = filteredSources().sort((a, b) => chanceValue(b, "bestDynValue") - chanceValue(a, "bestDynValue"));
-  $("sourceCount").textContent = `${rows.length.toLocaleString()} results`;
+  const rows = sortedRows(filteredSources(), "sources");
   const selectedRows = rows.slice(0, MAX_ROWS);
+  $("sourceTableMeta").innerHTML = tableMeta(rows, selectedRows);
   $("sourceRows").innerHTML = selectedRows.length
     ? selectedRows.map((row) => `
       <tr>
@@ -356,10 +476,12 @@ function renderSources() {
         <td>${chips(row.mapValues || row.maps, "map-chip")}</td>
         <td>${chips(row.diffValues || row.diffs, "diff-chip")}</td>
         <td class="num">${escapeHtml(row.itemCount)}</td>
-        <td><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
+        <td class="num">${escapeHtml(chanceText(row, "bestDynValue", "bestDyn"))}</td>
+        <td>${escapeHtml(row.topItem)}</td>
+        <td class="action-cell"><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
       </tr>
     `).join("")
-    : `<tr><td class="message-row" colspan="7">No sources match these filters.</td></tr>`;
+    : `<tr><td class="message-row" colspan="9">No sources match these filters.</td></tr>`;
 }
 
 function renderFavorites() {
@@ -389,6 +511,7 @@ function renderFavorites() {
 }
 
 function render() {
+  updateSortButtons();
   renderItems();
   renderSources();
   renderFavorites();
@@ -462,7 +585,7 @@ function renderItemDetail(payload) {
       { label: "Kind", html: (row) => kindChip(row.sourceKind) },
       { label: "Maps", html: (row) => chips(row.mapValues || row.maps, "map-chip") },
       { label: "Difficulties", html: (row) => chips(row.diffValues || row.diffs, "diff-chip") },
-      { label: "Chance", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
+      { label: "Best Chance", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
       { label: "Spawns", key: "spawnLocationCount", num: true },
       { label: "Loot Table", key: "bestLootTable" },
       { label: "Open", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
@@ -525,6 +648,10 @@ function wireEvents() {
   document.body.addEventListener("click", (event) => {
     const button = event.target.closest("button");
     if (!button) return;
+    if (button.dataset.sortList && button.dataset.sortKey) {
+      setSort(button.dataset.sortList, button.dataset.sortKey);
+      return;
+    }
     if (button.dataset.openItem) openItem(button.dataset.openItem);
     if (button.dataset.openSource) openSource(button.dataset.openSource);
     if (button.dataset.favType === "item") toggleFavoriteItem(button.dataset.favKey);
