@@ -35,7 +35,7 @@ from loot_spawn_analyzer import (
 
 WEB_APP_TITLE = "DungeonCrawler Loot Browser"
 APP_VERSION = "1.2"
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 INDEX_VERSION = 5
 DEFAULT_LIMIT = 500
 MAX_LIMIT = 5000
@@ -76,6 +76,11 @@ SOURCE_MAP_EXCLUSIONS = {
 }
 
 
+def is_monster_source_kind(kind: str) -> bool:
+    kind = str(kind or "")
+    return kind == "Monster" or "Boss" in kind
+
+
 def monster_variant_parts(source: str) -> tuple[str, str] | None:
     match = MONSTER_VARIANT_RE.match(str(source or ""))
     if not match:
@@ -97,7 +102,8 @@ def source_base_name(source: str) -> str:
 
 
 def source_map_exclusions(source: str, kind: str) -> set[str]:
-    return set(SOURCE_MAP_EXCLUSIONS.get((str(kind or ""), source_base_name(source)), ()))
+    base = source_base_name(source)
+    return set(SOURCE_MAP_EXCLUSIONS.get((str(kind or ""), base), SOURCE_MAP_EXCLUSIONS.get(("Monster", base), ())))
 
 
 def source_variant_labels(sources) -> list[str]:
@@ -560,7 +566,7 @@ class WebIndex:
         key = (source, kind)
         if key in self.source_rows:
             return [key]
-        if kind != "Monster" or monster_variant_parts(source):
+        if not is_monster_source_kind(kind) or monster_variant_parts(source):
             return []
         variant_keys = [
             (f"{source} ({variant})", kind)
@@ -1414,7 +1420,7 @@ def source_variant_summary_groups(rows: list[dict], index: WebIndex | None = Non
     variant_buckets: dict[tuple[str, str], list[tuple[str, list[dict]]]] = defaultdict(list)
     groups: list[tuple[str, str, list[str], list[dict]]] = []
     for (source, kind), bucket_rows in source_buckets.items():
-        parts = monster_variant_parts(source) if kind == "Monster" else None
+        parts = monster_variant_parts(source) if is_monster_source_kind(kind) else None
         if not parts:
             groups.append((source, kind, [source], bucket_rows))
             continue

@@ -979,7 +979,7 @@ async function openSource(key) {
     type: "source",
     payload,
     search: "",
-    filters: { rarity: "All", category: "All", map: "All", diff: "All" },
+    filters: { rarity: "All", category: "All", map: "All", diff: "High Roller" },
     sort: { key: "chance", direction: "desc" },
   };
   renderSourceDetail(payload);

@@ -266,6 +266,7 @@ class AssetInfo:
     rarity: str = ""
     category: str = ""
     grade: str = ""
+    source_kind: str = ""
 
 
 @dataclass(frozen=True)
@@ -365,7 +366,7 @@ class AssetResolver:
         if monster_asset:
             info = self.monsters.get(monster_asset.lower())
             if info:
-                return info.name, "Monster"
+                return info.name, info.source_kind or "Monster"
             return humanize_asset(monster_asset), "Monster"
         if props_asset:
             info = self.props.get(props_asset.lower())
@@ -425,6 +426,11 @@ def title_tag(value: str) -> str:
     if not value:
         return ""
     return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", value).strip().title()
+
+
+def monster_source_kind(class_type) -> str:
+    source_kind = title_tag(tag_leaf(class_type))
+    return source_kind if source_kind and source_kind != "Normal" else "Monster"
 
 
 def rarity_from_tag(value) -> str:
@@ -786,7 +792,7 @@ def load_asset_resolver(generated_root: Path) -> tuple[AssetResolver, list[str]]
                 display = localized_text(item_props.get("Name")) or humanize_asset(asset)
                 grade = title_tag(tag_leaf(item_props.get("GradeType")))
                 label = display if not grade else f"{display} ({grade})"
-                info = AssetInfo(name=label, grade=grade)
+                info = AssetInfo(name=label, grade=grade, source_kind=monster_source_kind(item_props.get("ClassType")))
                 monsters[asset.lower()] = info
                 monsters[path.stem.lower()] = info
             except Exception as exc:
