@@ -6,6 +6,7 @@
   sourceByKey: new Map(),
   rateWeights: {},
   favorites: { items: [], sources: [] },
+  chipPopover: { target: null, pinned: false },
   activeTab: "items",
   detailCache: new Map(),
   currentLuck: 0,
@@ -327,17 +328,88 @@ function chipClass(value) {
     .replace(/^-|-$/g, "");
 }
 
+function encodedChipValues(values) {
+  return encodeURIComponent(JSON.stringify(values));
+}
+
 function chips(value, className, limit = 5) {
   const values = splitValues(value);
   if (!values.length) return "";
   const visible = values.slice(0, limit);
-  const extra = values.length - visible.length;
+  const hidden = values.slice(limit);
+  const hiddenLabel = hidden.join(", ");
   return `
     <span class="chip-list">
       ${visible.map((item) => `<span class="chip ${className} ${className}-${chipClass(item)}">${escapeHtml(item)}</span>`).join("")}
-      ${extra > 0 ? `<span class="chip more-chip">+${extra}</span>` : ""}
+      ${hidden.length > 0 ? `<button type="button" class="chip more-chip" data-more-values="${escapeHtml(encodedChipValues(hidden))}" title="${escapeHtml(hiddenLabel)}" aria-label="${escapeHtml(`Show ${hidden.length} more: ${hiddenLabel}`)}">+${hidden.length}</button>` : ""}
     </span>
   `;
+}
+
+function chipPopoverElement() {
+  let popover = $("chipPopover");
+  if (!popover) {
+    popover = document.createElement("div");
+    popover.id = "chipPopover";
+    popover.className = "chip-popover";
+    popover.setAttribute("role", "tooltip");
+    popover.hidden = true;
+    document.body.appendChild(popover);
+  }
+  return popover;
+}
+
+function chipPopoverValues(target) {
+  try {
+    const values = JSON.parse(decodeURIComponent(target.dataset.moreValues || "[]"));
+    return Array.isArray(values) ? values.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function positionChipPopover(target, popover) {
+  const margin = 8;
+  const rect = target.getBoundingClientRect();
+  const popoverRect = popover.getBoundingClientRect();
+  let top = rect.bottom + margin;
+  if (top + popoverRect.height > window.innerHeight - margin) {
+    top = rect.top - popoverRect.height - margin;
+  }
+  const left = Math.min(
+    Math.max(margin, rect.left),
+    Math.max(margin, window.innerWidth - popoverRect.width - margin),
+  );
+  popover.style.left = `${left}px`;
+  popover.style.top = `${Math.max(margin, top)}px`;
+}
+
+function showChipPopover(target, pinned = false) {
+  const values = chipPopoverValues(target);
+  if (!values.length) return;
+  hideChipPopover(true);
+  const popover = chipPopoverElement();
+  popover.innerHTML = values.map((value) => `<span>${escapeHtml(value)}</span>`).join("");
+  popover.hidden = false;
+  target.classList.add("open");
+  state.chipPopover = { target, pinned };
+  requestAnimationFrame(() => positionChipPopover(target, popover));
+}
+
+function hideChipPopover(force = false) {
+  if (state.chipPopover.pinned && !force) return;
+  state.chipPopover.target?.classList.remove("open");
+  state.chipPopover = { target: null, pinned: false };
+  const popover = $("chipPopover");
+  if (popover) popover.hidden = true;
+}
+
+function toggleChipPopover(target) {
+  if (state.chipPopover.target === target && state.chipPopover.pinned) {
+    hideChipPopover(true);
+    return;
+  }
+  showChipPopover(target, true);
 }
 
 function kindChip(value) {
@@ -943,6 +1015,12 @@ function wireEvents() {
 
   document.body.addEventListener("click", (event) => {
     const button = event.target.closest("button");
+    if (button?.dataset.moreValues) {
+      event.stopPropagation();
+      toggleChipPopover(button);
+      return;
+    }
+    if (!event.target.closest("#chipPopover")) hideChipPopover(true);
     if (!button) return;
     if (button.dataset.sortList && button.dataset.sortKey) {
       setSort(button.dataset.sortList, button.dataset.sortKey);
@@ -959,6 +1037,27 @@ function wireEvents() {
       const row = state.sourceByKey.get(button.dataset.favKey);
       if (row) toggleFavoriteSource(row.source, row.sourceKind);
     }
+  });
+
+  document.body.addEventListener("mouseover", (event) => {
+    const button = event.target.closest("button[data-more-values]");
+    if (!button || button.contains(event.relatedTarget)) return;
+    showChipPopover(button);
+  });
+
+  document.body.addEventListener("mouseout", (event) => {
+    const button = event.target.closest("button[data-more-values]");
+    if (!button || button.contains(event.relatedTarget)) return;
+    hideChipPopover();
+  });
+
+  document.body.addEventListener("focusin", (event) => {
+    const button = event.target.closest("button[data-more-values]");
+    if (button) showChipPopover(button);
+  });
+
+  document.body.addEventListener("focusout", (event) => {
+    if (event.target.closest("button[data-more-values]")) hideChipPopover();
   });
 
   document.body.addEventListener("input", (event) => {
@@ -1010,12 +1109,19 @@ function wireEvents() {
   $("closeDetail").addEventListener("click", () => $("detailDialog").close());
   $("detailDialog").addEventListener("close", () => {
     state.activeDetail = null;
+    hideChipPopover(true);
   });
   $("clearFavorites").addEventListener("click", () => {
     state.favorites = { items: [], sources: [] };
     saveFavorites();
     render();
   });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hideChipPopover(true);
+  });
+  document.addEventListener("scroll", () => hideChipPopover(true), true);
+  window.addEventListener("resize", () => hideChipPopover(true));
 }
 
 wireEvents();
