@@ -944,15 +944,13 @@ function renderSourceDetail(payload) {
     </div>
     ${detailTable(limited, [
       { label: "Item", sortKey: "item", key: "item" },
+      { label: "Amount", sortKey: "amount", html: (row) => escapeHtml(amountText(row.itemCounts || row.itemCount)), num: true },
       { label: "Rarity", sortKey: "rarity", html: (row) => rarity(row.rarity) },
       { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
-      { label: "Amount", sortKey: "amount", html: (row) => escapeHtml(amountText(row.itemCounts || row.itemCount)), num: true },
       { label: "Maps", sortKey: "maps", html: (row) => chips(row.maps || row.map, "map-chip") },
       { label: "Difficulties", sortKey: "difficulties", html: (row) => chips(row.diffs || row.diff, "diff-chip") },
       { label: "Base Chance", sortKey: "baseChance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
       { label: "Luck Chance", sortKey: "chance", html: (row) => escapeHtml(chanceText(row)), num: true },
-      { label: "Rolls", sortKey: "rolls", key: "rolls", num: true },
-      { label: "Loot Table", sortKey: "lootTable", key: "lootTable" },
     ])}
   `;
 }
@@ -991,8 +989,6 @@ function renderItemDetail(payload) {
       { label: "Difficulties", html: (row) => chips(row.diffValues || row.diffs, "diff-chip") },
       { label: "Best Base Chance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
       { label: "Best Chance With Luck", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
-      { label: "Spawns", key: "spawnLocationCount", num: true },
-      { label: "Loot Table", key: "bestLootTable" },
       { label: "Open", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
     ], (row) => `class="clickable-row" data-open-source="${escapeHtml(sourceLookupKey(row))}" tabindex="0" role="button"`)}
   `;
