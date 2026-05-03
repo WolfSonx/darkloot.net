@@ -755,7 +755,7 @@ function renderItems() {
   $("itemTableMeta").innerHTML = tableMeta(rows, selectedRows);
   $("itemRows").innerHTML = selectedRows.length
     ? selectedRows.map((row) => `
-      <tr>
+      <tr class="clickable-row" data-open-item="${escapeHtml(row.itemAsset)}" tabindex="0" role="button">
         <td>${favoriteButton(isFavoriteItem(row.itemAsset), "item", row.itemAsset, "Favorite item")}</td>
         <td>${escapeHtml(row.item)}</td>
         <td>${rarity(row.rarity)}</td>
@@ -775,7 +775,7 @@ function renderSources() {
   $("sourceTableMeta").innerHTML = tableMeta(rows, selectedRows);
   $("sourceRows").innerHTML = selectedRows.length
     ? selectedRows.map((row) => `
-      <tr>
+      <tr class="clickable-row" data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}" tabindex="0" role="button">
         <td>${favoriteButton(isFavoriteSource(row.source, row.sourceKind), "source", sourceKey(row.source, row.sourceKind), "Favorite source")}</td>
         <td>${escapeHtml(row.source)}</td>
         <td>${kindChip(row.sourceKind)}</td>
@@ -792,7 +792,7 @@ function renderFavorites() {
   const favoriteItems = state.favorites.items.map((asset) => state.itemByAsset.get(asset)).filter(Boolean);
   $("favoriteItemRows").innerHTML = favoriteItems.length
     ? favoriteItems.map((row) => `
-      <tr>
+      <tr class="clickable-row" data-open-item="${escapeHtml(row.itemAsset)}" tabindex="0" role="button">
         <td>${escapeHtml(row.item)}</td>
         <td>${rarity(row.rarity)}</td>
         <td><button data-open-item="${escapeHtml(row.itemAsset)}">Open</button></td>
@@ -804,7 +804,7 @@ function renderFavorites() {
   const favoriteSources = state.favorites.sources.map((key) => state.sourceByKey.get(key)).filter(Boolean);
   $("favoriteSourceRows").innerHTML = favoriteSources.length
     ? favoriteSources.map((row) => `
-      <tr>
+      <tr class="clickable-row" data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}" tabindex="0" role="button">
         <td>${escapeHtml(row.source)}</td>
         <td>${kindChip(row.sourceKind)}</td>
         <td><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
@@ -834,7 +834,7 @@ function detailSortButton(key, label, num = false) {
   return `<button class="sort-button detail-sort-button ${num ? "num" : ""} ${active ? "active" : ""}" data-detail-sort-key="${escapeHtml(key)}" data-direction="${active ? escapeHtml(sort.direction) : ""}" aria-pressed="${active ? "true" : "false"}">${escapeHtml(label)}</button>`;
 }
 
-function detailTable(rows, columns) {
+function detailTable(rows, columns, rowAttrs = () => "") {
   if (!rows.length) return `<div class="message-row">No detail rows found.</div>`;
   return `
     <div class="table-wrap compact">
@@ -847,11 +847,14 @@ function detailTable(rows, columns) {
           return `<th class="${column.num ? "num" : ""}"${ariaSort}>${label}</th>`;
         }).join("")}</tr></thead>
         <tbody>
-          ${rows.map((row) => `
-            <tr>
+          ${rows.map((row) => {
+            const attrs = rowAttrs(row);
+            return `
+            <tr${attrs ? ` ${attrs}` : ""}>
               ${columns.map((column) => `<td class="${column.num ? "num" : ""}">${column.html ? column.html(row) : escapeHtml(row[column.key])}</td>`).join("")}
             </tr>
-          `).join("")}
+          `;
+          }).join("")}
         </tbody>
       </table>
     </div>
@@ -954,7 +957,7 @@ function renderItemDetail(payload) {
       { label: "Spawns", key: "spawnLocationCount", num: true },
       { label: "Loot Table", key: "bestLootTable" },
       { label: "Open", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
-    ])}
+    ], (row) => `class="clickable-row" data-open-source="${escapeHtml(sourceLookupKey(row))}" tabindex="0" role="button"`)}
   `;
 }
 
@@ -999,6 +1002,14 @@ function renderActiveDetail() {
   if (state.activeDetail.type === "source") renderSourceDetail(state.activeDetail.payload);
 }
 
+function openClickableRow(row) {
+  if (row.dataset.openItem) {
+    openItem(row.dataset.openItem);
+    return;
+  }
+  if (row.dataset.openSource) openSource(row.dataset.openSource);
+}
+
 function wireEvents() {
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1029,22 +1040,46 @@ function wireEvents() {
       return;
     }
     if (!event.target.closest("#chipPopover")) hideChipPopover(true);
-    if (!button) return;
-    if (button.dataset.sortList && button.dataset.sortKey) {
-      setSort(button.dataset.sortList, button.dataset.sortKey);
+    if (button) {
+      if (button.dataset.sortList && button.dataset.sortKey) {
+        setSort(button.dataset.sortList, button.dataset.sortKey);
+        return;
+      }
+      if (button.dataset.detailSortKey) {
+        setSourceDetailSort(button.dataset.detailSortKey);
+        return;
+      }
+      if (button.dataset.openItem) {
+        openItem(button.dataset.openItem);
+        return;
+      }
+      if (button.dataset.openSource) {
+        openSource(button.dataset.openSource);
+        return;
+      }
+      if (button.dataset.favType === "item") {
+        toggleFavoriteItem(button.dataset.favKey);
+        return;
+      }
+      if (button.dataset.favType === "source") {
+        const row = state.sourceByKey.get(button.dataset.favKey);
+        if (row) toggleFavoriteSource(row.source, row.sourceKind);
+        return;
+      }
       return;
     }
-    if (button.dataset.detailSortKey) {
-      setSourceDetailSort(button.dataset.detailSortKey);
-      return;
-    }
-    if (button.dataset.openItem) openItem(button.dataset.openItem);
-    if (button.dataset.openSource) openSource(button.dataset.openSource);
-    if (button.dataset.favType === "item") toggleFavoriteItem(button.dataset.favKey);
-    if (button.dataset.favType === "source") {
-      const row = state.sourceByKey.get(button.dataset.favKey);
-      if (row) toggleFavoriteSource(row.source, row.sourceKind);
-    }
+
+    const row = event.target.closest("tr[data-open-item], tr[data-open-source]");
+    if (row) openClickableRow(row);
+  });
+
+  document.body.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (event.target.closest("button, input, select, textarea, a")) return;
+    const row = event.target.closest("tr[data-open-item], tr[data-open-source]");
+    if (!row) return;
+    event.preventDefault();
+    openClickableRow(row);
   });
 
   document.body.addEventListener("mouseover", (event) => {
