@@ -435,7 +435,7 @@ label select {
 
 table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1080px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -695,6 +695,12 @@ th.num .sort-button {
   color: #90ead7;
   border-color: rgba(97, 217, 188, .48);
   background: rgba(97, 217, 188, .14);
+}
+
+.detail-chip {
+  color: #cfe7ff;
+  border-color: rgba(106, 183, 255, .42);
+  background: rgba(106, 183, 255, .13);
 }
 
 .more-chip {

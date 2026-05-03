@@ -12,8 +12,8 @@
   currentLuck: 0,
   activeDetail: null,
   sort: {
-    items: { key: "item", direction: "asc" },
-    sources: { key: "source", direction: "asc" },
+    items: { key: "chance", direction: "desc" },
+    sources: { key: "chance", direction: "desc" },
   },
 };
 
@@ -23,6 +23,7 @@ const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary",
 const DEFAULT_SORT_DIRECTION = {
   sources: "desc",
   items: "desc",
+  chance: "desc",
 };
 const DEFAULT_DIFFICULTY = "High Roller";
 const LUCK_500_SCALARS = [0.5, 0.5, 0.75, 1.0, 1.752, 2.584, 3.28, 3.705, 4.213];
@@ -118,7 +119,16 @@ function percent(value) {
   return `${(Number(value || 0) * 100).toFixed(4)}%`;
 }
 
+function probabilityUnion(values) {
+  const remaining = values.reduce((product, value) => {
+    const chance = Math.max(0, Math.min(1, Number(value || 0)));
+    return product * (1 - chance);
+  }, 1);
+  return 1 - remaining;
+}
+
 function chanceValue(row, valueKey = "dynAtLeastOneValue") {
+  if (row.combinedChanceValue != null) return Number(row.combinedChanceValue || 0);
   const model = row.luckModel;
   if (!model) return Number(row[valueKey] || row.chanceValue || row.bestDynValue || 0);
   const weights = state.rateWeights[model.rateKey];
@@ -131,11 +141,28 @@ function chanceValue(row, valueKey = "dynAtLeastOneValue") {
   return 1 - Math.pow(Math.max(0, 1 - perRoll), rolls);
 }
 
+function chancePerRollValue(row, valueKey = "dynAtLeastOneValue") {
+  const model = row.luckModel;
+  if (model) {
+    const weights = state.rateWeights[model.rateKey];
+    if (weights) {
+      const grade = Number(model.grade || 0);
+      const choiceFraction = Number(model.choiceFraction || 0);
+      const probs = gradeProbabilities(weights, state.currentLuck);
+      return Number(probs[grade] || 0) * choiceFraction;
+    }
+    if (model.basePerRollValue != null) return Number(model.basePerRollValue || 0);
+  }
+  const rolls = Math.max(1, Number(model?.rolls || row.rolls || 1));
+  return 1 - Math.pow(Math.max(0, 1 - chanceValue(row, valueKey)), 1 / rolls);
+}
+
 function chanceText(row, valueKey = "dynAtLeastOneValue", textKey = "dynAtLeastOne") {
-  return row.luckModel ? percent(chanceValue(row, valueKey)) : row[textKey];
+  return row.luckModel || row.combinedChanceValue != null ? percent(chanceValue(row, valueKey)) : row[textKey];
 }
 
 function baseChanceValue(row) {
+  if (row.combinedBaseChanceValue != null) return Number(row.combinedBaseChanceValue || 0);
   return Number(
     row.luckModel?.baseAtLeastOneValue
     ?? row.baseAtLeastOneValue
@@ -148,6 +175,29 @@ function baseChanceValue(row) {
 
 function baseChanceText(row) {
   return percent(baseChanceValue(row));
+}
+
+function baseChancePerRollValue(row) {
+  const model = row.luckModel;
+  if (model?.basePerRollValue != null) return Number(model.basePerRollValue || 0);
+  const rolls = Math.max(1, Number(model?.rolls || row.rolls || 1));
+  return 1 - Math.pow(Math.max(0, 1 - baseChanceValue(row)), 1 / rolls);
+}
+
+function combinedRowsChanceValue(rows, perRollGetter) {
+  const groups = new Map();
+  (rows || []).forEach((row, index) => {
+    const model = row.luckModel;
+    const rolls = Math.max(1, Number(model?.rolls || row.rolls || 1));
+    const key = model?.rateKey ? `${model.rateKey}::${rolls}` : `row::${index}`;
+    const group = groups.get(key) || { rolls, perRoll: 0 };
+    group.perRoll += Math.max(0, Number(perRollGetter(row) || 0));
+    groups.set(key, group);
+  });
+  return probabilityUnion([...groups.values()].map((group) => {
+    const perRoll = Math.min(1, group.perRoll);
+    return 1 - Math.pow(Math.max(0, 1 - perRoll), group.rolls);
+  }));
 }
 
 function loadFavorites() {
@@ -275,7 +325,7 @@ function sourceDetailSearchGroups(row) {
     [row.item, row.itemAsset, row.rarity, row.category],
     [row.map, row.maps?.join(" "), row.diff, row.diffs?.join(" ")],
     [row.lootTable, row.rateTable, row.rateTables?.join(" ")],
-    [row.grade, row.rolls, row.itemCount],
+    [row.grade, row.grades?.join(" "), row.rolls, row.rollsValues?.join(" "), row.itemCount, row.dropPathCount],
   ];
 }
 
@@ -473,7 +523,7 @@ function summarizedValues(values, limit = 3) {
   return `${ordered.slice(0, limit).join(", ")} +${ordered.length - limit}`;
 }
 
-function sourceDetailGroupKey(row) {
+function sourceDetailPathKey(row) {
   return JSON.stringify([
     row.itemAsset,
     row.item,
@@ -487,10 +537,22 @@ function sourceDetailGroupKey(row) {
   ]);
 }
 
+function sourceDetailPlayerKey(row) {
+  return JSON.stringify([
+    row.itemAsset,
+    row.item,
+    row.rarity,
+    row.category,
+    listText(row.maps || row.map),
+    listText(row.diffs || row.diff),
+    row.lootTable,
+  ]);
+}
+
 function groupedSourceDetailRows(rows) {
   const grouped = new Map();
   (rows || []).forEach((row, index) => {
-    const key = sourceDetailGroupKey(row);
+    const key = sourceDetailPathKey(row);
     let entry = grouped.get(key);
     if (!entry) {
       entry = {
@@ -528,6 +590,64 @@ function groupedSourceDetailRows(rows) {
       itemCount: summarizedValues(itemCounts, 3),
       rateTables,
       rateTable: summarizedValues(rateTables, 3),
+    };
+  });
+}
+
+function combinedSourceDetailRows(rows) {
+  const grouped = new Map();
+  (rows || []).forEach((row, index) => {
+    const key = sourceDetailPlayerKey(row);
+    let entry = grouped.get(key);
+    if (!entry) {
+      entry = {
+        ...row,
+        grades: [],
+        rollsValues: [],
+        itemCounts: [],
+        rateTables: [],
+        _firstIndex: index,
+        _rows: [],
+        _grades: new Set(),
+        _rolls: new Set(),
+        _itemCounts: new Set(),
+        _rateTables: new Set(),
+      };
+      grouped.set(key, entry);
+    }
+    entry._rows.push(row);
+    splitValues(row.grades || row.grade).forEach((value) => entry._grades.add(value));
+    splitValues(row.rollsValues || row.rolls).forEach((value) => entry._rolls.add(value));
+    splitValues(row.itemCounts || row.itemCount).forEach((value) => entry._itemCounts.add(value));
+    splitValues(row.rateTables || row.rateTable).forEach((value) => entry._rateTables.add(value));
+  });
+
+  return [...grouped.values()].map((row) => {
+    const grades = orderedValues([...row._grades]);
+    const rollsValues = orderedValues([...row._rolls]);
+    const itemCounts = orderedValues([...row._itemCounts]);
+    const rateTables = orderedValues([...row._rateTables]);
+    const combinedBaseChanceValue = combinedRowsChanceValue(row._rows, baseChancePerRollValue);
+    const combinedChanceValue = combinedRowsChanceValue(row._rows, chancePerRollValue);
+    const dropPathCount = row._rows.length;
+    return {
+      ...row,
+      grades,
+      grade: summarizedValues(grades, 3),
+      rollsValues,
+      rolls: summarizedValues(rollsValues, 3),
+      itemCounts,
+      itemCount: summarizedValues(itemCounts, 3),
+      rateTables,
+      rateTable: summarizedValues(rateTables, 3),
+      dropPathCount,
+      combinedBaseChanceValue,
+      combinedChanceValue,
+      baseAtLeastOneValue: combinedBaseChanceValue,
+      dynAtLeastOneValue: combinedChanceValue,
+      baseAtLeastOne: percent(combinedBaseChanceValue),
+      dynAtLeastOne: percent(combinedChanceValue),
+      luckModel: null,
     };
   });
 }
@@ -637,6 +757,8 @@ function itemSortValue(row, key) {
       return listText(row.maps || row.map);
     case "difficulties":
       return listText(row.diffs || row.diff);
+    case "chance":
+      return chanceValue(row);
     case "sources":
       return Number(row.sourceCount || 0);
     default:
@@ -654,6 +776,8 @@ function sourceSortValue(row, key) {
       return listText(row.mapValues || row.maps);
     case "difficulties":
       return listText(row.diffValues || row.diffs);
+    case "chance":
+      return chanceValue(row, "bestDynValue");
     case "items":
       return Number(row.itemCount || 0);
     default:
@@ -675,10 +799,8 @@ function sourceDetailSortValue(row, key) {
       return listText(row.diffs || row.diff);
     case "baseChance":
       return baseChanceValue(row);
-    case "grade":
-      return Number(row.grade || 0);
-    case "rolls":
-      return Number(row.rolls || 0);
+    case "details":
+      return `${row.lootTable || ""} ${row.grade || ""} ${row.rolls || ""}`;
     case "lootTable":
       return row.lootTable;
     case "chance":
@@ -754,6 +876,20 @@ function favoriteButton(active, type, key, label) {
   return `<button class="favorite ${active ? "active" : ""}" data-fav-type="${type}" data-fav-key="${escapeHtml(key)}" title="${escapeHtml(label)}">&#9733;</button>`;
 }
 
+function plural(value, singular, pluralValue = `${singular}s`) {
+  return Number(value) === 1 ? singular : pluralValue;
+}
+
+function dropDetails(row) {
+  const values = [
+    row.lootTable,
+    ...(row.grades || splitValues(row.grade)).map((value) => `G${value}`),
+    ...(row.rollsValues || splitValues(row.rolls)).map((value) => `${value} ${plural(value, "roll")}`),
+    Number(row.dropPathCount || 0) > 1 ? `${row.dropPathCount} paths` : "",
+  ].filter(Boolean);
+  return chips(values, "detail-chip", 6);
+}
+
 function renderItems() {
   const rows = sortedRows(filteredItems(), "items");
   const selectedRows = rows.slice(0, MAX_ROWS);
@@ -767,11 +903,12 @@ function renderItems() {
         <td>${categoryChip(row.category)}</td>
         <td>${chips(row.maps || row.map, "map-chip")}</td>
         <td>${chips(row.diffs || row.diff, "diff-chip")}</td>
+        <td class="num">${escapeHtml(chanceText(row))}</td>
         <td class="num">${escapeHtml(row.sourceCount)}</td>
         <td class="action-cell"><button data-open-item="${escapeHtml(row.itemAsset)}">Sources</button></td>
       </tr>
     `).join("")
-    : `<tr><td class="message-row" colspan="8">No items match these filters.</td></tr>`;
+    : `<tr><td class="message-row" colspan="9">No items match these filters.</td></tr>`;
 }
 
 function renderSources() {
@@ -786,11 +923,12 @@ function renderSources() {
         <td>${kindChip(row.sourceKind)}</td>
         <td>${chips(row.mapValues || row.maps, "map-chip")}</td>
         <td>${chips(row.diffValues || row.diffs, "diff-chip")}</td>
+        <td class="num">${escapeHtml(chanceText(row, "bestDynValue", "bestDyn"))}</td>
         <td class="num">${escapeHtml(row.itemCount)}</td>
         <td class="action-cell"><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
       </tr>
     `).join("")
-    : `<tr><td class="message-row" colspan="7">No sources match these filters.</td></tr>`;
+    : `<tr><td class="message-row" colspan="8">No sources match these filters.</td></tr>`;
 }
 
 function renderFavorites() {
@@ -870,9 +1008,10 @@ function renderSourceDetail(payload) {
   const search = state.activeDetail?.type === "source" ? state.activeDetail.search || "" : "";
   const filters = selectedSourceDetailFilters();
   const sort = state.activeDetail?.type === "source" ? state.activeDetail.sort || { key: "chance", direction: "desc" } : { key: "chance", direction: "desc" };
-  const groupedRows = groupedSourceDetailRows(payload.rows || []);
-  const filterOptions = sourceDetailFilterOptions(groupedRows);
-  const rows = groupedRows
+  const lootPathRows = groupedSourceDetailRows(payload.rows || []);
+  const playerRows = combinedSourceDetailRows(lootPathRows);
+  const filterOptions = sourceDetailFilterOptions(playerRows);
+  const rows = playerRows
     .filter((row) => matchesAnySearchGroup(search, sourceDetailSearchGroups(row)))
     .filter((row) => sourceDetailFilterMatches(row, filters))
     .map((row, index) => ({ row, index }))
@@ -886,18 +1025,18 @@ function renderSourceDetail(payload) {
     })
     .map((entry) => entry.row);
   const limited = rows.slice(0, 500);
-  const loadedRows = Number(payload.rowsLimited || payload.rows?.length || groupedRows.length);
+  const loadedRows = Number(payload.rowsLimited || payload.rows?.length || lootPathRows.length);
   const totalRows = Number(payload.total || loadedRows);
   const loadedText = loadedRows < totalRows
-    ? `Loaded top ${loadedRows.toLocaleString()} of ${totalRows.toLocaleString()} grouped rows`
-    : `${groupedRows.length.toLocaleString()} grouped rows`;
-  const showingText = `Showing ${limited.length.toLocaleString()} of ${rows.length.toLocaleString()} matching rows | ${loadedText}`;
+    ? `loaded top ${loadedRows.toLocaleString()} of ${totalRows.toLocaleString()} loot rows`
+    : `${lootPathRows.length.toLocaleString()} loot rows combined`;
+  const showingText = `Showing ${limited.length.toLocaleString()} of ${rows.length.toLocaleString()} matching drops | ${loadedText}`;
   $("detailTitle").textContent = payload.source;
-  $("detailMeta").textContent = `${payload.sourceKind} | ${totalRows.toLocaleString()} drop rows | ${payload.spawnLocationCount || 0} known spawns`;
+  $("detailMeta").textContent = `${payload.sourceKind} | ${playerRows.length.toLocaleString()} drops | ${payload.spawnLocationCount || 0} known spawns`;
   $("detailContent").innerHTML = `
     <div class="detail-toolbar source-detail-toolbar">
-      <label class="detail-search">Search source results
-        <input id="sourceDetailSearch" autocomplete="off" placeholder="Item, rarity, map, difficulty, loot table..." value="${escapeHtml(search)}">
+      <label class="detail-search">Search drops
+        <input id="sourceDetailSearch" autocomplete="off" placeholder="Gold key, coin, weapon, rarity..." value="${escapeHtml(search)}">
       </label>
       <div class="detail-filters">
         ${sourceDetailFilterSelect("sourceDetailRarity", "rarity", "Rarity", filters.rarity, filterOptions.rarity)}
@@ -913,14 +1052,12 @@ function renderSourceDetail(payload) {
     ${detailTable(limited, [
       { label: "Item", sortKey: "item", key: "item" },
       { label: "Rarity", sortKey: "rarity", html: (row) => rarity(row.rarity) },
-      { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
+      { label: "Type", sortKey: "category", html: (row) => categoryChip(row.category) },
       { label: "Maps", sortKey: "maps", html: (row) => chips(row.maps || row.map, "map-chip") },
-      { label: "Difficulties", sortKey: "difficulties", html: (row) => chips(row.diffs || row.diff, "diff-chip") },
-      { label: "Base Chance", sortKey: "baseChance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
-      { label: "Luck Chance", sortKey: "chance", html: (row) => escapeHtml(chanceText(row)), num: true },
-      { label: "Grade", sortKey: "grade", key: "grade", num: true },
-      { label: "Rolls", sortKey: "rolls", key: "rolls", num: true },
-      { label: "Loot Table", sortKey: "lootTable", key: "lootTable" },
+      { label: "Difficulty", sortKey: "difficulties", html: (row) => chips(row.diffs || row.diff, "diff-chip") },
+      { label: "Chance", sortKey: "chance", html: (row) => escapeHtml(chanceText(row)), num: true },
+      { label: "No Luck", sortKey: "baseChance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
+      { label: "Drop Details", sortKey: "details", html: (row) => dropDetails(row) },
     ])}
   `;
 }
@@ -939,8 +1076,8 @@ function renderItemDetail(payload) {
   $("detailMeta").textContent = `${payload.item?.rarity || ""} ${payload.item?.category || ""} | ${baseRows.length.toLocaleString()} sources`;
   $("detailContent").innerHTML = `
     <div class="detail-toolbar item-detail-toolbar">
-      <label class="detail-search">Search item sources
-        <input id="itemDetailSearch" autocomplete="off" placeholder="Source, kind, map, difficulty, loot table..." value="${escapeHtml(search)}">
+      <label class="detail-search">Search sources
+        <input id="itemDetailSearch" autocomplete="off" placeholder="Monster, chest, map, difficulty..." value="${escapeHtml(search)}">
       </label>
       <div class="detail-filters item-detail-filters">
         ${itemDetailFilterSelect("itemDetailKind", "kind", "Kind", filters.kind, filterOptions.kind)}
@@ -956,11 +1093,11 @@ function renderItemDetail(payload) {
       { label: "Source", key: "source" },
       { label: "Kind", html: (row) => kindChip(row.sourceKind) },
       { label: "Maps", html: (row) => chips(row.mapValues || row.maps, "map-chip") },
-      { label: "Difficulties", html: (row) => chips(row.diffValues || row.diffs, "diff-chip") },
-      { label: "Best Base Chance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
-      { label: "Best Chance With Luck", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
+      { label: "Difficulty", html: (row) => chips(row.diffValues || row.diffs, "diff-chip") },
+      { label: "Best Chance", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
+      { label: "No Luck", html: (row) => escapeHtml(baseChanceText(row)), num: true },
       { label: "Spawns", key: "spawnLocationCount", num: true },
-      { label: "Loot Table", key: "bestLootTable" },
+      { label: "Best Drop", key: "bestLootTable" },
       { label: "Open", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
     ], (row) => `class="clickable-row" data-open-source="${escapeHtml(sourceLookupKey(row))}" tabindex="0" role="button"`)}
   `;
