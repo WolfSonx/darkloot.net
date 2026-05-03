@@ -322,7 +322,7 @@ def main() -> int:
     parser.add_argument("--cache", type=Path, default=Path("loot_spawn_cache.pkl.gz"), help="Saved scanner cache to export.")
     parser.add_argument("--output", type=Path, default=Path("website/public/data"), help="Website data output directory.")
     parser.add_argument("--root", type=Path, default=Path("."), help="Export root used for module spawn lookup.")
-    parser.add_argument("--luck", type=int, default=500, help="Luck value represented in exported chance columns.")
+    parser.add_argument("--luck", type=int, default=0, help="Luck value represented in exported chance columns.")
     args = parser.parse_args()
 
     manifest = export_website_data(args.cache, args.output, args.root, args.luck)
