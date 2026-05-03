@@ -261,6 +261,7 @@ def build_indexes(output_dir: Path, state: AppState) -> tuple[list[dict], list[d
     stats["items"] = len(items)
     stats["sources"] = len(sources)
     stats["module_spawn_locations"] = len(index.spawn_locations)
+    stats["luck"] = int(luck)
 
     manifest = {
         "name": "DarkLoot",
@@ -268,7 +269,7 @@ def build_indexes(output_dir: Path, state: AppState) -> tuple[list[dict], list[d
         "dataVersion": DATA_VERSION,
         "appVersion": APP_VERSION,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
-        "luck": int(luck or scan_luck(result)),
+        "luck": int(luck),
         "counts": {
             "rows": len(index.rows),
             "items": len(items),
@@ -298,6 +299,8 @@ def export_website_data(cache_path: Path, output_dir: Path, root: Path, luck: in
     state = AppState(root.resolve(), luck, cache_path=cache_path)
     if not state.load_cache(cache_path):
         raise RuntimeError(f"Could not load scan cache: {cache_path}")
+    with state.lock:
+        state.luck = int(luck)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     reset_generated_details(output_dir)

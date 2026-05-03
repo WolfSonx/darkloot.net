@@ -8,7 +8,7 @@
   favorites: { items: [], sources: [] },
   activeTab: "items",
   detailCache: new Map(),
-  currentLuck: 500,
+  currentLuck: 0,
   activeDetail: null,
   sort: {
     items: { key: "item", direction: "asc" },
@@ -215,7 +215,7 @@ function formatDate(value) {
 async function loadData() {
   loadFavorites();
   state.manifest = await fetchJson("/data/manifest.json");
-  state.currentLuck = clampLuck(state.manifest.luck ?? 500);
+  state.currentLuck = clampLuck(state.manifest.luck ?? 0);
   const [items, sources, rates] = await Promise.all([
     fetchJson(state.manifest.files.items),
     fetchJson(state.manifest.files.sources),

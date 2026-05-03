@@ -830,7 +830,8 @@ class AppState:
                 index = WebIndex(result.rows)
             root = Path(payload.get("root") or self.root)
             index.attach_module_spawn_locations(root)
-            luck = int(payload.get("luck", scan_luck(result)) or scan_luck(result))
+            payload_luck = payload.get("luck")
+            luck = int(scan_luck(result) if payload_luck is None else payload_luck)
             created_at = float(payload.get("created_at", 0.0) or 0.0)
         except Exception:
             with self.lock:
