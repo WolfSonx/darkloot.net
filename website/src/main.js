@@ -415,10 +415,24 @@ function sourceSortValue(row, key) {
 
 function sourceDetailSortValue(row, key) {
   switch (key) {
+    case "item":
+      return row.item;
+    case "rarity":
+      return rarityRank(row.rarity);
     case "category":
       return row.category;
+    case "maps":
+      return listText(row.maps || row.map);
+    case "difficulties":
+      return listText(row.diffs || row.diff);
     case "baseChance":
       return baseChanceValue(row);
+    case "grade":
+      return Number(row.grade || 0);
+    case "rolls":
+      return Number(row.rolls || 0);
+    case "lootTable":
+      return row.lootTable;
     case "chance":
     default:
       return chanceValue(row);
@@ -634,16 +648,16 @@ function renderSourceDetail(payload) {
       </button>
     </div>
     ${detailTable(limited, [
-      { label: "Item", key: "item" },
-      { label: "Rarity", html: (row) => rarity(row.rarity) },
+      { label: "Item", sortKey: "item", key: "item" },
+      { label: "Rarity", sortKey: "rarity", html: (row) => rarity(row.rarity) },
       { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
-      { label: "Maps", html: (row) => chips(row.maps || row.map, "map-chip") },
-      { label: "Difficulties", html: (row) => chips(row.diffs || row.diff, "diff-chip") },
-      { label: "Base Chance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
-      { label: "Luck Chance", html: (row) => escapeHtml(chanceText(row)), num: true },
-      { label: "Grade", key: "grade", num: true },
-      { label: "Rolls", key: "rolls", num: true },
-      { label: "Loot Table", key: "lootTable" },
+      { label: "Maps", sortKey: "maps", html: (row) => chips(row.maps || row.map, "map-chip") },
+      { label: "Difficulties", sortKey: "difficulties", html: (row) => chips(row.diffs || row.diff, "diff-chip") },
+      { label: "Base Chance", sortKey: "baseChance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
+      { label: "Luck Chance", sortKey: "chance", html: (row) => escapeHtml(chanceText(row)), num: true },
+      { label: "Grade", sortKey: "grade", key: "grade", num: true },
+      { label: "Rolls", sortKey: "rolls", key: "rolls", num: true },
+      { label: "Loot Table", sortKey: "lootTable", key: "lootTable" },
     ])}
   `;
 }
