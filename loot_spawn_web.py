@@ -4674,7 +4674,7 @@ def create_server(host: str, port: int, state: AppState) -> tuple[ThreadingHTTPS
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=f"{WEB_APP_TITLE} {APP_VERSION}")
     parser.add_argument("root", nargs="?", default=".", help="Export root, Content folder, or Generated/V2 folder")
-    parser.add_argument("--luck", type=int, default=500)
+    parser.add_argument("--luck", type=int, default=0)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE_FILE, help="Saved scan cache file")
