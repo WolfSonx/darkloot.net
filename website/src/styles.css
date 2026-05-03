@@ -89,10 +89,10 @@ select:focus {
   top: 0;
   z-index: 3;
   display: grid;
-  grid-template-columns: minmax(210px, 1fr) auto minmax(210px, 1fr);
+  grid-template-columns: minmax(210px, 1fr) auto minmax(280px, 1fr);
   align-items: center;
   gap: 16px;
-  padding: 14px 20px 13px;
+  padding: 12px 20px 11px;
   border-bottom: 1px solid var(--line);
   border-top: 3px solid var(--accent);
   background:
@@ -141,6 +141,34 @@ h1 {
 
 .brand p:empty {
   display: none;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 16px;
+  min-width: 0;
+}
+
+.header-luck {
+  display: grid;
+  gap: 4px;
+  min-width: 92px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.header-luck input {
+  width: 86px;
+  min-height: 30px;
+  margin: 0;
+  color: var(--gold);
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .header-updated {
@@ -254,37 +282,6 @@ main {
   padding: 14px 20px 22px;
 }
 
-.control-band {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.control-band div {
-  width: min(180px, 100%);
-  min-height: 50px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(21, 27, 35, .92);
-  padding: 8px 10px;
-  box-shadow: inset 3px 0 0 rgba(240, 189, 89, .58);
-}
-
-.control-band span {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.control-band input {
-  width: 100%;
-  margin-top: 4px;
-  color: var(--gold);
-  font-size: 16px;
-  font-weight: 700;
-}
-
 .view {
   display: none;
 }
@@ -343,7 +340,7 @@ label select {
 .table-wrap {
   width: 100%;
   min-height: 260px;
-  max-height: max(260px, calc(100vh - 370px));
+  max-height: max(260px, calc(100vh - 312px));
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -732,23 +729,19 @@ dialog::backdrop {
     min-width: 0;
   }
 
-  .control-band,
   .filters,
   .source-filters,
   .favorites-layout {
     grid-template-columns: 1fr;
   }
 
-  .control-band {
-    justify-content: stretch;
-  }
-
-  .control-band div {
-    width: 100%;
+  .header-actions {
+    justify-self: stretch;
+    justify-content: space-between;
   }
 
   .header-updated {
-    text-align: left;
+    text-align: right;
   }
 
   main {

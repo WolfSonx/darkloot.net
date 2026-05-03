@@ -22,20 +22,19 @@
       <button class="tab" data-tab="sources">Sources</button>
       <button class="tab" data-tab="favorites">Favorites</button>
     </nav>
-    <div class="header-updated" aria-label="Data updated">
-      <span>Updated</span>
-      <strong id="updatedAt">-</strong>
+    <div class="header-actions">
+      <label class="header-luck">
+        <span>Luck</span>
+        <input id="luckInput" type="number" min="0" max="500" step="1" value="500" aria-label="Luck">
+      </label>
+      <div class="header-updated" aria-label="Data updated">
+        <span>Updated</span>
+        <strong id="updatedAt">-</strong>
+      </div>
     </div>
   </header>
 
   <main>
-    <section class="control-band" aria-label="Controls">
-      <div>
-        <span>Luck</span>
-        <input id="luckInput" type="number" min="0" max="500" step="1" value="500" aria-label="Luck">
-      </div>
-    </section>
-
     <section id="itemsView" class="view active">
       <div class="view-head">
         <h2>Item Drops</h2>
