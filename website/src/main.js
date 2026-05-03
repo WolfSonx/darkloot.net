@@ -480,7 +480,6 @@ function sourceDetailGroupKey(row) {
     row.rarity,
     row.category,
     row.grade,
-    row.itemCount,
     row.rolls,
     row.lootTable,
     baseChanceValue(row).toFixed(14),
@@ -498,22 +497,26 @@ function groupedSourceDetailRows(rows) {
         ...row,
         maps: [],
         diffs: [],
+        itemCounts: [],
         rateTables: [],
         _firstIndex: index,
         _maps: new Set(),
         _diffs: new Set(),
+        _itemCounts: new Set(),
         _rateTables: new Set(),
       };
       grouped.set(key, entry);
     }
     splitValues(row.maps || row.map).forEach((value) => entry._maps.add(value));
     splitValues(row.diffs || row.diff).forEach((value) => entry._diffs.add(value));
+    splitValues(row.itemCounts || row.itemCount).forEach((value) => entry._itemCounts.add(value));
     splitValues(row.rateTables || row.rateTable).forEach((value) => entry._rateTables.add(value));
   });
 
   return [...grouped.values()].map((row) => {
     const maps = sourceDetailOrderedValues([...row._maps], "map");
     const diffs = sourceDetailOrderedValues([...row._diffs], "diff");
+    const itemCounts = orderedValues([...row._itemCounts]);
     const rateTables = orderedValues([...row._rateTables]);
     return {
       ...row,
@@ -521,6 +524,8 @@ function groupedSourceDetailRows(rows) {
       diffs,
       map: maps.join(", "),
       diff: diffs.join(", "),
+      itemCounts,
+      itemCount: summarizedValues(itemCounts, 3),
       rateTables,
       rateTable: summarizedValues(rateTables, 3),
     };
