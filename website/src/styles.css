@@ -25,7 +25,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg);
+  background: linear-gradient(180deg, #111820 0, var(--bg) 220px, #101419 100%);
   color: var(--text);
   font-family: "Segoe UI", Arial, sans-serif;
   font-size: 14px;
@@ -82,10 +82,10 @@ select:focus {
   top: 0;
   z-index: 3;
   display: flex;
-  align-items: end;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
   gap: 20px;
-  padding: 14px 20px 0;
+  padding: 14px 20px 13px;
   border-bottom: 1px solid var(--line);
   border-top: 3px solid var(--accent);
   background: #151b22;
@@ -96,7 +96,6 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-bottom: 12px;
 }
 
 .brand-mark {
@@ -119,7 +118,7 @@ p {
 }
 
 h1 {
-  font-size: 21px;
+  font-size: 24px;
   letter-spacing: 0;
 }
 
@@ -131,35 +130,63 @@ h1 {
 
 .tabs {
   display: flex;
-  gap: 6px;
+  gap: 10px;
+}
+
+.app-nav {
+  justify-content: center;
+  align-items: center;
+  max-width: 820px;
+  margin: 0 auto 18px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #151c25;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, .20), inset 0 1px 0 rgba(255, 255, 255, .035);
 }
 
 .tab {
-  min-height: 44px;
-  padding: 0 22px;
-  border-bottom-right-radius: 0;
-  border-bottom-left-radius: 0;
+  min-height: 54px;
+  min-width: 190px;
+  padding: 0 28px;
+  border-radius: 7px;
   color: var(--muted);
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: 0;
+  box-shadow: inset 0 -3px 0 rgba(127, 140, 153, .18);
 }
 
 .tab.active {
   color: #fff;
   border-color: var(--green);
   background: #213144;
-  box-shadow: inset 0 3px 0 var(--green);
+  box-shadow: inset 0 4px 0 var(--green), 0 0 0 2px rgba(97, 217, 188, .10);
+}
+
+.tab[data-tab="items"].active {
+  border-color: var(--accent);
+}
+
+.tab[data-tab="sources"].active {
+  border-color: var(--accent-2);
+  box-shadow: inset 0 4px 0 var(--accent-2), 0 0 0 2px rgba(240, 199, 106, .10);
+}
+
+.tab[data-tab="favorites"].active {
+  border-color: var(--violet);
+  box-shadow: inset 0 4px 0 var(--violet), 0 0 0 2px rgba(189, 146, 255, .10);
 }
 
 main {
-  padding: 16px 20px 22px;
+  padding: 14px 20px 22px;
 }
 
 .summary-band {
   display: grid;
   grid-template-columns: repeat(4, minmax(120px, 1fr));
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .summary-band div {
@@ -169,6 +196,18 @@ main {
   background: var(--panel);
   padding: 9px 10px;
   box-shadow: inset 3px 0 0 rgba(97, 217, 188, .45);
+}
+
+.summary-band div:nth-child(2) {
+  box-shadow: inset 3px 0 0 rgba(116, 167, 255, .48);
+}
+
+.summary-band div:nth-child(3) {
+  box-shadow: inset 3px 0 0 rgba(240, 199, 106, .58);
+}
+
+.summary-band div:nth-child(4) {
+  box-shadow: inset 3px 0 0 rgba(189, 146, 255, .48);
 }
 
 .summary-band span {
@@ -213,6 +252,18 @@ main {
   font-size: 16px;
 }
 
+.view-head h2::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 0 4px rgba(240, 199, 106, .13);
+  vertical-align: 1px;
+}
+
 .filters {
   display: grid;
   grid-template-columns: minmax(260px, 2fr) repeat(4, minmax(150px, 1fr));
@@ -238,7 +289,7 @@ label select {
 
 .table-wrap {
   width: 100%;
-  max-height: calc(100vh - 290px);
+  max-height: calc(100vh - 350px);
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -272,7 +323,7 @@ th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #19202a;
+  background: #1d2835;
   color: #dce3ea;
   font-size: 12px;
   font-weight: 650;
@@ -306,6 +357,112 @@ tr:hover td {
   border-color: #f1d38c;
   background: var(--gold);
   color: #19140b;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.kind-chip {
+  color: #ffc9ad;
+  border-color: rgba(255, 163, 111, .45);
+  background: rgba(255, 139, 78, .16);
+}
+
+.kind-chip-prop {
+  color: #9bdfff;
+  border-color: rgba(116, 167, 255, .45);
+  background: rgba(72, 144, 220, .18);
+}
+
+.map-chip {
+  color: #f8d878;
+  border-color: rgba(240, 199, 106, .46);
+  background: rgba(240, 199, 106, .14);
+}
+
+.map-chip-crypts,
+.map-chip-inferno {
+  color: #ffd2a3;
+  border-color: rgba(255, 145, 84, .45);
+  background: rgba(255, 121, 77, .16);
+}
+
+.map-chip-goblin-caves {
+  color: #cdf28d;
+  border-color: rgba(152, 204, 83, .48);
+  background: rgba(98, 146, 60, .18);
+}
+
+.map-chip-ice-cavern,
+.map-chip-ice-abyss {
+  color: #b9e7ff;
+  border-color: rgba(116, 167, 255, .50);
+  background: rgba(80, 140, 210, .18);
+}
+
+.map-chip-ruins {
+  color: #dfc8ff;
+  border-color: rgba(189, 146, 255, .50);
+  background: rgba(127, 78, 190, .18);
+}
+
+.diff-chip {
+  color: #d9e3ec;
+  border-color: rgba(169, 181, 193, .38);
+  background: rgba(169, 181, 193, .10);
+}
+
+.diff-chip-pve {
+  color: #90ead7;
+  border-color: rgba(97, 217, 188, .50);
+  background: rgba(97, 217, 188, .16);
+}
+
+.diff-chip-high-roller {
+  color: #d8bdff;
+  border-color: rgba(189, 146, 255, .52);
+  background: rgba(130, 87, 193, .20);
+}
+
+.diff-chip-squire {
+  color: #ffe39a;
+  border-color: rgba(240, 199, 106, .54);
+  background: rgba(240, 199, 106, .16);
+}
+
+.category-chip {
+  color: #b9d1ff;
+  border-color: rgba(116, 167, 255, .44);
+  background: rgba(116, 167, 255, .14);
+}
+
+.category-chip-utility,
+.category-chip-consumable {
+  color: #90ead7;
+  border-color: rgba(97, 217, 188, .48);
+  background: rgba(97, 217, 188, .14);
+}
+
+.more-chip {
+  color: var(--accent-2);
+  border-color: rgba(240, 199, 106, .40);
+  background: rgba(240, 199, 106, .12);
 }
 
 .rarity {
@@ -407,10 +564,13 @@ dialog::backdrop {
 
   .tabs {
     width: 100%;
+    flex-direction: column;
   }
 
   .tab {
     flex: 1;
+    width: 100%;
+    min-width: 0;
   }
 
   .summary-band,

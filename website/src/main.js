@@ -273,6 +273,52 @@ function rarity(value) {
   return `<span class="rarity ${escapeHtml(value)}">${escapeHtml(value)}</span>`;
 }
 
+function splitValues(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  return String(value || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function chipClass(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function chips(value, className, limit = 5) {
+  const values = splitValues(value);
+  if (!values.length) return "";
+  const visible = values.slice(0, limit);
+  const extra = values.length - visible.length;
+  return `
+    <span class="chip-list">
+      ${visible.map((item) => `<span class="chip ${className} ${className}-${chipClass(item)}">${escapeHtml(item)}</span>`).join("")}
+      ${extra > 0 ? `<span class="chip more-chip">+${extra}</span>` : ""}
+    </span>
+  `;
+}
+
+function kindChip(value) {
+  return chips([value], "kind-chip", 1);
+}
+
+function categoryChip(value) {
+  return chips([value], "category-chip", 1);
+}
+
+function sourceLookupKey(row) {
+  const direct = sourceKey(row.source, row.sourceKind);
+  if (state.sourceByKey.has(direct)) return direct;
+  for (const source of row.sourceValues || []) {
+    const key = sourceKey(source, row.sourceKind);
+    if (state.sourceByKey.has(key)) return key;
+  }
+  return direct;
+}
+
 function favoriteButton(active, type, key, label) {
   return `<button class="favorite ${active ? "active" : ""}" data-fav-type="${type}" data-fav-key="${escapeHtml(key)}" title="${escapeHtml(label)}">&#9733;</button>`;
 }
@@ -287,12 +333,12 @@ function renderItems() {
         <td>${favoriteButton(isFavoriteItem(row.itemAsset), "item", row.itemAsset, "Favorite item")}</td>
         <td>${escapeHtml(row.item)}</td>
         <td>${rarity(row.rarity)}</td>
-        <td>${escapeHtml(row.category)}</td>
-        <td>${escapeHtml(row.map)}</td>
-        <td>${escapeHtml(row.diff)}</td>
+        <td>${categoryChip(row.category)}</td>
+        <td>${chips(row.maps || row.map, "map-chip")}</td>
+        <td>${chips(row.diffs || row.diff, "diff-chip")}</td>
         <td class="num">${escapeHtml(chanceText(row))}</td>
         <td class="num">${escapeHtml(row.sourceCount)}</td>
-        <td><button data-open-item="${escapeHtml(row.itemAsset)}">Open</button></td>
+        <td><button data-open-item="${escapeHtml(row.itemAsset)}">Sources</button></td>
       </tr>
     `).join("")
     : `<tr><td class="message-row" colspan="9">No items match these filters.</td></tr>`;
@@ -307,9 +353,9 @@ function renderSources() {
       <tr>
         <td>${favoriteButton(isFavoriteSource(row.source, row.sourceKind), "source", sourceKey(row.source, row.sourceKind), "Favorite source")}</td>
         <td>${escapeHtml(row.source)}</td>
-        <td>${escapeHtml(row.sourceKind)}</td>
-        <td>${escapeHtml(row.maps)}</td>
-        <td>${escapeHtml(row.diffs)}</td>
+        <td>${kindChip(row.sourceKind)}</td>
+        <td>${chips(row.mapValues || row.maps, "map-chip")}</td>
+        <td>${chips(row.diffValues || row.diffs, "diff-chip")}</td>
         <td class="num">${escapeHtml(row.itemCount)}</td>
         <td class="num">${escapeHtml(chanceText(row, "bestDynValue", "bestDyn"))}</td>
         <td>${escapeHtml(row.topItem)}</td>
@@ -337,7 +383,7 @@ function renderFavorites() {
     ? favoriteSources.map((row) => `
       <tr>
         <td>${escapeHtml(row.source)}</td>
-        <td>${escapeHtml(row.sourceKind)}</td>
+        <td>${kindChip(row.sourceKind)}</td>
         <td><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
         <td><button data-fav-type="source" data-fav-key="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Remove</button></td>
       </tr>
@@ -391,9 +437,9 @@ function renderSourceDetail(payload) {
     ${detailTable(limited, [
       { label: "Item", key: "item" },
       { label: "Rarity", html: (row) => rarity(row.rarity) },
-      { label: "Category", key: "category" },
-      { label: "Maps", key: "map" },
-      { label: "Difficulties", key: "diff" },
+      { label: "Category", html: (row) => categoryChip(row.category) },
+      { label: "Maps", html: (row) => chips(row.maps || row.map, "map-chip") },
+      { label: "Difficulties", html: (row) => chips(row.diffs || row.diff, "diff-chip") },
       { label: "Chance", html: (row) => escapeHtml(chanceText(row)), num: true },
       { label: "Grade", key: "grade", num: true },
       { label: "Rolls", key: "rolls", num: true },
@@ -416,12 +462,13 @@ function renderItemDetail(payload) {
     </div>
     ${detailTable(limited, [
       { label: "Source", key: "source" },
-      { label: "Kind", key: "sourceKind" },
-      { label: "Maps", key: "maps" },
-      { label: "Difficulties", key: "diffs" },
+      { label: "Kind", html: (row) => kindChip(row.sourceKind) },
+      { label: "Maps", html: (row) => chips(row.mapValues || row.maps, "map-chip") },
+      { label: "Difficulties", html: (row) => chips(row.diffValues || row.diffs, "diff-chip") },
       { label: "Best Chance", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
       { label: "Spawns", key: "spawnLocationCount", num: true },
       { label: "Loot Table", key: "bestLootTable" },
+      { label: "Open", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
     ])}
   `;
 }
@@ -432,7 +479,7 @@ async function openItem(asset) {
   $("detailTitle").textContent = item.item;
   $("detailMeta").textContent = "Loading item details...";
   $("detailContent").innerHTML = "";
-  $("detailDialog").showModal();
+  if (!$("detailDialog").open) $("detailDialog").showModal();
   const payload = await detail(item.detailPath);
   state.activeDetail = { type: "item", payload };
   renderItemDetail(payload);
@@ -444,7 +491,7 @@ async function openSource(key) {
   $("detailTitle").textContent = row.source;
   $("detailMeta").textContent = "Loading source drops...";
   $("detailContent").innerHTML = "";
-  $("detailDialog").showModal();
+  if (!$("detailDialog").open) $("detailDialog").showModal();
   const payload = await detail(row.detailPath);
   state.activeDetail = { type: "source", payload };
   renderSourceDetail(payload);
