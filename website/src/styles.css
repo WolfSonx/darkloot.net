@@ -519,6 +519,25 @@ tbody tr.clickable-row:focus-visible td {
   background: linear-gradient(180deg, rgba(106, 183, 255, .24), rgba(106, 183, 255, .11));
 }
 
+.detail-action-cell {
+  width: 90px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.detail-action-cell button {
+  min-width: 68px;
+  border-color: rgba(106, 183, 255, .44);
+  background: linear-gradient(180deg, rgba(106, 183, 255, .16), rgba(106, 183, 255, .07));
+  color: #eaf5ff;
+  padding: 0 10px;
+}
+
+.detail-action-cell button:hover {
+  border-color: rgba(106, 183, 255, .80);
+  background: linear-gradient(180deg, rgba(106, 183, 255, .24), rgba(106, 183, 255, .11));
+}
+
 .sort-button {
   display: inline-flex;
   align-items: center;
@@ -909,6 +928,14 @@ dialog::backdrop {
 
 .detail-result-count {
   flex: 1 1 260px;
+}
+
+.detail-favorite.active,
+.detail-favorite[aria-pressed="true"] {
+  border-color: rgba(242, 189, 85, .88);
+  background: linear-gradient(180deg, #ffd77a, var(--gold));
+  color: #19140b;
+  box-shadow: 0 0 0 2px rgba(242, 189, 85, .14), 0 8px 18px rgba(0, 0, 0, .18);
 }
 
 .message-row {

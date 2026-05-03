@@ -181,6 +181,7 @@ function toggleFavoriteItem(asset) {
     : [...state.favorites.items, asset];
   saveFavorites();
   render();
+  renderActiveDetail();
 }
 
 function toggleFavoriteSource(source, kind) {
@@ -191,6 +192,7 @@ function toggleFavoriteSource(source, kind) {
     : [...state.favorites.sources, key];
   saveFavorites();
   render();
+  renderActiveDetail();
 }
 
 async function fetchJson(path) {
@@ -881,14 +883,18 @@ function detailTable(rows, columns, rowAttrs = () => "") {
           const active = column.sortKey && sort?.key === column.sortKey;
           const ariaSort = column.sortKey ? ` aria-sort="${active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"` : "";
           const label = column.sortKey ? detailSortButton(column.sortKey, column.label, column.num) : escapeHtml(column.label);
-          return `<th class="${column.num ? "num" : ""}"${ariaSort}>${label}</th>`;
+          const className = [column.num ? "num" : "", column.className || ""].filter(Boolean).join(" ");
+          return `<th class="${className}"${ariaSort}>${label}</th>`;
         }).join("")}</tr></thead>
         <tbody>
           ${rows.map((row) => {
             const attrs = rowAttrs(row);
             return `
             <tr${attrs ? ` ${attrs}` : ""}>
-              ${columns.map((column) => `<td class="${column.num ? "num" : ""}">${column.html ? column.html(row) : escapeHtml(row[column.key])}</td>`).join("")}
+              ${columns.map((column) => {
+                const className = [column.num ? "num" : "", column.className || ""].filter(Boolean).join(" ");
+                return `<td class="${className}">${column.html ? column.html(row) : escapeHtml(row[column.key])}</td>`;
+              }).join("")}
             </tr>
           `;
           }).join("")}
@@ -938,7 +944,11 @@ function renderSourceDetail(payload) {
         ${sourceDetailFilterSelect("sourceDetailDiff", "diff", "Difficulty", filters.diff, filterOptions.diff)}
       </div>
       <span class="muted detail-result-count">${escapeHtml(showingText)}</span>
-      <button data-fav-type="source" data-fav-key="${escapeHtml(sourceKey(payload.source, payload.sourceKind))}">
+      <button
+        class="detail-favorite ${isFavoriteSource(payload.source, payload.sourceKind) ? "active" : ""}"
+        data-fav-type="source"
+        data-fav-key="${escapeHtml(sourceKey(payload.source, payload.sourceKind))}"
+        aria-pressed="${isFavoriteSource(payload.source, payload.sourceKind) ? "true" : "false"}">
         ${isFavoriteSource(payload.source, payload.sourceKind) ? "Remove Favorite" : "Favorite Source"}
       </button>
     </div>
@@ -978,7 +988,11 @@ function renderItemDetail(payload) {
         ${itemDetailFilterSelect("itemDetailDiff", "diff", "Difficulty", filters.diff, filterOptions.diff)}
       </div>
       <span class="muted detail-result-count">Showing ${limited.length.toLocaleString()} of ${rows.length.toLocaleString()} matching sources | ${baseRows.length.toLocaleString()} total</span>
-      <button data-fav-type="item" data-fav-key="${escapeHtml(payload.item?.itemAsset || "")}">
+      <button
+        class="detail-favorite ${isFavoriteItem(payload.item?.itemAsset) ? "active" : ""}"
+        data-fav-type="item"
+        data-fav-key="${escapeHtml(payload.item?.itemAsset || "")}"
+        aria-pressed="${isFavoriteItem(payload.item?.itemAsset) ? "true" : "false"}">
         ${isFavoriteItem(payload.item?.itemAsset) ? "Remove Favorite" : "Favorite Item"}
       </button>
     </div>
@@ -989,7 +1003,7 @@ function renderItemDetail(payload) {
       { label: "Difficulties", html: (row) => chips(row.diffValues || row.diffs, "diff-chip") },
       { label: "Best Base Chance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
       { label: "Best Chance With Luck", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
-      { label: "Open", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
+      { label: "Open", className: "detail-action-cell", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
     ], (row) => `class="clickable-row" data-open-source="${escapeHtml(sourceLookupKey(row))}" tabindex="0" role="button"`)}
   `;
 }
