@@ -11,8 +11,8 @@
   currentLuck: 500,
   activeDetail: null,
   sort: {
-    items: { key: "chance", direction: "desc" },
-    sources: { key: "chance", direction: "desc" },
+    items: { key: "item", direction: "asc" },
+    sources: { key: "source", direction: "asc" },
   },
 };
 
@@ -20,7 +20,6 @@ const FAVORITES_KEY = "darkloot:favorites:v1";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
 const DEFAULT_SORT_DIRECTION = {
-  chance: "desc",
   sources: "desc",
   items: "desc",
 };
@@ -360,9 +359,8 @@ function itemSortValue(row, key) {
       return listText(row.diffs || row.diff);
     case "sources":
       return Number(row.sourceCount || 0);
-    case "chance":
     default:
-      return chanceValue(row);
+      return row.item;
   }
 }
 
@@ -378,11 +376,8 @@ function sourceSortValue(row, key) {
       return listText(row.diffValues || row.diffs);
     case "items":
       return Number(row.itemCount || 0);
-    case "topItem":
-      return row.topItem;
-    case "chance":
     default:
-      return chanceValue(row, "bestDynValue");
+      return row.source;
   }
 }
 
@@ -455,12 +450,11 @@ function renderItems() {
         <td>${categoryChip(row.category)}</td>
         <td>${chips(row.maps || row.map, "map-chip")}</td>
         <td>${chips(row.diffs || row.diff, "diff-chip")}</td>
-        <td class="num">${escapeHtml(chanceText(row))}</td>
         <td class="num">${escapeHtml(row.sourceCount)}</td>
         <td class="action-cell"><button data-open-item="${escapeHtml(row.itemAsset)}">Sources</button></td>
       </tr>
     `).join("")
-    : `<tr><td class="message-row" colspan="9">No items match these filters.</td></tr>`;
+    : `<tr><td class="message-row" colspan="8">No items match these filters.</td></tr>`;
 }
 
 function renderSources() {
@@ -476,12 +470,10 @@ function renderSources() {
         <td>${chips(row.mapValues || row.maps, "map-chip")}</td>
         <td>${chips(row.diffValues || row.diffs, "diff-chip")}</td>
         <td class="num">${escapeHtml(row.itemCount)}</td>
-        <td class="num">${escapeHtml(chanceText(row, "bestDynValue", "bestDyn"))}</td>
-        <td>${escapeHtml(row.topItem)}</td>
         <td class="action-cell"><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
       </tr>
     `).join("")
-    : `<tr><td class="message-row" colspan="9">No sources match these filters.</td></tr>`;
+    : `<tr><td class="message-row" colspan="7">No sources match these filters.</td></tr>`;
 }
 
 function renderFavorites() {

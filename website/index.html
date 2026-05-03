@@ -17,6 +17,11 @@
         <p id="dataStatus">Loading loot data...</p>
       </div>
     </div>
+    <nav class="tabs app-nav" aria-label="Primary">
+      <button class="tab active" data-tab="items">Items</button>
+      <button class="tab" data-tab="sources">Sources</button>
+      <button class="tab" data-tab="favorites">Favorites</button>
+    </nav>
     <div class="header-updated" aria-label="Data updated">
       <span>Updated</span>
       <strong id="updatedAt">-</strong>
@@ -24,12 +29,6 @@
   </header>
 
   <main>
-    <nav class="tabs app-nav" aria-label="Primary">
-      <button class="tab active" data-tab="items">Items</button>
-      <button class="tab" data-tab="sources">Sources</button>
-      <button class="tab" data-tab="favorites">Favorites</button>
-    </nav>
-
     <section class="control-band" aria-label="Controls">
       <div>
         <span>Luck</span>
@@ -68,7 +67,6 @@
               <th><button class="sort-button" data-sort-list="items" data-sort-key="category">Category</button></th>
               <th><button class="sort-button" data-sort-list="items" data-sort-key="maps">Maps</button></th>
               <th><button class="sort-button" data-sort-list="items" data-sort-key="difficulties">Difficulties</button></th>
-              <th class="num"><button class="sort-button num" data-sort-list="items" data-sort-key="chance">Best Chance</button></th>
               <th class="num"><button class="sort-button num" data-sort-list="items" data-sort-key="sources">Sources</button></th>
               <th class="action-col">Open</th>
             </tr>
@@ -107,8 +105,6 @@
               <th><button class="sort-button" data-sort-list="sources" data-sort-key="maps">Maps</button></th>
               <th><button class="sort-button" data-sort-list="sources" data-sort-key="difficulties">Difficulties</button></th>
               <th class="num"><button class="sort-button num" data-sort-list="sources" data-sort-key="items">Items</button></th>
-              <th class="num"><button class="sort-button num" data-sort-list="sources" data-sort-key="chance">Best Chance</button></th>
-              <th><button class="sort-button" data-sort-list="sources" data-sort-key="topItem">Top Item</button></th>
               <th class="action-col">Open</th>
             </tr>
           </thead>

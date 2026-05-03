@@ -88,10 +88,10 @@ select:focus {
   position: sticky;
   top: 0;
   z-index: 3;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) auto minmax(210px, 1fr);
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
   padding: 14px 20px 13px;
   border-bottom: 1px solid var(--line);
   border-top: 3px solid var(--accent);
@@ -105,6 +105,8 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 12px;
+  justify-self: start;
+  min-width: 0;
 }
 
 .brand-mark {
@@ -142,6 +144,7 @@ h1 {
 }
 
 .header-updated {
+  justify-self: end;
   min-width: 128px;
   text-align: right;
 }
@@ -167,10 +170,11 @@ h1 {
 }
 
 .app-nav {
+  justify-self: center;
   justify-content: center;
   align-items: center;
   max-width: 560px;
-  margin: 0 auto 12px;
+  margin: 0;
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -354,7 +358,7 @@ label select {
 
 table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 980px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -418,13 +422,12 @@ tr:hover td {
 .sort-button {
   display: inline-flex;
   align-items: center;
-  width: 100%;
   min-height: 24px;
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: inherit;
-  padding: 0 18px 0 0;
+  padding: 0 6px;
   box-shadow: none;
   font-size: 12px;
   font-weight: 750;
@@ -441,6 +444,10 @@ tr:hover td {
 .sort-button.num {
   justify-content: flex-end;
   text-align: right;
+}
+
+th.num .sort-button {
+  margin-left: auto;
 }
 
 .sort-button::after {
@@ -703,7 +710,15 @@ dialog::backdrop {
   .view-head,
   .detail-toolbar {
     align-items: stretch;
-    flex-direction: column;
+  }
+
+  .app-header {
+    grid-template-columns: 1fr;
+  }
+
+  .app-nav {
+    width: 100%;
+    max-width: none;
   }
 
   .tabs {
