@@ -71,6 +71,9 @@ MODULE_MAP_NAMES = {
     "ShipGraveyard": "Ship Graveyard",
 }
 MODULE_D_FILE_MAPS = {"firedeep", "shipgraveyard"}
+SOURCE_MAP_EXCLUSIONS = {
+    ("Monster", "Demon Overseer"): {"Ice Abyss"},
+}
 
 
 def monster_variant_parts(source: str) -> tuple[str, str] | None:
@@ -86,6 +89,15 @@ def source_variant_sort_key(source: str) -> tuple[str, int, str]:
         return (str(source).lower(), len(MONSTER_VARIANTS), str(source))
     base, variant = parts
     return (base.lower(), MONSTER_VARIANTS.index(variant), source)
+
+
+def source_base_name(source: str) -> str:
+    parts = monster_variant_parts(source)
+    return parts[0] if parts else str(source or "")
+
+
+def source_map_exclusions(source: str, kind: str) -> set[str]:
+    return set(SOURCE_MAP_EXCLUSIONS.get((str(kind or ""), source_base_name(source)), ()))
 
 
 def source_variant_labels(sources) -> list[str]:
@@ -570,8 +582,9 @@ class WebIndex:
         return self.source_spawn_maps.get(self.source_key_for_row(row), set())
 
     def row_location_maps(self, row: dict) -> set[str]:
-        row_maps = set(row["maps"])
-        source_maps = self.source_location_maps(row)
+        excluded_maps = source_map_exclusions(row["source"], row["source_kind"])
+        row_maps = set(row["maps"]) - excluded_maps
+        source_maps = self.source_location_maps(row) - excluded_maps
         if source_maps:
             return row_maps & source_maps
         return row_maps
@@ -1176,7 +1189,6 @@ def detail_group_key(row: dict) -> tuple:
         row["grade_choices"],
         row["empty_choices"],
         row.get("loot_asset", row["loot_table"]),
-        row.get("rate_key", row["rate_table"]),
         round(row["base_per_roll"], 14),
         round(row["dyn_per_roll"], 14),
         round(row["base_at_least_one"], 14),

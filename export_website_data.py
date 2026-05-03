@@ -25,7 +25,7 @@ from loot_spawn_web import (
 
 
 DATA_VERSION = 1
-MAX_SOURCE_DETAIL_ROWS = 2000
+MAX_SOURCE_DETAIL_ROWS = 12000
 
 
 def slug_for(*parts: object) -> str:
@@ -145,7 +145,9 @@ def public_source_drop_row(row: dict) -> dict:
         "rarity": compact["rarity"],
         "category": compact["category"],
         "map": compact["map"],
+        "maps": compact["maps"],
         "diff": compact["diff"],
+        "diffs": compact["diffs"],
         "grade": compact["grade"],
         "itemCount": compact["itemCount"],
         "rolls": compact["rolls"],

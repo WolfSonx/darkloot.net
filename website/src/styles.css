@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg: #090d12;
   --panel: #121922;
   --panel-2: #1a2430;
@@ -59,6 +60,7 @@ button,
 input,
 select {
   font: inherit;
+  color-scheme: dark;
 }
 
 button {
@@ -101,6 +103,17 @@ input:focus,
 select:focus {
   border-color: var(--green);
   box-shadow: 0 0 0 2px rgba(75, 214, 188, .18), inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+
+select option,
+select optgroup {
+  background: #101925;
+  color: var(--text);
+}
+
+select option:checked {
+  background: #1e6fbd;
+  color: #ffffff;
 }
 
 .app-header {
@@ -784,6 +797,10 @@ dialog::backdrop {
   max-width: 360px;
 }
 
+.source-detail-toolbar {
+  align-items: end;
+}
+
 .detail-search {
   flex: 1 1 320px;
   max-width: 430px;
@@ -791,6 +808,31 @@ dialog::backdrop {
 
 .detail-search input {
   max-width: none;
+}
+
+.source-detail-filters {
+  flex: 3 1 540px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(122px, 1fr));
+  gap: 8px;
+}
+
+.detail-filter {
+  min-width: 0;
+}
+
+.detail-filter span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.detail-result-count {
+  flex: 1 1 260px;
 }
 
 .message-row {
@@ -832,6 +874,7 @@ dialog::backdrop {
 
   .filters,
   .source-filters,
+  .source-detail-filters,
   .favorites-layout {
     grid-template-columns: 1fr;
   }

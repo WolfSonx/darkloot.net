@@ -275,6 +275,7 @@ function sourceDetailSearchText(row) {
     row.rolls,
     row.lootTable,
     row.rateTable,
+    row.rateTables?.join(" "),
   ].join(" ");
 }
 
@@ -360,6 +361,137 @@ function sourceLookupKey(row) {
 
 function listText(value) {
   return splitValues(value).join(", ");
+}
+
+function orderedValues(values, order = []) {
+  const rank = new Map((order || []).map((value, index) => [String(value), index]));
+  return [...new Set(values.flatMap((value) => splitValues(value)))]
+    .sort((left, right) => {
+      const leftRank = rank.has(left) ? rank.get(left) : Number.MAX_SAFE_INTEGER;
+      const rightRank = rank.has(right) ? rank.get(right) : Number.MAX_SAFE_INTEGER;
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+    });
+}
+
+function sourceDetailOrderedValues(values, key) {
+  const filters = state.manifest?.filters || {};
+  const order = key === "map"
+    ? filters.maps
+    : key === "diff"
+      ? filters.diffs
+      : key === "rarity"
+        ? filters.rarities
+        : key === "category"
+          ? filters.categories
+          : [];
+  return orderedValues(values, order);
+}
+
+function summarizedValues(values, limit = 3) {
+  const ordered = orderedValues(values);
+  if (ordered.length <= limit) return ordered.join(", ");
+  return `${ordered.slice(0, limit).join(", ")} +${ordered.length - limit}`;
+}
+
+function sourceDetailGroupKey(row) {
+  return JSON.stringify([
+    row.itemAsset,
+    row.item,
+    row.rarity,
+    row.category,
+    row.grade,
+    row.itemCount,
+    row.rolls,
+    row.lootTable,
+    baseChanceValue(row).toFixed(14),
+    chanceValue(row).toFixed(14),
+  ]);
+}
+
+function groupedSourceDetailRows(rows) {
+  const grouped = new Map();
+  (rows || []).forEach((row, index) => {
+    const key = sourceDetailGroupKey(row);
+    let entry = grouped.get(key);
+    if (!entry) {
+      entry = {
+        ...row,
+        maps: [],
+        diffs: [],
+        rateTables: [],
+        _firstIndex: index,
+        _maps: new Set(),
+        _diffs: new Set(),
+        _rateTables: new Set(),
+      };
+      grouped.set(key, entry);
+    }
+    splitValues(row.maps || row.map).forEach((value) => entry._maps.add(value));
+    splitValues(row.diffs || row.diff).forEach((value) => entry._diffs.add(value));
+    splitValues(row.rateTables || row.rateTable).forEach((value) => entry._rateTables.add(value));
+  });
+
+  return [...grouped.values()].map((row) => {
+    const maps = sourceDetailOrderedValues([...row._maps], "map");
+    const diffs = sourceDetailOrderedValues([...row._diffs], "diff");
+    const rateTables = orderedValues([...row._rateTables]);
+    return {
+      ...row,
+      maps,
+      diffs,
+      map: maps.join(", "),
+      diff: diffs.join(", "),
+      rateTables,
+      rateTable: summarizedValues(rateTables, 3),
+    };
+  });
+}
+
+function selectedSourceDetailFilters() {
+  return {
+    rarity: "All",
+    category: "All",
+    map: "All",
+    diff: "All",
+    ...(state.activeDetail?.filters || {}),
+  };
+}
+
+function sourceDetailFilterMatches(row, filters) {
+  if (filters.rarity !== "All" && row.rarity !== filters.rarity) return false;
+  if (filters.category !== "All" && row.category !== filters.category) return false;
+  if (filters.map !== "All" && !splitValues(row.maps || row.map).includes(filters.map)) return false;
+  if (filters.diff !== "All" && !splitValues(row.diffs || row.diff).includes(filters.diff)) return false;
+  return true;
+}
+
+function sourceDetailFilterOptions(rows) {
+  return {
+    rarity: sourceDetailOrderedValues(rows.map((row) => row.rarity), "rarity"),
+    category: sourceDetailOrderedValues(rows.map((row) => row.category), "category"),
+    map: sourceDetailOrderedValues(rows.flatMap((row) => row.maps || row.map), "map"),
+    diff: sourceDetailOrderedValues(rows.flatMap((row) => row.diffs || row.diff), "diff"),
+  };
+}
+
+function selectOptions(values, selectedValue, allLabel = "All") {
+  const valuesWithAll = [allLabel, ...values];
+  if (selectedValue && !valuesWithAll.includes(selectedValue)) valuesWithAll.push(selectedValue);
+  return valuesWithAll
+    .map((value) => `<option value="${escapeHtml(value)}" ${value === selectedValue ? "selected" : ""}>${escapeHtml(value)}</option>`)
+    .join("");
+}
+
+function sourceDetailFilterSelect(id, key, label, selectedValue, values) {
+  return `
+    <label class="detail-filter">
+      <span>${escapeHtml(label)}</span>
+      <select id="${escapeHtml(id)}" data-source-detail-filter="${escapeHtml(key)}">
+        ${selectOptions(values, selectedValue)}
+      </select>
+    </label>
+  `;
 }
 
 function rarityRank(value) {
@@ -617,9 +749,13 @@ function detailTable(rows, columns) {
 
 function renderSourceDetail(payload) {
   const search = state.activeDetail?.type === "source" ? state.activeDetail.search || "" : "";
+  const filters = selectedSourceDetailFilters();
   const sort = state.activeDetail?.type === "source" ? state.activeDetail.sort || { key: "chance", direction: "desc" } : { key: "chance", direction: "desc" };
-  const rows = (payload.rows || [])
+  const groupedRows = groupedSourceDetailRows(payload.rows || []);
+  const filterOptions = sourceDetailFilterOptions(groupedRows);
+  const rows = groupedRows
     .filter((row) => matchesTerms(search, sourceDetailSearchText(row)))
+    .filter((row) => sourceDetailFilterMatches(row, filters))
     .map((row, index) => ({ row, index }))
     .sort((left, right) => {
       const direction = sort.direction === "desc" ? -1 : 1;
@@ -631,18 +767,26 @@ function renderSourceDetail(payload) {
     })
     .map((entry) => entry.row);
   const limited = rows.slice(0, 500);
-  const totalRows = Number(payload.total || payload.rows?.length || rows.length);
-  const showingText = search
-    ? `Showing ${limited.length.toLocaleString()} of ${rows.length.toLocaleString()} matching rows`
-    : `Showing ${limited.length.toLocaleString()} of ${totalRows.toLocaleString()} highest-chance rows`;
+  const loadedRows = Number(payload.rowsLimited || payload.rows?.length || groupedRows.length);
+  const totalRows = Number(payload.total || loadedRows);
+  const loadedText = loadedRows < totalRows
+    ? `Loaded top ${loadedRows.toLocaleString()} of ${totalRows.toLocaleString()} grouped rows`
+    : `${groupedRows.length.toLocaleString()} grouped rows`;
+  const showingText = `Showing ${limited.length.toLocaleString()} of ${rows.length.toLocaleString()} matching rows | ${loadedText}`;
   $("detailTitle").textContent = payload.source;
   $("detailMeta").textContent = `${payload.sourceKind} | ${totalRows.toLocaleString()} drop rows | ${payload.spawnLocationCount || 0} known spawns`;
   $("detailContent").innerHTML = `
-    <div class="detail-toolbar">
+    <div class="detail-toolbar source-detail-toolbar">
       <label class="detail-search">Search source results
         <input id="sourceDetailSearch" autocomplete="off" placeholder="Item, rarity, map, difficulty, loot table..." value="${escapeHtml(search)}">
       </label>
-      <span class="muted">${escapeHtml(showingText)}</span>
+      <div class="source-detail-filters">
+        ${sourceDetailFilterSelect("sourceDetailRarity", "rarity", "Rarity", filters.rarity, filterOptions.rarity)}
+        ${sourceDetailFilterSelect("sourceDetailCategory", "category", "Category", filters.category, filterOptions.category)}
+        ${sourceDetailFilterSelect("sourceDetailMap", "map", "Map", filters.map, filterOptions.map)}
+        ${sourceDetailFilterSelect("sourceDetailDiff", "diff", "Difficulty", filters.diff, filterOptions.diff)}
+      </div>
+      <span class="muted detail-result-count">${escapeHtml(showingText)}</span>
       <button data-fav-type="source" data-fav-key="${escapeHtml(sourceKey(payload.source, payload.sourceKind))}">
         ${isFavoriteSource(payload.source, payload.sourceKind) ? "Remove Favorite" : "Favorite Source"}
       </button>
@@ -679,7 +823,8 @@ function renderItemDetail(payload) {
       { label: "Kind", html: (row) => kindChip(row.sourceKind) },
       { label: "Maps", html: (row) => chips(row.mapValues || row.maps, "map-chip") },
       { label: "Difficulties", html: (row) => chips(row.diffValues || row.diffs, "diff-chip") },
-      { label: "Best Chance", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
+      { label: "Best Base Chance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
+      { label: "Best Chance With Luck", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
       { label: "Spawns", key: "spawnLocationCount", num: true },
       { label: "Loot Table", key: "bestLootTable" },
       { label: "Open", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
@@ -707,7 +852,13 @@ async function openSource(key) {
   $("detailContent").innerHTML = "";
   if (!$("detailDialog").open) $("detailDialog").showModal();
   const payload = await detail(row.detailPath);
-  state.activeDetail = { type: "source", payload, search: "", sort: { key: "chance", direction: "desc" } };
+  state.activeDetail = {
+    type: "source",
+    payload,
+    search: "",
+    filters: { rarity: "All", category: "All", map: "All", diff: "All" },
+    sort: { key: "chance", direction: "desc" },
+  };
   renderSourceDetail(payload);
 }
 
@@ -770,6 +921,17 @@ function wireEvents() {
       restored.focus();
       restored.setSelectionRange(position, position);
     }
+  });
+
+  document.body.addEventListener("change", (event) => {
+    const input = event.target;
+    if (!input.dataset?.sourceDetailFilter || state.activeDetail?.type !== "source") return;
+    state.activeDetail.filters = {
+      ...selectedSourceDetailFilters(),
+      [input.dataset.sourceDetailFilter]: input.value,
+    };
+    renderSourceDetail(state.activeDetail.payload);
+    $(input.id)?.focus();
   });
 
   $("closeDetail").addEventListener("click", () => $("detailDialog").close());
