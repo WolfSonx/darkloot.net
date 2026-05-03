@@ -390,7 +390,7 @@ label select {
 .table-wrap {
   width: 100%;
   min-height: 260px;
-  max-height: max(260px, calc(100vh - 312px));
+  max-height: max(300px, calc(100vh - 260px));
   overflow: auto;
   border: 1px solid rgba(83, 105, 128, .62);
   border-radius: 8px;
@@ -776,11 +776,21 @@ dialog::backdrop {
   justify-content: space-between;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
   margin-bottom: 10px;
 }
 
 .detail-toolbar input {
   max-width: 360px;
+}
+
+.detail-search {
+  flex: 1 1 320px;
+  max-width: 430px;
+}
+
+.detail-search input {
+  max-width: none;
 }
 
 .message-row {

@@ -125,6 +125,21 @@ function chanceText(row, valueKey = "dynAtLeastOneValue", textKey = "dynAtLeastO
   return row.luckModel ? percent(chanceValue(row, valueKey)) : row[textKey];
 }
 
+function baseChanceValue(row) {
+  return Number(
+    row.luckModel?.baseAtLeastOneValue
+    ?? row.baseAtLeastOneValue
+    ?? row.chanceValue
+    ?? row.dynAtLeastOneValue
+    ?? row.bestDynValue
+    ?? 0
+  );
+}
+
+function baseChanceText(row) {
+  return percent(baseChanceValue(row));
+}
+
 function loadFavorites() {
   try {
     const parsed = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "{}");
@@ -243,6 +258,23 @@ function sourceSearchText(row) {
     row.maps,
     row.diffs,
     row.sourceValues?.join(" "),
+  ].join(" ");
+}
+
+function sourceDetailSearchText(row) {
+  return [
+    row.item,
+    row.itemAsset,
+    row.rarity,
+    row.category,
+    row.map,
+    row.maps,
+    row.diff,
+    row.diffs,
+    row.grade,
+    row.rolls,
+    row.lootTable,
+    row.rateTable,
   ].join(" ");
 }
 
@@ -535,13 +567,22 @@ function detailTable(rows, columns) {
 }
 
 function renderSourceDetail(payload) {
-  const rows = [...(payload.rows || [])].sort((a, b) => chanceValue(b) - chanceValue(a));
+  const search = state.activeDetail?.type === "source" ? state.activeDetail.search || "" : "";
+  const rows = (payload.rows || []).filter((row) => matchesTerms(search, sourceDetailSearchText(row)));
+  rows.sort((a, b) => chanceValue(b) - chanceValue(a));
   const limited = rows.slice(0, 500);
+  const totalRows = Number(payload.total || payload.rows?.length || rows.length);
+  const showingText = search
+    ? `Showing ${limited.length.toLocaleString()} of ${rows.length.toLocaleString()} matching rows`
+    : `Showing ${limited.length.toLocaleString()} of ${totalRows.toLocaleString()} highest-chance rows`;
   $("detailTitle").textContent = payload.source;
-  $("detailMeta").textContent = `${payload.sourceKind} | ${Number(payload.total || rows.length).toLocaleString()} drop rows | ${payload.spawnLocationCount || 0} known spawns`;
+  $("detailMeta").textContent = `${payload.sourceKind} | ${totalRows.toLocaleString()} drop rows | ${payload.spawnLocationCount || 0} known spawns`;
   $("detailContent").innerHTML = `
     <div class="detail-toolbar">
-      <span class="muted">Showing ${limited.length.toLocaleString()} of ${Number(payload.total || rows.length).toLocaleString()} highest-chance rows</span>
+      <label class="detail-search">Search source results
+        <input id="sourceDetailSearch" autocomplete="off" placeholder="Item, rarity, map, difficulty, loot table..." value="${escapeHtml(search)}">
+      </label>
+      <span class="muted">${escapeHtml(showingText)}</span>
       <button data-fav-type="source" data-fav-key="${escapeHtml(sourceKey(payload.source, payload.sourceKind))}">
         ${isFavoriteSource(payload.source, payload.sourceKind) ? "Remove Favorite" : "Favorite Source"}
       </button>
@@ -552,7 +593,8 @@ function renderSourceDetail(payload) {
       { label: "Category", html: (row) => categoryChip(row.category) },
       { label: "Maps", html: (row) => chips(row.maps || row.map, "map-chip") },
       { label: "Difficulties", html: (row) => chips(row.diffs || row.diff, "diff-chip") },
-      { label: "Chance", html: (row) => escapeHtml(chanceText(row)), num: true },
+      { label: "Luck Chance", html: (row) => escapeHtml(chanceText(row)), num: true },
+      { label: "Base Chance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
       { label: "Grade", key: "grade", num: true },
       { label: "Rolls", key: "rolls", num: true },
       { label: "Loot Table", key: "lootTable" },
@@ -605,7 +647,7 @@ async function openSource(key) {
   $("detailContent").innerHTML = "";
   if (!$("detailDialog").open) $("detailDialog").showModal();
   const payload = await detail(row.detailPath);
-  state.activeDetail = { type: "source", payload };
+  state.activeDetail = { type: "source", payload, search: "" };
   renderSourceDetail(payload);
 }
 
@@ -650,6 +692,19 @@ function wireEvents() {
     if (button.dataset.favType === "source") {
       const row = state.sourceByKey.get(button.dataset.favKey);
       if (row) toggleFavoriteSource(row.source, row.sourceKind);
+    }
+  });
+
+  document.body.addEventListener("input", (event) => {
+    const input = event.target;
+    if (input.id !== "sourceDetailSearch" || state.activeDetail?.type !== "source") return;
+    const position = input.selectionStart ?? input.value.length;
+    state.activeDetail.search = input.value;
+    renderSourceDetail(state.activeDetail.payload);
+    const restored = $("sourceDetailSearch");
+    if (restored) {
+      restored.focus();
+      restored.setSelectionRange(position, position);
     }
   });
 
