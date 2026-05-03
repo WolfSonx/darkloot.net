@@ -11,11 +11,14 @@
   <header class="app-header">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">DL</div>
-      <div>
-        <h1>DarkLoot</h1>
-        <p id="dataStatus">Loading loot data...</p>
-      </div>
+      <h1>DarkLoot</h1>
     </div>
+    <nav class="tabs app-nav" aria-label="Primary">
+      <button class="tab active" data-tab="items">Items</button>
+      <button class="tab" data-tab="sources">Sources</button>
+      <button class="tab" data-tab="favorites">Favorites</button>
+    </nav>
+    <p id="dataStatus" class="nav-status">Loading loot data...</p>
   </header>
 
   <main>
@@ -37,12 +40,6 @@
         <strong id="updatedAt">-</strong>
       </div>
     </section>
-
-    <nav class="tabs app-nav" aria-label="Primary">
-      <button class="tab active" data-tab="items">Items</button>
-      <button class="tab" data-tab="sources">Sources</button>
-      <button class="tab" data-tab="favorites">Favorites</button>
-    </nav>
 
     <section id="itemsView" class="view active">
       <div class="view-head">
@@ -76,7 +73,6 @@
               <th>Category</th>
               <th>Maps</th>
               <th>Difficulties</th>
-              <th class="num">Best Chance</th>
               <th class="num">Sources</th>
               <th class="action-col">Open</th>
             </tr>
@@ -115,8 +111,6 @@
               <th>Maps</th>
               <th>Difficulties</th>
               <th class="num">Items</th>
-              <th class="num">Best Chance</th>
-              <th>Top Item</th>
               <th class="action-col">Open</th>
             </tr>
           </thead>

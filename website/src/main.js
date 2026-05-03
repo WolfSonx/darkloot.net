@@ -336,12 +336,11 @@ function renderItems() {
         <td>${categoryChip(row.category)}</td>
         <td>${chips(row.maps || row.map, "map-chip")}</td>
         <td>${chips(row.diffs || row.diff, "diff-chip")}</td>
-        <td class="num">${escapeHtml(chanceText(row))}</td>
         <td class="num">${escapeHtml(row.sourceCount)}</td>
         <td><button data-open-item="${escapeHtml(row.itemAsset)}">Sources</button></td>
       </tr>
     `).join("")
-    : `<tr><td class="message-row" colspan="9">No items match these filters.</td></tr>`;
+    : `<tr><td class="message-row" colspan="8">No items match these filters.</td></tr>`;
 }
 
 function renderSources() {
@@ -357,12 +356,10 @@ function renderSources() {
         <td>${chips(row.mapValues || row.maps, "map-chip")}</td>
         <td>${chips(row.diffValues || row.diffs, "diff-chip")}</td>
         <td class="num">${escapeHtml(row.itemCount)}</td>
-        <td class="num">${escapeHtml(chanceText(row, "bestDynValue", "bestDyn"))}</td>
-        <td>${escapeHtml(row.topItem)}</td>
         <td><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
       </tr>
     `).join("")
-    : `<tr><td class="message-row" colspan="9">No sources match these filters.</td></tr>`;
+    : `<tr><td class="message-row" colspan="7">No sources match these filters.</td></tr>`;
 }
 
 function renderFavorites() {
@@ -465,7 +462,7 @@ function renderItemDetail(payload) {
       { label: "Kind", html: (row) => kindChip(row.sourceKind) },
       { label: "Maps", html: (row) => chips(row.mapValues || row.maps, "map-chip") },
       { label: "Difficulties", html: (row) => chips(row.diffValues || row.diffs, "diff-chip") },
-      { label: "Best Chance", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
+      { label: "Chance", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
       { label: "Spawns", key: "spawnLocationCount", num: true },
       { label: "Loot Table", key: "bestLootTable" },
       { label: "Open", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
