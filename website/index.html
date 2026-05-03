@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b0d10">
   <title>DarkLoot</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/src/styles.css?v=20260504-1">
+  <link rel="stylesheet" href="/src/styles.css?v=20260503-6">
 </head>
 <body>
   <header class="app-header">
@@ -37,7 +37,7 @@
   <main>
     <section id="itemsView" class="view active">
       <div class="view-head">
-        <h2>Find Items</h2>
+        <h2>Item Drops</h2>
       </div>
       <div class="filters">
         <label class="wide">Search item or source
@@ -46,7 +46,7 @@
         <label>Rarity
           <select id="itemRarity"></select>
         </label>
-        <label>Type
+        <label>Category
           <select id="itemCategory"></select>
         </label>
         <label>Map
@@ -63,10 +63,9 @@
               <th class="fav-col">Fav</th>
               <th><button class="sort-button" data-sort-list="items" data-sort-key="item">Item</button></th>
               <th><button class="sort-button" data-sort-list="items" data-sort-key="rarity">Rarity</button></th>
-              <th><button class="sort-button" data-sort-list="items" data-sort-key="category">Type</button></th>
+              <th><button class="sort-button" data-sort-list="items" data-sort-key="category">Category</button></th>
               <th><button class="sort-button" data-sort-list="items" data-sort-key="maps">Maps</button></th>
-              <th><button class="sort-button" data-sort-list="items" data-sort-key="difficulties">Difficulty</button></th>
-              <th class="num"><button class="sort-button num" data-sort-list="items" data-sort-key="chance">Best Chance</button></th>
+              <th><button class="sort-button" data-sort-list="items" data-sort-key="difficulties">Difficulties</button></th>
               <th class="num"><button class="sort-button num" data-sort-list="items" data-sort-key="sources">Sources</button></th>
               <th class="action-col">Open</th>
             </tr>
@@ -79,7 +78,7 @@
 
     <section id="sourcesView" class="view">
       <div class="view-head">
-        <h2>Find Sources</h2>
+        <h2>Loot Sources</h2>
       </div>
       <div class="filters source-filters">
         <label class="wide">Search source or item
@@ -103,9 +102,8 @@
               <th><button class="sort-button" data-sort-list="sources" data-sort-key="source">Source</button></th>
               <th><button class="sort-button" data-sort-list="sources" data-sort-key="kind">Kind</button></th>
               <th><button class="sort-button" data-sort-list="sources" data-sort-key="maps">Maps</button></th>
-              <th><button class="sort-button" data-sort-list="sources" data-sort-key="difficulties">Difficulty</button></th>
-              <th class="num"><button class="sort-button num" data-sort-list="sources" data-sort-key="chance">Best Chance</button></th>
-              <th class="num"><button class="sort-button num" data-sort-list="sources" data-sort-key="items">Drops</button></th>
+              <th><button class="sort-button" data-sort-list="sources" data-sort-key="difficulties">Difficulties</button></th>
+              <th class="num"><button class="sort-button num" data-sort-list="sources" data-sort-key="items">Items</button></th>
               <th class="action-col">Open</th>
             </tr>
           </thead>
@@ -168,6 +166,6 @@
     <div id="detailContent"></div>
   </dialog>
 
-  <script type="module" src="/src/main.js?v=20260504-1"></script>
+  <script type="module" src="/src/main.js?v=20260503-6"></script>
 </body>
 </html>
