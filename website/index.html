@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0d10">
+  <title>DarkLoot</title>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">DL</div>
+      <div>
+        <h1>DarkLoot</h1>
+        <p id="dataStatus">Loading loot data...</p>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Primary">
+      <button class="tab active" data-tab="items">Items</button>
+      <button class="tab" data-tab="sources">Sources</button>
+      <button class="tab" data-tab="favorites">Favorites</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="summary-band" aria-label="Data summary">
+      <div>
+        <span>Items</span>
+        <strong id="itemTotal">0</strong>
+      </div>
+      <div>
+        <span>Sources</span>
+        <strong id="sourceTotal">0</strong>
+      </div>
+      <div>
+        <span>Luck</span>
+        <strong id="luckValue">-</strong>
+      </div>
+      <div>
+        <span>Updated</span>
+        <strong id="updatedAt">-</strong>
+      </div>
+    </section>
+
+    <section id="itemsView" class="view active">
+      <div class="view-head">
+        <h2>Item Drops</h2>
+        <span id="itemCount" class="result-count">0 results</span>
+      </div>
+      <div class="filters">
+        <label class="wide">Search item or source
+          <input id="itemSearch" autocomplete="off" placeholder="Gold key, wolf pelt, falchion...">
+        </label>
+        <label>Rarity
+          <select id="itemRarity"></select>
+        </label>
+        <label>Category
+          <select id="itemCategory"></select>
+        </label>
+        <label>Map
+          <select id="itemMap"></select>
+        </label>
+        <label>Difficulty
+          <select id="itemDiff"></select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="fav-col">Fav</th>
+              <th>Item</th>
+              <th>Rarity</th>
+              <th>Category</th>
+              <th>Maps</th>
+              <th>Difficulties</th>
+              <th class="num">Best Chance</th>
+              <th class="num">Sources</th>
+              <th class="action-col">Open</th>
+            </tr>
+          </thead>
+          <tbody id="itemRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sourcesView" class="view">
+      <div class="view-head">
+        <h2>Loot Sources</h2>
+        <span id="sourceCount" class="result-count">0 results</span>
+      </div>
+      <div class="filters source-filters">
+        <label class="wide">Search source or item
+          <input id="sourceSearch" autocomplete="off" placeholder="Skeleton champion, ornate chest, gold key...">
+        </label>
+        <label>Map
+          <select id="sourceMap"></select>
+        </label>
+        <label>Difficulty
+          <select id="sourceDiff"></select>
+        </label>
+        <label>Kind
+          <select id="sourceKind"></select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="fav-col">Fav</th>
+              <th>Source</th>
+              <th>Kind</th>
+              <th>Maps</th>
+              <th>Difficulties</th>
+              <th class="num">Items</th>
+              <th class="num">Best Chance</th>
+              <th>Top Item</th>
+              <th class="action-col">Open</th>
+            </tr>
+          </thead>
+          <tbody id="sourceRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="favoritesView" class="view">
+      <div class="view-head">
+        <h2>Favorites</h2>
+        <button id="clearFavorites" class="danger">Clear</button>
+      </div>
+      <div class="favorites-layout">
+        <div>
+          <h3>Items</h3>
+          <div class="table-wrap compact">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Rarity</th>
+                  <th class="action-col">Open</th>
+                  <th class="action-col">Remove</th>
+                </tr>
+              </thead>
+              <tbody id="favoriteItemRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3>Sources</h3>
+          <div class="table-wrap compact">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Kind</th>
+                  <th class="action-col">Open</th>
+                  <th class="action-col">Remove</th>
+                </tr>
+              </thead>
+              <tbody id="favoriteSourceRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="detailDialog">
+    <div class="dialog-head">
+      <div>
+        <h2 id="detailTitle">Details</h2>
+        <p id="detailMeta"></p>
+      </div>
+      <button id="closeDetail" aria-label="Close">Close</button>
+    </div>
+    <div id="detailContent"></div>
+  </dialog>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

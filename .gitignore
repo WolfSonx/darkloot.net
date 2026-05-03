@@ -1,0 +1,26 @@
+# Local game exports and scan/cache state
+Content/
+loot_spawn_cache.pkl.gz
+loot_spawn_settings.json
+bundle_cache/
+
+# Build and package outputs
+build/
+build_onedir/
+dist/
+dist_onedir/
+website/dist/
+node_modules/
+website/node_modules/
+pyi_tmp/
+*.zip
+*.spec
+
+# Runtime logs and Python cache
+*.log
+__pycache__/
+*.py[cod]
+
+# Editor/project metadata
+.idea/
+.vscode/
