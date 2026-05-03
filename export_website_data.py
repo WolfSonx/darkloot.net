@@ -69,15 +69,77 @@ def reset_generated_details(output_dir: Path) -> None:
     (output_dir / "details" / "sources").mkdir(parents=True, exist_ok=True)
 
 
-def public_item_source_row(row: dict) -> dict:
+def luck_model_for_row(row: dict | None) -> dict | None:
+    if not row:
+        return None
+    rate_key = str(row.get("rate_key") or "").lower()
+    if not rate_key:
+        return None
+    try:
+        return {
+            "rateKey": rate_key,
+            "grade": int(row.get("grade", 0) or 0),
+            "rolls": max(1, int(row.get("rolls", 1) or 1)),
+            "choiceFraction": float(row.get("choice_fraction", 0.0) or 0.0),
+            "baseAtLeastOneValue": float(row.get("base_at_least_one", 0.0) or 0.0),
+            "basePerRollValue": float(row.get("base_per_roll", 0.0) or 0.0),
+        }
+    except (TypeError, ValueError):
+        return None
+
+
+def attach_luck_model(public_row: dict, raw_row: dict | None) -> dict:
+    model = luck_model_for_row(raw_row)
+    if model:
+        public_row["luckModel"] = model
+    return public_row
+
+
+def best_item_row(index, item_row: dict) -> dict | None:
+    best = None
+    for row in index.item_rows.get(item_row["itemAsset"], ()):
+        if row["rarity"] != item_row["rarity"] or row["cat"] != item_row["category"]:
+            continue
+        if not index.row_location_maps(row):
+            continue
+        if best is None or row["dyn_at_least_one"] > best["dyn_at_least_one"]:
+            best = row
+    return best
+
+
+def best_source_row(index, source_row: dict) -> dict | None:
+    best = None
+    kind = source_row["sourceKind"]
+    for source in source_row.get("sourceValues", [source_row["source"]]):
+        for row in index.source_rows_for_query(source, kind):
+            if not index.row_location_maps(row):
+                continue
+            if best is None or row["dyn_at_least_one"] > best["dyn_at_least_one"]:
+                best = row
+    return best
+
+
+def best_item_source_row(base_rows: list[dict], source_row: dict) -> dict | None:
+    source_values = set(source_row.get("sourceValues") or [source_row["source"]])
+    kind = source_row["sourceKind"]
+    best = None
+    for row in base_rows:
+        if row["source_kind"] != kind or row["source"] not in source_values:
+            continue
+        if best is None or row["dyn_at_least_one"] > best["dyn_at_least_one"]:
+            best = row
+    return best
+
+
+def public_item_source_row(row: dict, raw_row: dict | None = None) -> dict:
     cleaned = dict(row)
     cleaned.pop("spawnLocations", None)
-    return cleaned
+    return attach_luck_model(cleaned, raw_row)
 
 
 def public_source_drop_row(row: dict) -> dict:
     compact = compact_row(row)
-    return {
+    return attach_luck_model({
         "item": compact["item"],
         "itemAsset": compact["itemAsset"],
         "rarity": compact["rarity"],
@@ -91,7 +153,7 @@ def public_source_drop_row(row: dict) -> dict:
         "dynAtLeastOneValue": compact["dynAtLeastOneValue"],
         "lootTable": compact["lootTable"],
         "rateTable": compact["rateTable"],
-    }
+    }, row)
 
 
 def export_source_details(output_dir: Path, state: AppState, sources: list[dict]) -> None:
@@ -164,7 +226,10 @@ def export_item_details(output_dir: Path, state: AppState, items: list[dict]) ->
                 "sourceCount": row["sourceCount"],
             },
             "total": len(source_rows),
-            "rows": [public_item_source_row(source_row) for source_row in source_rows],
+            "rows": [
+                public_item_source_row(source_row, best_item_source_row(base_rows, source_row))
+                for source_row in source_rows
+            ],
         }
         write_json(output_path_for_public_data(output_dir, row["detailPath"]), payload)
 
@@ -178,7 +243,7 @@ def build_indexes(output_dir: Path, state: AppState) -> tuple[list[dict], list[d
     for summary in index.item_summaries:
         row = compact_row(summary)
         row["detailPath"] = f"/data/details/items/{slug_for(row['itemAsset'], row['item'])}"
-        items.append(row)
+        items.append(attach_luck_model(row, best_item_row(index, row)))
     items.sort(key=lambda row: (-float(row.get("dynAtLeastOneValue") or 0), row["item"].lower()))
 
     sources = []
@@ -186,7 +251,7 @@ def build_indexes(output_dir: Path, state: AppState) -> tuple[list[dict], list[d
         row = dict(summary)
         row.pop("spawnLocations", None)
         row["detailPath"] = f"/data/details/sources/{slug_for(row['sourceKind'], row['source'])}"
-        sources.append(row)
+        sources.append(attach_luck_model(row, best_source_row(index, row)))
     sources.sort(key=lambda row: (-float(row.get("bestDynValue") or 0), row["source"].lower(), row["sourceKind"].lower()))
 
     stats = dict(result.stats)
@@ -218,6 +283,7 @@ def build_indexes(output_dir: Path, state: AppState) -> tuple[list[dict], list[d
         "files": {
             "items": "/data/items-index.json",
             "sources": "/data/sources-index.json",
+            "rates": "/data/rates.json",
             "quests": "/data/quests.json",
             "maps": "/data/maps.json",
         },
@@ -234,9 +300,13 @@ def export_website_data(cache_path: Path, output_dir: Path, root: Path, luck: in
     output_dir.mkdir(parents=True, exist_ok=True)
     reset_generated_details(output_dir)
     items, sources, manifest = build_indexes(output_dir, state)
+    _index, result, _luck = state.current_data()
+    if not result:
+        raise RuntimeError("No scan result available after loading cache.")
 
     write_json(output_dir / "items-index.json", {"dataVersion": DATA_VERSION, "rows": items})
     write_json(output_dir / "sources-index.json", {"dataVersion": DATA_VERSION, "rows": sources})
+    write_json(output_dir / "rates.json", {"dataVersion": DATA_VERSION, "rows": result.rate_weights})
     write_json(output_dir / "quests.json", {"dataVersion": DATA_VERSION, "rows": []})
     write_json(output_dir / "maps.json", {"dataVersion": DATA_VERSION, "rows": []})
     export_source_details(output_dir, state, sources)

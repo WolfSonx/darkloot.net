@@ -38,6 +38,7 @@ The exporter writes:
 
 ```text
 website/public/data/manifest.json
+website/public/data/rates.json
 website/public/data/items-index.json
 website/public/data/sources-index.json
 website/public/data/details/items/*.json

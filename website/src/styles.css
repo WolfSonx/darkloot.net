@@ -1,18 +1,21 @@
 :root {
-  --bg: #0b0d10;
-  --panel: #141820;
-  --panel-2: #1a202a;
-  --panel-3: #202835;
-  --line: #303a48;
-  --line-soft: #222b37;
-  --text: #f2f5f7;
-  --muted: #a8b1bd;
-  --faint: #788390;
-  --gold: #e6bd63;
-  --green: #54c7a2;
-  --red: #ef7468;
-  --blue: #78a7ff;
-  --input: #0f1319;
+  --bg: #0f1216;
+  --panel: #181d23;
+  --panel-2: #222936;
+  --panel-3: #263241;
+  --line: #344252;
+  --line-soft: #27313c;
+  --text: #f3f6f8;
+  --muted: #a9b5c1;
+  --faint: #7f8c99;
+  --accent: #61d9bc;
+  --accent-2: #f0c76a;
+  --green: var(--accent);
+  --gold: var(--accent-2);
+  --red: #f27f74;
+  --blue: #74a7ff;
+  --violet: #bd92ff;
+  --input: #111720;
 }
 
 * {
@@ -42,11 +45,13 @@ button {
   color: var(--text);
   padding: 0 11px;
   cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, transform .12s ease;
 }
 
 button:hover {
   border-color: var(--green);
   background: var(--panel-3);
+  transform: translateY(-1px);
 }
 
 button.danger {
@@ -82,8 +87,9 @@ select:focus {
   gap: 20px;
   padding: 14px 20px 0;
   border-bottom: 1px solid var(--line);
-  background: #10141a;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, .25);
+  border-top: 3px solid var(--accent);
+  background: #151b22;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .18);
 }
 
 .brand {
@@ -98,9 +104,9 @@ select:focus {
   place-items: center;
   width: 38px;
   height: 38px;
-  border: 1px solid #6f5b2f;
+  border: 1px solid #6d7654;
   border-radius: 8px;
-  background: linear-gradient(135deg, #1b2028, #312715);
+  background: #1a222c;
   color: var(--gold);
   font-weight: 800;
 }
@@ -129,15 +135,19 @@ h1 {
 }
 
 .tab {
+  min-height: 44px;
+  padding: 0 22px;
   border-bottom-right-radius: 0;
   border-bottom-left-radius: 0;
   color: var(--muted);
+  font-size: 15px;
+  font-weight: 650;
 }
 
 .tab.active {
   color: #fff;
   border-color: var(--green);
-  background: #1d2f31;
+  background: #213144;
   box-shadow: inset 0 3px 0 var(--green);
 }
 
@@ -158,7 +168,7 @@ main {
   border-radius: 8px;
   background: var(--panel);
   padding: 9px 10px;
-  box-shadow: inset 3px 0 0 rgba(230, 189, 99, .5);
+  box-shadow: inset 3px 0 0 rgba(97, 217, 188, .45);
 }
 
 .summary-band span {
@@ -172,6 +182,15 @@ main {
   margin-top: 5px;
   color: var(--gold);
   font-size: 16px;
+}
+
+.summary-band input {
+  width: 100%;
+  max-width: 130px;
+  margin-top: 5px;
+  color: var(--gold);
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .view {
