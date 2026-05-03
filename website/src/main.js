@@ -473,6 +473,38 @@ function summarizedValues(values, limit = 3) {
   return `${ordered.slice(0, limit).join(", ")} +${ordered.length - limit}`;
 }
 
+function amountText(value) {
+  const values = orderedValues(splitValues(value));
+  const numbers = values
+    .map((entry) => Number(entry))
+    .filter((entry) => Number.isFinite(entry))
+    .sort((left, right) => left - right);
+  if (numbers.length && numbers.length === values.length) {
+    const ranges = [];
+    let start = numbers[0];
+    let previous = numbers[0];
+    for (const number of numbers.slice(1)) {
+      if (number === previous + 1) {
+        previous = number;
+        continue;
+      }
+      ranges.push(start === previous ? String(start) : `${start}-${previous}`);
+      start = number;
+      previous = number;
+    }
+    ranges.push(start === previous ? String(start) : `${start}-${previous}`);
+    return ranges.join(", ");
+  }
+  return summarizedValues(values, 3);
+}
+
+function amountSortValue(value) {
+  const numbers = splitValues(value)
+    .map((entry) => Number(entry))
+    .filter((entry) => Number.isFinite(entry));
+  return numbers.length ? Math.min(...numbers) : 0;
+}
+
 function sourceDetailGroupKey(row) {
   return JSON.stringify([
     row.itemAsset,
@@ -675,8 +707,8 @@ function sourceDetailSortValue(row, key) {
       return listText(row.diffs || row.diff);
     case "baseChance":
       return baseChanceValue(row);
-    case "grade":
-      return Number(row.grade || 0);
+    case "amount":
+      return amountSortValue(row.itemCounts || row.itemCount);
     case "rolls":
       return Number(row.rolls || 0);
     case "lootTable":
@@ -914,11 +946,11 @@ function renderSourceDetail(payload) {
       { label: "Item", sortKey: "item", key: "item" },
       { label: "Rarity", sortKey: "rarity", html: (row) => rarity(row.rarity) },
       { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
+      { label: "Amount", sortKey: "amount", html: (row) => escapeHtml(amountText(row.itemCounts || row.itemCount)), num: true },
       { label: "Maps", sortKey: "maps", html: (row) => chips(row.maps || row.map, "map-chip") },
       { label: "Difficulties", sortKey: "difficulties", html: (row) => chips(row.diffs || row.diff, "diff-chip") },
       { label: "Base Chance", sortKey: "baseChance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
       { label: "Luck Chance", sortKey: "chance", html: (row) => escapeHtml(chanceText(row)), num: true },
-      { label: "Grade", sortKey: "grade", key: "grade", num: true },
       { label: "Rolls", sortKey: "rolls", key: "rolls", num: true },
       { label: "Loot Table", sortKey: "lootTable", key: "lootTable" },
     ])}
