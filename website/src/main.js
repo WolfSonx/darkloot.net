@@ -413,6 +413,18 @@ function sourceSortValue(row, key) {
   }
 }
 
+function sourceDetailSortValue(row, key) {
+  switch (key) {
+    case "category":
+      return row.category;
+    case "baseChance":
+      return baseChanceValue(row);
+    case "chance":
+    default:
+      return chanceValue(row);
+  }
+}
+
 function sortedRows(rows, list) {
   const sort = state.sort[list];
   const getter = list === "items" ? itemSortValue : sourceSortValue;
@@ -436,8 +448,19 @@ function setSort(list, key) {
   render();
 }
 
+function setSourceDetailSort(key) {
+  if (state.activeDetail?.type !== "source") return;
+  const current = state.activeDetail.sort || { key: "chance", direction: "desc" };
+  const defaultDirection = key === "chance" || key === "baseChance" ? "desc" : "asc";
+  const direction = current.key === key
+    ? (current.direction === "asc" ? "desc" : "asc")
+    : defaultDirection;
+  state.activeDetail.sort = { key, direction };
+  renderSourceDetail(state.activeDetail.payload);
+}
+
 function updateSortButtons() {
-  document.querySelectorAll(".sort-button").forEach((button) => {
+  document.querySelectorAll(".sort-button[data-sort-list]").forEach((button) => {
     const sort = state.sort[button.dataset.sortList];
     const active = sort?.key === button.dataset.sortKey;
     button.classList.toggle("active", active);
@@ -548,12 +571,24 @@ async function detail(path) {
   return state.detailCache.get(path);
 }
 
+function detailSortButton(key, label, num = false) {
+  const sort = state.activeDetail?.type === "source" ? state.activeDetail.sort : null;
+  const active = sort?.key === key;
+  return `<button class="sort-button detail-sort-button ${num ? "num" : ""} ${active ? "active" : ""}" data-detail-sort-key="${escapeHtml(key)}" data-direction="${active ? escapeHtml(sort.direction) : ""}" aria-pressed="${active ? "true" : "false"}">${escapeHtml(label)}</button>`;
+}
+
 function detailTable(rows, columns) {
   if (!rows.length) return `<div class="message-row">No detail rows found.</div>`;
   return `
     <div class="table-wrap compact">
       <table>
-        <thead><tr>${columns.map((column) => `<th class="${column.num ? "num" : ""}">${escapeHtml(column.label)}</th>`).join("")}</tr></thead>
+        <thead><tr>${columns.map((column) => {
+          const sort = state.activeDetail?.type === "source" ? state.activeDetail.sort : null;
+          const active = column.sortKey && sort?.key === column.sortKey;
+          const ariaSort = column.sortKey ? ` aria-sort="${active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"` : "";
+          const label = column.sortKey ? detailSortButton(column.sortKey, column.label, column.num) : escapeHtml(column.label);
+          return `<th class="${column.num ? "num" : ""}"${ariaSort}>${label}</th>`;
+        }).join("")}</tr></thead>
         <tbody>
           ${rows.map((row) => `
             <tr>
@@ -568,8 +603,19 @@ function detailTable(rows, columns) {
 
 function renderSourceDetail(payload) {
   const search = state.activeDetail?.type === "source" ? state.activeDetail.search || "" : "";
-  const rows = (payload.rows || []).filter((row) => matchesTerms(search, sourceDetailSearchText(row)));
-  rows.sort((a, b) => chanceValue(b) - chanceValue(a));
+  const sort = state.activeDetail?.type === "source" ? state.activeDetail.sort || { key: "chance", direction: "desc" } : { key: "chance", direction: "desc" };
+  const rows = (payload.rows || [])
+    .filter((row) => matchesTerms(search, sourceDetailSearchText(row)))
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => {
+      const direction = sort.direction === "desc" ? -1 : 1;
+      const result = compareSortValues(sourceDetailSortValue(left.row, sort.key), sourceDetailSortValue(right.row, sort.key));
+      if (result) return result * direction;
+      const chanceResult = compareSortValues(chanceValue(left.row), chanceValue(right.row));
+      if (chanceResult) return chanceResult * -1;
+      return left.index - right.index;
+    })
+    .map((entry) => entry.row);
   const limited = rows.slice(0, 500);
   const totalRows = Number(payload.total || payload.rows?.length || rows.length);
   const showingText = search
@@ -590,11 +636,11 @@ function renderSourceDetail(payload) {
     ${detailTable(limited, [
       { label: "Item", key: "item" },
       { label: "Rarity", html: (row) => rarity(row.rarity) },
-      { label: "Category", html: (row) => categoryChip(row.category) },
+      { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
       { label: "Maps", html: (row) => chips(row.maps || row.map, "map-chip") },
       { label: "Difficulties", html: (row) => chips(row.diffs || row.diff, "diff-chip") },
-      { label: "Luck Chance", html: (row) => escapeHtml(chanceText(row)), num: true },
       { label: "Base Chance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
+      { label: "Luck Chance", html: (row) => escapeHtml(chanceText(row)), num: true },
       { label: "Grade", key: "grade", num: true },
       { label: "Rolls", key: "rolls", num: true },
       { label: "Loot Table", key: "lootTable" },
@@ -647,7 +693,7 @@ async function openSource(key) {
   $("detailContent").innerHTML = "";
   if (!$("detailDialog").open) $("detailDialog").showModal();
   const payload = await detail(row.detailPath);
-  state.activeDetail = { type: "source", payload, search: "" };
+  state.activeDetail = { type: "source", payload, search: "", sort: { key: "chance", direction: "desc" } };
   renderSourceDetail(payload);
 }
 
@@ -684,6 +730,10 @@ function wireEvents() {
     if (!button) return;
     if (button.dataset.sortList && button.dataset.sortKey) {
       setSort(button.dataset.sortList, button.dataset.sortKey);
+      return;
+    }
+    if (button.dataset.detailSortKey) {
+      setSourceDetailSort(button.dataset.detailSortKey);
       return;
     }
     if (button.dataset.openItem) openItem(button.dataset.openItem);
