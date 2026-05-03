@@ -71,8 +71,10 @@ MODULE_MAP_NAMES = {
     "ShipGraveyard": "Ship Graveyard",
 }
 MODULE_D_FILE_MAPS = {"firedeep", "shipgraveyard"}
-SOURCE_MAP_EXCLUSIONS = {
-    ("Monster", "Demon Overseer"): {"Ice Abyss"},
+SOURCE_MAP_EXCLUSIONS: dict[tuple[str, str], set[str]] = {}
+SOURCE_MAP_INCLUSIONS = {
+    ("Boss", "Demon Overseer"): {"Inferno"},
+    ("Monster", "Demon Overseer"): {"Inferno"},
 }
 
 
@@ -104,6 +106,11 @@ def source_base_name(source: str) -> str:
 def source_map_exclusions(source: str, kind: str) -> set[str]:
     base = source_base_name(source)
     return set(SOURCE_MAP_EXCLUSIONS.get((str(kind or ""), base), SOURCE_MAP_EXCLUSIONS.get(("Monster", base), ())))
+
+
+def source_map_inclusions(source: str, kind: str) -> set[str]:
+    base = source_base_name(source)
+    return set(SOURCE_MAP_INCLUSIONS.get((str(kind or ""), base), SOURCE_MAP_INCLUSIONS.get(("Monster", base), ())))
 
 
 def source_variant_labels(sources) -> list[str]:
@@ -589,8 +596,12 @@ class WebIndex:
 
     def row_location_maps(self, row: dict) -> set[str]:
         excluded_maps = source_map_exclusions(row["source"], row["source_kind"])
+        included_maps = source_map_inclusions(row["source"], row["source_kind"])
         row_maps = set(row["maps"]) - excluded_maps
         source_maps = self.source_location_maps(row) - excluded_maps
+        if included_maps:
+            row_maps &= included_maps
+            source_maps &= included_maps
         if source_maps:
             return row_maps & source_maps
         return row_maps

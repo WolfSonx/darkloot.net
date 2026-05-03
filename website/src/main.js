@@ -24,6 +24,7 @@ const DEFAULT_SORT_DIRECTION = {
   sources: "desc",
   items: "desc",
 };
+const DEFAULT_DIFFICULTY = "High Roller";
 const LUCK_500_SCALARS = [0.5, 0.5, 0.75, 1.0, 1.752, 2.584, 3.28, 3.705, 4.213];
 const GRADE4_ANCHORS = [
   [0, 1.000],
@@ -202,6 +203,11 @@ function optionHtml(values, label = "All") {
   return [`<option>${escapeHtml(label)}</option>`, ...values.map((value) => `<option>${escapeHtml(value)}</option>`)].join("");
 }
 
+function setSelectIfAvailable(id, value) {
+  const select = $(id);
+  if ([...select.options].some((option) => option.value === value)) select.value = value;
+}
+
 function fillFilters() {
   const filters = state.manifest.filters || {};
   $("itemRarity").innerHTML = optionHtml(filters.rarities || []);
@@ -212,6 +218,8 @@ function fillFilters() {
   $("sourceDiff").innerHTML = optionHtml(filters.diffs || []);
   const kinds = [...new Set(state.sources.map((row) => row.sourceKind).filter(Boolean))].sort();
   $("sourceKind").innerHTML = optionHtml(kinds);
+  setSelectIfAvailable("itemDiff", DEFAULT_DIFFICULTY);
+  setSelectIfAvailable("sourceDiff", DEFAULT_DIFFICULTY);
 }
 
 function formatDate(value) {
@@ -524,7 +532,7 @@ function selectedSourceDetailFilters() {
     rarity: "All",
     category: "All",
     map: "All",
-    diff: "All",
+    diff: DEFAULT_DIFFICULTY,
     ...(state.activeDetail?.filters || {}),
   };
 }
@@ -533,7 +541,7 @@ function selectedItemDetailFilters() {
   return {
     kind: "All",
     map: "All",
-    diff: "All",
+    diff: DEFAULT_DIFFICULTY,
     ...(state.activeDetail?.filters || {}),
   };
 }
@@ -962,7 +970,7 @@ async function openItem(asset) {
     type: "item",
     payload,
     search: "",
-    filters: { kind: "All", map: "All", diff: "All" },
+    filters: { kind: "All", map: "All", diff: DEFAULT_DIFFICULTY },
   };
   renderItemDetail(payload);
 }
@@ -979,7 +987,7 @@ async function openSource(key) {
     type: "source",
     payload,
     search: "",
-    filters: { rarity: "All", category: "All", map: "All", diff: "High Roller" },
+    filters: { rarity: "All", category: "All", map: "All", diff: DEFAULT_DIFFICULTY },
     sort: { key: "chance", direction: "desc" },
   };
   renderSourceDetail(payload);
