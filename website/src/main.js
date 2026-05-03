@@ -55,17 +55,25 @@ function escapeHtml(value) {
 
 function terms(value) {
   return String(value || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()
-    .split(/\s+/)
+    .split(/[^a-z0-9]+/)
     .map((term) => term.trim())
     .filter(Boolean);
 }
 
-function matchesTerms(needle, haystack) {
+function matchesSearchParts(parts, haystack) {
+  const textParts = terms(haystack);
+  return parts.every((part) => textParts.some((textPart) => textPart.startsWith(part)));
+}
+
+function matchesAnySearchGroup(needle, groups) {
   const parts = terms(needle);
   if (!parts.length) return true;
-  const text = String(haystack || "").toLowerCase();
-  return parts.every((part) => text.includes(part));
+  return groups.some((group) => {
+    const text = group.filter(Boolean).join(" ");
+    return matchesSearchParts(parts, text);
+  });
 }
 
 function sourceKey(source, kind) {
@@ -237,46 +245,37 @@ function selected(id) {
   return $(id).value || "All";
 }
 
-function itemSearchText(row) {
+function itemSearchGroups(row) {
   return [
-    row.item,
-    row.itemAsset,
-    row.rarity,
-    row.category,
-    row.source,
-    row.sources?.join(" "),
-    row.map,
-    row.diff,
-  ].join(" ");
+    [row.item, row.itemAsset, row.rarity, row.category],
+    [row.source, row.sources?.join(" ")],
+    [row.map, row.maps?.join(" "), row.diff, row.diffs?.join(" ")],
+  ];
 }
 
-function sourceSearchText(row) {
+function sourceSearchGroups(row) {
   return [
-    row.source,
-    row.sourceKind,
-    row.topItem,
-    row.maps,
-    row.diffs,
-    row.sourceValues?.join(" "),
-  ].join(" ");
+    [row.source, row.sourceKind, row.sourceValues?.join(" ")],
+    [row.topItem],
+    [row.maps, row.mapValues?.join(" "), row.diffs, row.diffValues?.join(" ")],
+  ];
 }
 
-function sourceDetailSearchText(row) {
+function sourceDetailSearchGroups(row) {
   return [
-    row.item,
-    row.itemAsset,
-    row.rarity,
-    row.category,
-    row.map,
-    row.maps,
-    row.diff,
-    row.diffs,
-    row.grade,
-    row.rolls,
-    row.lootTable,
-    row.rateTable,
-    row.rateTables?.join(" "),
-  ].join(" ");
+    [row.item, row.itemAsset, row.rarity, row.category],
+    [row.map, row.maps?.join(" "), row.diff, row.diffs?.join(" ")],
+    [row.lootTable, row.rateTable, row.rateTables?.join(" ")],
+    [row.grade, row.rolls, row.itemCount],
+  ];
+}
+
+function itemDetailSearchGroups(row) {
+  return [
+    [row.source, row.sourceKind, row.sourceValues?.join(" ")],
+    [row.bestLootTable, row.bestRateTable, row.bestGroup],
+    [row.maps, row.mapValues?.join(" "), row.diffs, row.diffValues?.join(" "), row.bestMap, row.bestDiff],
+  ];
 }
 
 function filteredItems() {
@@ -286,7 +285,7 @@ function filteredItems() {
   const map = selected("itemMap");
   const diff = selected("itemDiff");
   return state.items.filter((row) => {
-    if (!matchesTerms(search, itemSearchText(row))) return false;
+    if (!matchesAnySearchGroup(search, itemSearchGroups(row))) return false;
     if (rarity !== "All" && row.rarity !== rarity) return false;
     if (category !== "All" && row.category !== category) return false;
     if (map !== "All" && !(row.maps || []).includes(map)) return false;
@@ -301,7 +300,7 @@ function filteredSources() {
   const diff = selected("sourceDiff");
   const kind = selected("sourceKind");
   return state.sources.filter((row) => {
-    if (!matchesTerms(search, sourceSearchText(row))) return false;
+    if (!matchesAnySearchGroup(search, sourceSearchGroups(row))) return false;
     if (map !== "All" && !(row.mapValues || []).includes(map)) return false;
     if (diff !== "All" && !(row.diffValues || []).includes(diff)) return false;
     if (kind !== "All" && row.sourceKind !== kind) return false;
@@ -458,11 +457,27 @@ function selectedSourceDetailFilters() {
   };
 }
 
+function selectedItemDetailFilters() {
+  return {
+    kind: "All",
+    map: "All",
+    diff: "All",
+    ...(state.activeDetail?.filters || {}),
+  };
+}
+
 function sourceDetailFilterMatches(row, filters) {
   if (filters.rarity !== "All" && row.rarity !== filters.rarity) return false;
   if (filters.category !== "All" && row.category !== filters.category) return false;
   if (filters.map !== "All" && !splitValues(row.maps || row.map).includes(filters.map)) return false;
   if (filters.diff !== "All" && !splitValues(row.diffs || row.diff).includes(filters.diff)) return false;
+  return true;
+}
+
+function itemDetailFilterMatches(row, filters) {
+  if (filters.kind !== "All" && row.sourceKind !== filters.kind) return false;
+  if (filters.map !== "All" && !splitValues(row.mapValues || row.maps).includes(filters.map)) return false;
+  if (filters.diff !== "All" && !splitValues(row.diffValues || row.diffs).includes(filters.diff)) return false;
   return true;
 }
 
@@ -475,6 +490,14 @@ function sourceDetailFilterOptions(rows) {
   };
 }
 
+function itemDetailFilterOptions(rows) {
+  return {
+    kind: orderedValues(rows.map((row) => row.sourceKind)),
+    map: sourceDetailOrderedValues(rows.flatMap((row) => row.mapValues || row.maps), "map"),
+    diff: sourceDetailOrderedValues(rows.flatMap((row) => row.diffValues || row.diffs), "diff"),
+  };
+}
+
 function selectOptions(values, selectedValue, allLabel = "All") {
   const valuesWithAll = [allLabel, ...values];
   if (selectedValue && !valuesWithAll.includes(selectedValue)) valuesWithAll.push(selectedValue);
@@ -483,15 +506,23 @@ function selectOptions(values, selectedValue, allLabel = "All") {
     .join("");
 }
 
-function sourceDetailFilterSelect(id, key, label, selectedValue, values) {
+function detailFilterSelect(id, dataName, key, label, selectedValue, values) {
   return `
     <label class="detail-filter">
       <span>${escapeHtml(label)}</span>
-      <select id="${escapeHtml(id)}" data-source-detail-filter="${escapeHtml(key)}">
+      <select id="${escapeHtml(id)}" data-${escapeHtml(dataName)}="${escapeHtml(key)}">
         ${selectOptions(values, selectedValue)}
       </select>
     </label>
   `;
+}
+
+function sourceDetailFilterSelect(id, key, label, selectedValue, values) {
+  return detailFilterSelect(id, "source-detail-filter", key, label, selectedValue, values);
+}
+
+function itemDetailFilterSelect(id, key, label, selectedValue, values) {
+  return detailFilterSelect(id, "item-detail-filter", key, label, selectedValue, values);
 }
 
 function rarityRank(value) {
@@ -754,7 +785,7 @@ function renderSourceDetail(payload) {
   const groupedRows = groupedSourceDetailRows(payload.rows || []);
   const filterOptions = sourceDetailFilterOptions(groupedRows);
   const rows = groupedRows
-    .filter((row) => matchesTerms(search, sourceDetailSearchText(row)))
+    .filter((row) => matchesAnySearchGroup(search, sourceDetailSearchGroups(row)))
     .filter((row) => sourceDetailFilterMatches(row, filters))
     .map((row, index) => ({ row, index }))
     .sort((left, right) => {
@@ -780,7 +811,7 @@ function renderSourceDetail(payload) {
       <label class="detail-search">Search source results
         <input id="sourceDetailSearch" autocomplete="off" placeholder="Item, rarity, map, difficulty, loot table..." value="${escapeHtml(search)}">
       </label>
-      <div class="source-detail-filters">
+      <div class="detail-filters">
         ${sourceDetailFilterSelect("sourceDetailRarity", "rarity", "Rarity", filters.rarity, filterOptions.rarity)}
         ${sourceDetailFilterSelect("sourceDetailCategory", "category", "Category", filters.category, filterOptions.category)}
         ${sourceDetailFilterSelect("sourceDetailMap", "map", "Map", filters.map, filterOptions.map)}
@@ -807,13 +838,28 @@ function renderSourceDetail(payload) {
 }
 
 function renderItemDetail(payload) {
-  const rows = [...(payload.rows || [])].sort((a, b) => chanceValue(b, "chanceValue") - chanceValue(a, "chanceValue"));
+  const search = state.activeDetail?.type === "item" ? state.activeDetail.search || "" : "";
+  const filters = selectedItemDetailFilters();
+  const baseRows = payload.rows || [];
+  const filterOptions = itemDetailFilterOptions(baseRows);
+  const rows = baseRows
+    .filter((row) => matchesAnySearchGroup(search, itemDetailSearchGroups(row)))
+    .filter((row) => itemDetailFilterMatches(row, filters))
+    .sort((a, b) => chanceValue(b, "chanceValue") - chanceValue(a, "chanceValue"));
   const limited = rows.slice(0, 500);
   $("detailTitle").textContent = payload.item?.item || "Item";
-  $("detailMeta").textContent = `${payload.item?.rarity || ""} ${payload.item?.category || ""} | ${rows.length.toLocaleString()} sources`;
+  $("detailMeta").textContent = `${payload.item?.rarity || ""} ${payload.item?.category || ""} | ${baseRows.length.toLocaleString()} sources`;
   $("detailContent").innerHTML = `
-    <div class="detail-toolbar">
-      <span class="muted">Showing ${limited.length.toLocaleString()} of ${rows.length.toLocaleString()} sources</span>
+    <div class="detail-toolbar item-detail-toolbar">
+      <label class="detail-search">Search item sources
+        <input id="itemDetailSearch" autocomplete="off" placeholder="Source, kind, map, difficulty, loot table..." value="${escapeHtml(search)}">
+      </label>
+      <div class="detail-filters item-detail-filters">
+        ${itemDetailFilterSelect("itemDetailKind", "kind", "Kind", filters.kind, filterOptions.kind)}
+        ${itemDetailFilterSelect("itemDetailMap", "map", "Map", filters.map, filterOptions.map)}
+        ${itemDetailFilterSelect("itemDetailDiff", "diff", "Difficulty", filters.diff, filterOptions.diff)}
+      </div>
+      <span class="muted detail-result-count">Showing ${limited.length.toLocaleString()} of ${rows.length.toLocaleString()} matching sources | ${baseRows.length.toLocaleString()} total</span>
       <button data-fav-type="item" data-fav-key="${escapeHtml(payload.item?.itemAsset || "")}">
         ${isFavoriteItem(payload.item?.itemAsset) ? "Remove Favorite" : "Favorite Item"}
       </button>
@@ -840,7 +886,12 @@ async function openItem(asset) {
   $("detailContent").innerHTML = "";
   if (!$("detailDialog").open) $("detailDialog").showModal();
   const payload = await detail(item.detailPath);
-  state.activeDetail = { type: "item", payload };
+  state.activeDetail = {
+    type: "item",
+    payload,
+    search: "",
+    filters: { kind: "All", map: "All", diff: "All" },
+  };
   renderItemDetail(payload);
 }
 
@@ -912,26 +963,48 @@ function wireEvents() {
 
   document.body.addEventListener("input", (event) => {
     const input = event.target;
-    if (input.id !== "sourceDetailSearch" || state.activeDetail?.type !== "source") return;
-    const position = input.selectionStart ?? input.value.length;
-    state.activeDetail.search = input.value;
-    renderSourceDetail(state.activeDetail.payload);
-    const restored = $("sourceDetailSearch");
-    if (restored) {
-      restored.focus();
-      restored.setSelectionRange(position, position);
+    if (input.id === "sourceDetailSearch" && state.activeDetail?.type === "source") {
+      const position = input.selectionStart ?? input.value.length;
+      state.activeDetail.search = input.value;
+      renderSourceDetail(state.activeDetail.payload);
+      const restored = $("sourceDetailSearch");
+      if (restored) {
+        restored.focus();
+        restored.setSelectionRange(position, position);
+      }
+      return;
+    }
+    if (input.id === "itemDetailSearch" && state.activeDetail?.type === "item") {
+      const position = input.selectionStart ?? input.value.length;
+      state.activeDetail.search = input.value;
+      renderItemDetail(state.activeDetail.payload);
+      const restored = $("itemDetailSearch");
+      if (restored) {
+        restored.focus();
+        restored.setSelectionRange(position, position);
+      }
     }
   });
 
   document.body.addEventListener("change", (event) => {
     const input = event.target;
-    if (!input.dataset?.sourceDetailFilter || state.activeDetail?.type !== "source") return;
-    state.activeDetail.filters = {
-      ...selectedSourceDetailFilters(),
-      [input.dataset.sourceDetailFilter]: input.value,
-    };
-    renderSourceDetail(state.activeDetail.payload);
-    $(input.id)?.focus();
+    if (input.dataset?.sourceDetailFilter && state.activeDetail?.type === "source") {
+      state.activeDetail.filters = {
+        ...selectedSourceDetailFilters(),
+        [input.dataset.sourceDetailFilter]: input.value,
+      };
+      renderSourceDetail(state.activeDetail.payload);
+      $(input.id)?.focus();
+      return;
+    }
+    if (input.dataset?.itemDetailFilter && state.activeDetail?.type === "item") {
+      state.activeDetail.filters = {
+        ...selectedItemDetailFilters(),
+        [input.dataset.itemDetailFilter]: input.value,
+      };
+      renderItemDetail(state.activeDetail.payload);
+      $(input.id)?.focus();
+    }
   });
 
   $("closeDetail").addEventListener("click", () => $("detailDialog").close());
