@@ -249,6 +249,9 @@ SPECIAL_WORDS = {
     "soul",
 }
 
+NORMAL_HOARD_SOURCE = "Normal Hoard"
+SUPER_HOARD_SOURCE = "Hoard After Key or Boss"
+
 
 @dataclass(frozen=True)
 class LootChoice:
@@ -527,14 +530,16 @@ def category_from_item_props(props: dict, item_name: str) -> str:
     misc_type = tag_leaf(props.get("MiscType", ""))
     equip_type = tag_leaf(props.get("EquipType", ""))
     combined = " ".join([item_type, misc_type, equip_type, item_name]).lower()
+    if any(word in combined for word in ("quest", "huntingloot", "hunting loot", "key")):
+        return "Special/Quest"
+    if "treasure" in misc_type.lower():
+        return "Treasure"
     if any(word in combined for word in ("weapon", "armor", "shield", "accessory", "instrument")):
         return "Equipment"
     if any(word in combined for word in ("potion", "consumable", "utility", "bandage", "campfire")):
         return "Consumable"
     if any(word in combined for word in ("currency", "coin", "ore", "ingot", "powder", "gem", "material")):
         return "Material/Currency"
-    if any(word in combined for word in ("quest", "huntingloot", "hunting loot", "key")):
-        return "Special/Quest"
     if any(word in combined for word in ("treasure", "misc")):
         guessed = categorize_item(item_name)
         return "Treasure" if guessed == "Other" else guessed
@@ -911,6 +916,15 @@ def source_from_spawner_item(spawner_asset: str, item: dict, resolver: AssetReso
     return humanize_asset(spawner_asset), "Spawner"
 
 
+def split_treasure_hoard_source(source: str, source_kind: str, group_asset: str, spawner_asset: str) -> str:
+    if source_kind != "Prop" or source != "Treasure Hoard":
+        return source
+    source_key = " ".join([group_asset, spawner_asset]).lower()
+    if "superhoard" in source_key or "super hoard" in source_key:
+        return SUPER_HOARD_SOURCE
+    return NORMAL_HOARD_SOURCE
+
+
 def parse_spawner(path: Path, resolver: AssetResolver | None = None) -> list[SpawnerEntry]:
     obj = read_json_asset(path)
     spawner_asset = obj.get("Name") or path.stem
@@ -924,6 +938,7 @@ def parse_spawner(path: Path, resolver: AssetResolver | None = None) -> list[Spa
             continue
         grades = tuple(int(value) for value in (item.get("DungeonGrades", []) or []) if isinstance(value, int))
         source, source_kind = source_from_spawner_item(spawner_asset, item, resolver)
+        source = split_treasure_hoard_source(source, source_kind, group_asset, spawner_asset)
         rows.append(
             SpawnerEntry(
                 spawner_asset=spawner_asset,

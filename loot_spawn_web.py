@@ -695,11 +695,16 @@ class WebIndex:
             for name in (
                 location.get("spawner", ""),
                 humanize_asset(location.get("spawnerAsset", "")),
-                location.get("preview", ""),
-                humanize_asset(location.get("previewAsset", "")),
             ):
                 for variant in match_key_variants(str(name)):
                     possible_keys.update(spawner_to_sources.get(variant, set()))
+            if not possible_keys:
+                for name in (
+                    location.get("preview", ""),
+                    humanize_asset(location.get("previewAsset", "")),
+                ):
+                    for variant in match_key_variants(str(name)):
+                        possible_keys.update(spawner_to_sources.get(variant, set()))
             for source_key in possible_keys:
                 location_key = str(location.get("key") or "")
                 if location_key and location_key in linked_keys[source_key]:
