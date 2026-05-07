@@ -26,6 +26,142 @@ from loot_spawn_web import (
 
 DATA_VERSION = 1
 MAX_SOURCE_DETAIL_ROWS = 12000
+BASE_STAT_KEYS = {
+    "Strength",
+    "Vigor",
+    "Agility",
+    "Dexterity",
+    "Will",
+    "Knowledge",
+    "Resourcefulness",
+}
+STAT_KEY_ALIASES = {
+    "ArmorRatingAdd": "ArmorRating",
+    "ActionSpeedMod": "ActionSpeedBonus",
+    "BuffDurationMod": "BuffDurationBonus",
+    "CooldownReductionMod": "CooldownReductionBonus",
+    "DebuffDurationMod": "DebuffDurationBonus",
+    "DemonDamageMod": "DemonDamageBonus",
+    "DemonReductionMod": "DemonDamageReduction",
+    "HeadshotReductionMod": "HeadshotReduction",
+    "HeadshotDamageMod": "HeadshotDamageBonus",
+    "HealthRecoveryMod": "HealthRecoveryBonus",
+    "ItemEquipSpeed": "EquipSpeed",
+    "MagicRegistance": "MagicResistance",
+    "MagicalRegistance": "MagicalResistance",
+    "MagicalDamageMod": "MagicalDamageBonus",
+    "MagicalHealBase": "MagicalHealing",
+    "MagicalReduction": "MagicalDamageReduction",
+    "MaxHealthAdd": "Health",
+    "MaxHealthMod": "MaxHealthBonus",
+    "MemoryCapacityAdd": "MemoryCapacity",
+    "MemoryCapacityMod": "MemoryCapacity",
+    "MemoryRecoveryMod": "SpellRecoveryBonus",
+    "MoveSpeedAdd": "MoveSpeed",
+    "MoveSpeedBase": "MoveSpeed",
+    "MoveSpeedMod": "MoveSpeedBonus",
+    "PhysicalDamageMod": "PhysicalDamageBonus",
+    "PhysicalHealBase": "PhysicalHealing",
+    "PhysicalReduction": "PhysicalArmorReduction",
+    "PhysicalWeaponDamageAdd": "PhysicalWeaponDamage",
+    "ProjectileReductionMod": "ProjectileReduction",
+    "UndeadDamageMod": "UndeadDamageBonus",
+    "UndeadReductionMod": "UndeadDamageReduction",
+    "UtilityEffectivenessAdd": "UtilityEffectiveness",
+    "UtilityEffectivenessMod": "UtilityEffectiveness",
+}
+PERCENT_STAT_KEYS = {
+    "ActionSpeed",
+    "ActionSpeedBonus",
+    "ArmorPenetration",
+    "BuffDurationBonus",
+    "CooldownReductionBonus",
+    "DebuffDurationBonus",
+    "DemonDamageBonus",
+    "DemonDamageReduction",
+    "EquipSpeed",
+    "EquipSpeedBonus",
+    "HeadshotDamageBonus",
+    "HeadshotReduction",
+    "HealthRecoveryBonus",
+    "MagicPenetration",
+    "MagicalDamageReduction",
+    "MagicalDamageBonus",
+    "MagicalInteractionSpeed",
+    "MagicalInteractionSpeedBonus",
+    "ManualDexterity",
+    "ManualDexterityBonus",
+    "MaxHealthBonus",
+    "MoveSpeedBonus",
+    "PhysicalDamageBonus",
+    "PhysicalArmorReduction",
+    "ProjectileReduction",
+    "RegularInteractionSpeed",
+    "RegularInteractionSpeedBonus",
+    "SpellRecoveryBonus",
+    "SpellCastingSpeed",
+    "SpellCastingSpeedBonus",
+    "UndeadDamageBonus",
+    "UndeadDamageReduction",
+}
+ITEM_PROPERTY_EXCLUDED_STAT_KEYS = {"Primitive"}
+STAT_EXPORT_SUFFIXES = (
+    "Base",
+    "Add",
+    "Mod",
+    "Bonus",
+    "Reduction",
+    "Resistance",
+    "Registance",
+    "Penetration",
+    "Power",
+    "Damage",
+    "Healing",
+    "Speed",
+    "Dexterity",
+    "Luck",
+    "Capacity",
+    "Rating",
+    "Health",
+    "Effectiveness",
+    "Persuasiveness",
+)
+STAT_EXPORT_EXCLUDED_PREFIXES = ("Exec",)
+STAT_EXPORT_EXCLUDED_KEYS = {
+    "AdvPoint",
+    "EnchantMaxValue",
+    "EnchantMinValue",
+    "EnchantOrder",
+    "GearScore",
+    "InventoryHeight",
+    "InventoryWidth",
+    "MaxCount",
+    "PrimaryTooltipPriority",
+    "PropertyRate",
+    "PropertyTypeGroupId",
+    "Radius",
+    "WearingDelayTime",
+}
+EQUIPMENT_SLOT_LABELS = {
+    "Head": "Head",
+    "Chest": "Chest",
+    "Legs": "Legs",
+    "Leg": "Legs",
+    "Hands": "Hands",
+    "Foot": "Feet",
+    "Feet": "Feet",
+    "Back": "Cloak",
+    "Necklace": "Necklace",
+    "Ring": "Ring",
+    "Primary": "Primary",
+    "Secondary": "Secondary",
+    "Utility": "Utility",
+}
+RARITY_ALIASES = {
+    "Poor": "Junk",
+    "Normal": "Common",
+    "Legend": "Legendary",
+}
 
 
 def slug_for(*parts: object) -> str:
@@ -67,6 +203,591 @@ def reset_generated_details(output_dir: Path) -> None:
             shutil.rmtree(resolved)
     (output_dir / "details" / "items").mkdir(parents=True, exist_ok=True)
     (output_dir / "details" / "sources").mkdir(parents=True, exist_ok=True)
+
+
+def read_asset(path: Path) -> dict | None:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        return data[0]
+    if isinstance(data, dict):
+        return data
+    return None
+
+
+def asset_name(value: object) -> str:
+    if isinstance(value, dict):
+        for key in ("PrimaryAssetName", "AssetPathName", "ObjectName", "ObjectPath"):
+            name = asset_name(value.get(key))
+            if name:
+                return name
+        return ""
+    if value is None:
+        return ""
+    text = str(value)
+    quoted = re.search(r"'([^']+)'", text)
+    if quoted:
+        return quoted.group(1)
+    if "." in text:
+        tail = text.rsplit(".", 1)[-1]
+    else:
+        tail = text.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    return tail.strip()
+
+
+def asset_reference_path(value: object) -> str:
+    if isinstance(value, dict):
+        return str(value.get("AssetPathName") or value.get("ObjectPath") or "")
+    return str(value or "")
+
+
+def exported_content_asset_path(content_root: Path, reference: str) -> Path | None:
+    text = str(reference or "").replace("\\", "/")
+    if not text:
+        return None
+    if text.startswith("/Game/DungeonCrawler/"):
+        relative = text[len("/Game/DungeonCrawler/") :]
+    elif "DungeonCrawler/Content/DungeonCrawler/" in text:
+        relative = text.split("DungeonCrawler/Content/DungeonCrawler/", 1)[1]
+    elif text.startswith("Content/DungeonCrawler/"):
+        relative = text[len("Content/DungeonCrawler/") :]
+    else:
+        return None
+    relative = relative.split(".", 1)[0].strip("/")
+    if not relative:
+        return None
+    return content_root / Path(*relative.split("/")).with_suffix(".json")
+
+
+def icon_raster_url(icon_json_path: Path | None, icon_asset: str, output_dir: Path) -> str:
+    if not icon_json_path:
+        return ""
+    candidates = []
+    for extension in (".png", ".webp", ".jpg", ".jpeg"):
+        candidates.append(icon_json_path.with_suffix(extension))
+        if icon_asset:
+            candidates.append(icon_json_path.parent / f"{icon_asset}{extension}")
+    source = next((path for path in candidates if path.exists()), None)
+    if not source:
+        return ""
+    target_dir = output_dir.parent / "assets" / "item-icons"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_name = slug_for(icon_asset or icon_json_path.stem, source.suffix).removesuffix(".json")
+    target = target_dir / f"{target_name}{source.suffix.lower()}"
+    shutil.copy2(source, target)
+    return f"/assets/item-icons/{target.name}"
+
+
+def item_art_from_reference(generated_root: Path, output_dir: Path, art_reference: object) -> dict:
+    art_path = asset_reference_path(art_reference)
+    art_asset = asset_name(art_reference)
+    if not art_path and not art_asset:
+        return {}
+    content_root = generated_root.parents[2]
+    art_json_path = exported_content_asset_path(content_root, art_path)
+    icon_ref = ""
+    icon_asset = ""
+    icon_size = {}
+    icon_json_path = None
+    if art_json_path and art_json_path.exists():
+        art = read_asset(art_json_path)
+        props = (art or {}).get("Properties") or {}
+        icon = props.get("ItemIconTexture") or props.get("LowViolenceItemIconTexture")
+        icon_ref = asset_reference_path(icon)
+        icon_asset = asset_name(icon)
+        icon_json_path = exported_content_asset_path(content_root, icon_ref)
+        if icon_json_path and icon_json_path.exists():
+            texture = read_asset(icon_json_path) or {}
+            imported_size = ((texture.get("Properties") or {}).get("ImportedSize") or {})
+            width = texture.get("SizeX") or imported_size.get("X")
+            height = texture.get("SizeY") or imported_size.get("Y")
+            if isinstance(width, (int, float)) and isinstance(height, (int, float)):
+                icon_size = {"width": int(width), "height": int(height)}
+    result = {
+        "artAsset": art_asset,
+        "artPath": art_path,
+    }
+    if icon_asset or icon_ref:
+        result.update({
+            "iconAsset": icon_asset,
+            "iconPath": icon_ref,
+            "iconSize": icon_size,
+        })
+        icon_url = icon_raster_url(icon_json_path, icon_asset, output_dir)
+        if icon_url:
+            result["iconUrl"] = icon_url
+    return {key: value for key, value in result.items() if value not in ("", {}, None)}
+
+
+def load_item_art(generated_root: Path, output_dir: Path) -> dict:
+    item_art = {}
+    item_dir = generated_root / "Item" / "Item"
+    if not item_dir.exists():
+        return item_art
+    for path in item_dir.glob("*.json"):
+        asset = read_asset(path)
+        if not asset:
+            continue
+        name = asset.get("Name") or path.stem
+        art = item_art_from_reference(generated_root, output_dir, (asset.get("Properties") or {}).get("ArtData"))
+        if art:
+            item_art[name] = art
+    return item_art
+
+
+def apply_item_art(rows: list[dict], item_art: dict) -> None:
+    for row in rows:
+        art = item_art.get(row.get("itemAsset") or row.get("asset"))
+        if art:
+            row["art"] = art
+            if art.get("iconUrl"):
+                row["iconUrl"] = art["iconUrl"]
+
+
+def asset_names(values: object) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    return [name for name in (asset_name(value) for value in values) if name]
+
+
+def localized_text(value: object, fallback: str = "") -> str:
+    if isinstance(value, dict):
+        for key in ("LocalizedString", "SourceString", "Key"):
+            text = value.get(key)
+            if text:
+                return str(text)
+    if isinstance(value, str) and value:
+        return value
+    return fallback
+
+
+def tag_leaf(value: object) -> str:
+    if isinstance(value, dict):
+        value = value.get("TagName") or value.get("Name") or value.get("AssetPathName") or value.get("ObjectName")
+    if value is None:
+        return ""
+    text = str(value)
+    if "::" in text:
+        text = text.rsplit("::", 1)[-1]
+    if "." in text:
+        text = text.rsplit(".", 1)[-1]
+    if "/" in text:
+        text = text.rsplit("/", 1)[-1]
+    return text
+
+
+def normalize_rarity(value: object) -> str:
+    leaf = tag_leaf(value)
+    return RARITY_ALIASES.get(leaf, leaf)
+
+
+def humanize_identifier(value: object) -> str:
+    text = str(value or "")
+    replacements = (
+        "Id_ItemPropertyType_Effect_",
+        "Id_ItemPropertyType_Perk_",
+        "Id_ItemProperty_Primary_",
+        "Id_ItemProperty_Secondary_",
+        "Id_ActorStatusEffect_",
+        "Id_PlayerCharacter_GrandMaster_",
+        "Id_PlayerCharacter_",
+        "Id_Perk_",
+        "Id_Item_",
+    )
+    for prefix in replacements:
+        if text.startswith(prefix):
+            text = text[len(prefix) :]
+            break
+    text = text.replace("MagicRegistance", "MagicResistance")
+    text = text.replace("Registance", "Resistance")
+    text = text.replace("_", " ")
+    text = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or str(value or "")
+
+
+def class_key(asset: object) -> str:
+    text = str(asset or "")
+    text = text.replace("Id_PlayerCharacter_GrandMaster_", "")
+    text = text.replace("Id_PlayerCharacter_", "")
+    return text
+
+
+def normalize_stat_key(key: object) -> str:
+    text = tag_leaf(key) or asset_name(key) or str(key or "")
+    text = text.replace("Id_ItemPropertyType_Effect_", "")
+    text = text.replace("MagicRegistance", "MagicResistance")
+    text = text.replace("Registance", "Resistance")
+    if text in STAT_KEY_ALIASES:
+        return STAT_KEY_ALIASES[text]
+    for base_key in BASE_STAT_KEYS:
+        if text == f"{base_key}Base":
+            return base_key
+    return text
+
+
+def is_stat_export_key(key: str) -> bool:
+    if not key or key in STAT_EXPORT_EXCLUDED_KEYS:
+        return False
+    if any(key.startswith(prefix) for prefix in STAT_EXPORT_EXCLUDED_PREFIXES):
+        return False
+    if key in BASE_STAT_KEYS or key in STAT_KEY_ALIASES:
+        return True
+    return any(key.endswith(suffix) for suffix in STAT_EXPORT_SUFFIXES)
+
+
+def numeric_stat_entries(properties: dict) -> list[dict]:
+    entries = []
+    for key, value in properties.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if not is_stat_export_key(key):
+            continue
+        stat_key = normalize_stat_key(key)
+        value_scale = 0.1 if stat_key in PERCENT_STAT_KEYS or str(key).endswith("Mod") else 1
+        unit = "%" if stat_key in PERCENT_STAT_KEYS else ""
+        entries.append({
+            "statKey": stat_key,
+            "rawKey": key,
+            "label": humanize_identifier(stat_key),
+            "value": round(value * value_scale, 4),
+            "unit": unit,
+        })
+    entries.sort(key=lambda row: row["label"].lower())
+    return entries
+
+
+def effect_properties(asset: dict) -> dict:
+    props = asset.get("Properties") or {}
+    item_props = props.get("Item")
+    return item_props if isinstance(item_props, dict) else props
+
+
+def load_effect_assets(paths: list[Path]) -> dict:
+    effects = {}
+    for effect_dir in paths:
+        if not effect_dir.exists():
+            continue
+        for path in effect_dir.glob("*.json"):
+            asset = read_asset(path)
+            if not asset:
+                continue
+            name = asset.get("Name") or path.stem
+            if name in effects:
+                continue
+            props = effect_properties(asset)
+            effects[name] = {
+                "id": name,
+                "stats": numeric_stat_entries(props),
+                "grantedTags": [tag_leaf(row) for row in props.get("GrantedTags") or [] if tag_leaf(row)],
+            }
+    return effects
+
+
+def load_property_types(generated_root: Path) -> dict:
+    property_types = {}
+    type_dir = generated_root / "ItemProperty" / "ItemPropertyType"
+    for path in type_dir.glob("*.json"):
+        asset = read_asset(path)
+        if not asset:
+            continue
+        name = asset.get("Name") or path.stem
+        props = asset.get("Properties") or {}
+        property_type = tag_leaf(props.get("PropertyType")) or humanize_identifier(name)
+        effect_type = tag_leaf(props.get("EffectType"))
+        stat_key = normalize_stat_key(effect_type or property_type or name)
+        value_ratio = props.get("ValueRatio")
+        property_types[name] = {
+            "id": name,
+            "statKey": stat_key,
+            "rawKey": effect_type or property_type,
+            "label": humanize_identifier(stat_key),
+            "propertyLabel": humanize_identifier(property_type),
+            "valueRatio": value_ratio if isinstance(value_ratio, (int, float)) else None,
+        }
+    return property_types
+
+
+def property_item_entry(row: dict, property_types: dict) -> dict | None:
+    type_id = asset_name(row.get("PropertyTypeId"))
+    if not type_id:
+        return None
+    type_info = property_types.get(type_id, {
+        "id": type_id,
+        "statKey": normalize_stat_key(type_id),
+        "label": humanize_identifier(type_id),
+        "propertyLabel": humanize_identifier(type_id),
+        "valueRatio": None,
+    })
+    if type_info["statKey"] in ITEM_PROPERTY_EXCLUDED_STAT_KEYS:
+        return None
+    min_value = row.get("MinValue", 0)
+    max_value = row.get("MaxValue", min_value)
+    value_ratio = type_info.get("valueRatio")
+    is_percent = type_info["statKey"] in PERCENT_STAT_KEYS
+    value_scale = value_ratio * 100 if is_percent and isinstance(value_ratio, (int, float)) else 1
+    unit = "%" if is_percent else ""
+    return {
+        "propertyId": type_id,
+        "statKey": type_info["statKey"],
+        "label": type_info["label"],
+        "propertyLabel": type_info.get("propertyLabel") or type_info["label"],
+        "min": round(min_value * value_scale, 4),
+        "max": round(max_value * value_scale, 4),
+        "rawMin": min_value,
+        "rawMax": max_value,
+        "rate": row.get("PropertyRate", 0),
+        "valueRatio": type_info.get("valueRatio"),
+        "unit": unit,
+    }
+
+
+def load_property_assets(generated_root: Path, property_types: dict) -> dict:
+    properties = {}
+    property_dir = generated_root / "ItemProperty" / "ItemProperty"
+    for path in property_dir.glob("*.json"):
+        asset = read_asset(path)
+        if not asset:
+            continue
+        name = asset.get("Name") or path.stem
+        rows = (asset.get("Properties") or {}).get("ItemPropertyItemArray") or []
+        entries = [entry for entry in (property_item_entry(row, property_types) for row in rows) if entry]
+        properties[name] = entries
+    return properties
+
+
+def load_requirement_classes(generated_root: Path) -> dict:
+    requirements = {}
+    requirement_dir = generated_root.parent / "DT_Item" / "ItemRequirement"
+    for path in requirement_dir.glob("*.json"):
+        asset = read_asset(path)
+        if not asset:
+            continue
+        name = asset.get("Name") or path.stem
+        item = ((asset.get("Properties") or {}).get("Item") or {})
+        class_assets = asset_names(item.get("ClassRequirements"))
+        requirements[name] = [
+            {"id": class_key(class_asset), "name": humanize_identifier(class_asset)}
+            for class_asset in class_assets
+        ]
+    return requirements
+
+
+def load_status_effects(generated_root: Path) -> dict:
+    return load_effect_assets([generated_root / "ActorStatus" / "StatusEffect"])
+
+
+def load_character_effects(generated_root: Path) -> dict:
+    return load_effect_assets([
+        generated_root / "PlayerCharacter" / "PlayerCharacterEffect",
+        generated_root.parent / "DT_PlayerCharacter" / "PlayerCharacterEffect",
+    ])
+
+
+def load_curve_tables(generated_root: Path) -> dict:
+    tables = {}
+    curve_dir = generated_root.parent.parent / "GameplayAbility"
+    if not curve_dir.exists():
+        return tables
+    for path in curve_dir.glob("CT_*.json"):
+        asset = read_asset(path)
+        if not asset:
+            continue
+        rows = asset.get("Rows") or {}
+        table_rows = {}
+        for row_name, row in rows.items():
+            keys = []
+            for key in row.get("Keys") or []:
+                time = key.get("Time")
+                value = key.get("Value")
+                if isinstance(time, (int, float)) and isinstance(value, (int, float)):
+                    keys.append([time, value])
+            if keys:
+                table_rows[row_name] = sorted(keys, key=lambda entry: entry[0])
+        if table_rows:
+            tables[asset.get("Name") or path.stem] = table_rows
+    return tables
+
+
+def load_perks(generated_root: Path, status_effects: dict) -> dict:
+    perks = {}
+    perk_dir = generated_root / "Perk" / "Perk"
+    for path in perk_dir.glob("*.json"):
+        asset = read_asset(path)
+        if not asset:
+            continue
+        name = asset.get("Name") or path.stem
+        props = asset.get("Properties") or {}
+        effect_ids = asset_names(props.get("Effects"))
+        stats = []
+        for effect_id in effect_ids:
+            effect_stats = status_effects.get(effect_id, {}).get("stats", [])
+            inferred = False
+            if not effect_stats:
+                for candidate in (f"{effect_id}Buff", f"{effect_id}_Buff"):
+                    effect_stats = status_effects.get(candidate, {}).get("stats", [])
+                    if effect_stats:
+                        effect_id = candidate
+                        inferred = True
+                        break
+            for stat in effect_stats:
+                if inferred:
+                    stat = {**stat, "inferred": True}
+                stats.append({**stat, "source": effect_id})
+        class_assets = asset_names(props.get("Classes"))
+        class_ids = sorted({class_key(class_asset) for class_asset in class_assets})
+        perks[name] = {
+            "id": name,
+            "name": localized_text(props.get("Name"), humanize_identifier(name)),
+            "classes": class_ids,
+            "classNames": [humanize_identifier(f"Id_PlayerCharacter_{class_id}") for class_id in class_ids],
+            "effects": effect_ids,
+            "stats": stats,
+            "canUse": bool(props.get("CanUse", True)),
+        }
+    return perks
+
+
+def load_characters(generated_root: Path, perks: dict, character_effects: dict) -> list[dict]:
+    characters = []
+    character_dir = generated_root.parent / "DT_PlayerCharacter" / "PlayerCharacter"
+    for path in character_dir.glob("Id_PlayerCharacter_*.json"):
+        asset = read_asset(path)
+        if not asset:
+            continue
+        name = asset.get("Name") or path.stem
+        key = class_key(name)
+        if not key or "GrandMaster" in str(name) or key == "GrandMaster":
+            continue
+        props = ((asset.get("Properties") or {}).get("Item") or {})
+        if props.get("CanUse") is False:
+            continue
+        perk_ids = {perk_id for perk_id in asset_names(props.get("Perks")) if perk_id in perks}
+        perk_ids.update(
+            perk_id
+            for perk_id, perk in perks.items()
+            if perk.get("canUse", True) and key in (perk.get("classes") or [])
+        )
+        effect_ids = asset_names(props.get("Effects"))
+        base_stats = []
+        for effect_id in effect_ids:
+            if effect_id != f"Id_PlayerCharacterEffect_{key}":
+                continue
+            for stat in character_effects.get(effect_id, {}).get("stats", []):
+                base_stats.append({**stat, "source": effect_id})
+        characters.append({
+            "id": key,
+            "asset": name,
+            "name": localized_text(props.get("Name"), humanize_identifier(name)),
+            "perks": sorted(perk_ids, key=lambda perk_id: perks[perk_id]["name"].lower()),
+            "effects": effect_ids,
+            "baseStats": base_stats,
+        })
+    characters.sort(key=lambda row: row["name"].lower())
+    return characters
+
+
+def kit_slot_from_item(props: dict) -> dict | None:
+    raw_slot = tag_leaf(props.get("SlotType"))
+    if not raw_slot:
+        return None
+    label = EQUIPMENT_SLOT_LABELS.get(raw_slot)
+    if not label:
+        return None
+    return {"id": raw_slot, "label": label}
+
+
+def load_kit_items(generated_root: Path, public_items: list[dict], property_assets: dict, requirements: dict, item_art: dict) -> list[dict]:
+    public_by_asset = {row.get("itemAsset"): row for row in public_items}
+    kit_items = []
+    item_dir = generated_root / "Item" / "Item"
+    for path in item_dir.glob("*.json"):
+        asset = read_asset(path)
+        if not asset:
+            continue
+        name = asset.get("Name") or path.stem
+        props = asset.get("Properties") or {}
+        slot = kit_slot_from_item(props)
+        if not slot:
+            continue
+        primary_id = asset_name(props.get("PrimaryProperty"))
+        secondary_ids = asset_names(props.get("SecondaryProperties"))
+        if not primary_id and not secondary_ids:
+            continue
+        requirement_id = asset_name(props.get("Requirement"))
+        public_row = public_by_asset.get(name) or {}
+        allowed_classes = requirements.get(requirement_id, [])
+        rarity_value = normalize_rarity(props.get("RarityType")) or public_row.get("rarity") or "Unknown"
+        item_type = str(props.get("ItemType") or "").split("::")[-1]
+        kit_item = {
+            "asset": name,
+            "name": localized_text(props.get("Name"), public_row.get("item") or humanize_identifier(name)),
+            "rarity": rarity_value,
+            "category": public_row.get("category") or "Equipment",
+            "itemType": item_type,
+            "slot": slot,
+            "hand": tag_leaf(props.get("HandType")),
+            "armorType": tag_leaf(props.get("ArmorType")),
+            "weaponTypes": [tag_leaf(row) for row in props.get("WeaponTypes") or [] if tag_leaf(row)],
+            "gearScore": props.get("GearScore", 0),
+            "inventory": {
+                "width": props.get("InventoryWidth", 1),
+                "height": props.get("InventoryHeight", 1),
+            },
+            "artAsset": asset_name(props.get("ArtData")),
+            "artPath": asset_reference_path(props.get("ArtData")),
+            "primary": property_assets.get(primary_id, []),
+            "primaryPropertyId": primary_id,
+            "secondaryPoolIds": secondary_ids,
+            "allowedClasses": allowed_classes,
+            "detailPath": public_row.get("detailPath"),
+        }
+        art = item_art.get(name)
+        if art:
+            kit_item["art"] = art
+            if art.get("iconUrl"):
+                kit_item["iconUrl"] = art["iconUrl"]
+        kit_items.append(kit_item)
+    kit_items.sort(key=lambda row: (row["slot"]["label"], row["name"].lower(), row["rarity"]))
+    return kit_items
+
+
+def build_kit_builder_data(generated_root: Path, public_items: list[dict], item_art: dict) -> dict:
+    property_types = load_property_types(generated_root)
+    property_assets = load_property_assets(generated_root, property_types)
+    requirements = load_requirement_classes(generated_root)
+    status_effects = load_status_effects(generated_root)
+    character_effects = load_character_effects(generated_root)
+    curve_tables = load_curve_tables(generated_root)
+    perks = load_perks(generated_root, status_effects)
+    characters = load_characters(generated_root, perks, character_effects)
+    kit_items = load_kit_items(generated_root, public_items, property_assets, requirements, item_art)
+    secondary_pool_ids = sorted({pool_id for item in kit_items for pool_id in item["secondaryPoolIds"]})
+    secondary_pools = {
+        pool_id: {
+            "id": pool_id,
+            "name": humanize_identifier(pool_id),
+            "options": property_assets.get(pool_id, []),
+        }
+        for pool_id in secondary_pool_ids
+    }
+    return {
+        "dataVersion": DATA_VERSION,
+        "items": kit_items,
+        "secondaryPools": secondary_pools,
+        "propertyTypes": property_types,
+        "curveTables": curve_tables,
+        "characters": characters,
+        "perks": sorted(perks.values(), key=lambda row: row["name"].lower()),
+        "notes": {
+            "statusEffectStats": "Direct numeric status-effect fields are exported for perks when present.",
+            "baseCharacterStats": "Class base stats are loaded from V2/PlayerCharacter/PlayerCharacterEffect, with DT_PlayerCharacter as a fallback.",
+            "derivedStatCurves": "Curve tables are loaded from Data/GameplayAbility/CT_*.json when exported.",
+        },
+    }
 
 
 def luck_model_for_row(row: dict | None) -> dict | None:
@@ -137,9 +858,9 @@ def public_item_source_row(row: dict, raw_row: dict | None = None) -> dict:
     return attach_luck_model(cleaned, raw_row)
 
 
-def public_source_drop_row(row: dict) -> dict:
+def public_source_drop_row(row: dict, item_art: dict | None = None) -> dict:
     compact = compact_row(row)
-    return attach_luck_model({
+    public = {
         "item": compact["item"],
         "itemAsset": compact["itemAsset"],
         "rarity": compact["rarity"],
@@ -155,10 +876,16 @@ def public_source_drop_row(row: dict) -> dict:
         "dynAtLeastOneValue": compact["dynAtLeastOneValue"],
         "lootTable": compact["lootTable"],
         "rateTable": compact["rateTable"],
-    }, row)
+    }
+    art = (item_art or {}).get(compact["itemAsset"])
+    if art:
+        public["art"] = art
+        if art.get("iconUrl"):
+            public["iconUrl"] = art["iconUrl"]
+    return attach_luck_model(public, row)
 
 
-def export_source_details(output_dir: Path, state: AppState, sources: list[dict]) -> None:
+def export_source_details(output_dir: Path, state: AppState, sources: list[dict], item_art: dict) -> None:
     index, result, luck = state.current_data()
     if not index:
         return
@@ -191,7 +918,7 @@ def export_source_details(output_dir: Path, state: AppState, sources: list[dict]
             "spawnLocationCount": len(locations),
             "spawnLocations": index.compact_locations(locations, 160),
             "rowsLimited": len(public_rows),
-            "rows": [public_source_drop_row(detail_row) for detail_row in public_rows],
+            "rows": [public_source_drop_row(detail_row, item_art) for detail_row in public_rows],
         }
         write_json(output_path_for_public_data(output_dir, row["detailPath"]), payload)
 
@@ -226,6 +953,8 @@ def export_item_details(output_dir: Path, state: AppState, items: list[dict]) ->
                 "maps": row["maps"],
                 "diffs": row["diffs"],
                 "sourceCount": row["sourceCount"],
+                "art": row.get("art"),
+                "iconUrl": row.get("iconUrl"),
             },
             "total": len(source_rows),
             "rows": [
@@ -289,6 +1018,7 @@ def build_indexes(output_dir: Path, state: AppState) -> tuple[list[dict], list[d
             "rates": "/data/rates.json",
             "quests": "/data/quests.json",
             "maps": "/data/maps.json",
+            "kit": "/data/kit-builder.json",
         },
         "stats": stats,
     }
@@ -309,12 +1039,33 @@ def export_website_data(cache_path: Path, output_dir: Path, root: Path, luck: in
     if not result:
         raise RuntimeError("No scan result available after loading cache.")
 
+    generated_root = Path(result.stats.get("generated_root") or "")
+    item_art = load_item_art(generated_root, output_dir) if generated_root.exists() else {}
+    apply_item_art(items, item_art)
     write_json(output_dir / "items-index.json", {"dataVersion": DATA_VERSION, "rows": items})
     write_json(output_dir / "sources-index.json", {"dataVersion": DATA_VERSION, "rows": sources})
     write_json(output_dir / "rates.json", {"dataVersion": DATA_VERSION, "rows": result.rate_weights})
     write_json(output_dir / "quests.json", {"dataVersion": DATA_VERSION, "rows": []})
     write_json(output_dir / "maps.json", {"dataVersion": DATA_VERSION, "rows": []})
-    export_source_details(output_dir, state, sources)
+    if generated_root.exists():
+        kit_builder = build_kit_builder_data(generated_root, items, item_art)
+    else:
+        kit_builder = {
+            "dataVersion": DATA_VERSION,
+            "items": [],
+            "secondaryPools": {},
+            "propertyTypes": {},
+            "curveTables": {},
+            "characters": [],
+            "perks": [],
+            "notes": {"missingGeneratedRoot": str(generated_root)},
+        }
+    manifest["counts"]["kitItems"] = len(kit_builder.get("items") or [])
+    manifest["counts"]["kitCharacters"] = len(kit_builder.get("characters") or [])
+    manifest["counts"]["kitPerks"] = len(kit_builder.get("perks") or [])
+    manifest["counts"]["itemArt"] = len(item_art)
+    write_json(output_dir / "kit-builder.json", kit_builder)
+    export_source_details(output_dir, state, sources, item_art)
     export_item_details(output_dir, state, items)
     write_json(output_dir / "manifest.json", manifest)
     return manifest

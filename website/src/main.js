@@ -2,6 +2,31 @@
   manifest: null,
   items: [],
   sources: [],
+  kit: {
+    items: [],
+    itemByAsset: new Map(),
+    secondaryPools: {},
+    propertyTypes: {},
+    curveTables: {},
+    characters: [],
+    characterById: new Map(),
+    perks: [],
+    perkById: new Map(),
+  },
+  builder: {
+    characterId: "",
+    selectedSlot: "weapon1Primary",
+    activeWeaponSet: "1",
+    search: "",
+    rarity: "All",
+    slotFilter: "Selected",
+    pickerOpen: false,
+    characterCollapsed: false,
+    equipped: {},
+    primaryValues: {},
+    bonuses: {},
+    perks: [],
+  },
   itemByAsset: new Map(),
   sourceByKey: new Map(),
   rateWeights: {},
@@ -20,6 +45,86 @@
 const FAVORITES_KEY = "darkloot:favorites:v1";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
+const BUILDER_PERK_LIMIT = 4;
+const BUILDER_DEFAULTS = {
+  headshotDamageBonus: 150,
+  primaryUnarmedDamage: 8,
+  primaryUnarmedImpactPower: 1,
+};
+const BUILDER_SLOTS = [
+  { id: "weapon1Primary", label: "Primary", marker: "1", accepts: ["Primary"], area: "weapon1Primary", kind: "weapon", weaponSet: "1", weaponRole: "primary" },
+  { id: "weapon1Secondary", label: "Secondary", accepts: ["Secondary"], area: "weapon1Secondary", kind: "weapon", weaponSet: "1", weaponRole: "secondary" },
+  { id: "weapon2Primary", label: "Primary", marker: "2", accepts: ["Primary"], area: "weapon2Primary", kind: "weapon", weaponSet: "2", weaponRole: "primary" },
+  { id: "weapon2Secondary", label: "Secondary", accepts: ["Secondary"], area: "weapon2Secondary", kind: "weapon", weaponSet: "2", weaponRole: "secondary" },
+  { id: "head", label: "Head", accepts: ["Head"], area: "head", kind: "medium" },
+  { id: "chest", label: "Chest", accepts: ["Chest"], area: "chest", kind: "tall" },
+  { id: "hands", label: "Hands", accepts: ["Hands"], area: "hands", kind: "medium" },
+  { id: "legs", label: "Legs", accepts: ["Legs", "Leg"], area: "legs", kind: "tall" },
+  { id: "feet", label: "Feet", accepts: ["Foot", "Feet"], area: "feet", kind: "medium" },
+  { id: "cloak", label: "Cloak", accepts: ["Back", "Cloak"], area: "cloak", kind: "medium" },
+  { id: "necklace", label: "Necklace", accepts: ["Necklace"], area: "necklace", kind: "small" },
+  { id: "ring1", label: "Ring 1", accepts: ["Ring"], area: "ring1", kind: "small" },
+  { id: "ring2", label: "Ring 2", accepts: ["Ring"], area: "ring2", kind: "small" },
+];
+const BUILDER_STAT_ROWS = [
+  { key: "Strength", label: "Strength" },
+  { key: "Vigor", label: "Vigor" },
+  { key: "Agility", label: "Agility" },
+  { key: "Dexterity", label: "Dexterity" },
+  { key: "Will", label: "Will" },
+  { key: "Knowledge", label: "Knowledge" },
+  { key: "Resourcefulness", label: "Resourcefulness" },
+  { key: "Health", label: "Health" },
+  { key: "PhysicalHealing", label: "Physical Healing" },
+  { key: "MagicalHealing", label: "Magical Healing" },
+  { key: "MemoryCapacity", label: "Memory Capacity" },
+  { key: "MemorySpellPayload", label: "Memory Spell Payload" },
+  { key: "MemoryMusicPayload", label: "Memory Music Payload" },
+  { key: "UtilityEffectiveness", label: "Utility Effectiveness" },
+  { key: "Luck", label: "Luck" },
+  { key: "HealthRecoveryBonus", label: "Health Recovery Bonus", unit: "%" },
+  { key: "SpellRecoveryBonus", label: "Spell Recovery Bonus", unit: "%" },
+  { key: "MoveSpeed", label: "Move Speed" },
+  { key: "ActionSpeed", label: "Action Speed", unit: "%" },
+  { key: "ManualDexterity", label: "Manual Dexterity", unit: "%" },
+  { key: "SpellCastingSpeed", label: "Spell Casting Speed", unit: "%" },
+  { key: "EquipSpeed", label: "Equip Speed", unit: "%" },
+  { key: "RegularInteractionSpeed", label: "Regular Interaction Speed", unit: "%" },
+  { key: "MagicalInteractionSpeed", label: "Magical Interaction Speed", unit: "%" },
+  { key: "Persuasiveness", label: "Persuasiveness" },
+  { key: "BuffDurationBonus", label: "Buff Duration Bonus", unit: "%" },
+  { key: "DebuffDurationBonus", label: "Debuff Duration Bonus", unit: "%" },
+  { key: "CooldownReductionBonus", label: "Cooldown Reduction Bonus", unit: "%" },
+  { key: "ArmorPenetration", label: "Armor Penetration", unit: "%" },
+  { key: "MagicPenetration", label: "Magic Penetration", unit: "%" },
+  { key: "HeadshotReduction", label: "Headshot Damage Reduction", unit: "%" },
+  { key: "ProjectileReduction", label: "Projectile Damage Reduction", unit: "%" },
+  { key: "PhysicalArmorReduction", label: "Physical Armor Reduction", unit: "%" },
+  { key: "PhysicalArmorReductionFromArmor", label: "From Armor Rating", indent: true, unit: "%" },
+  { key: "PhysicalArmorReductionBonus", label: "From Bonuses", indent: true, unit: "%" },
+  { key: "MagicalDamageReduction", label: "Magical Damage Reduction", unit: "%" },
+  { key: "MagicalDamageReductionFromResistance", label: "From Magic Resistance", indent: true, unit: "%" },
+  { key: "MagicalDamageReductionBonus", label: "From Bonuses", indent: true, unit: "%" },
+  { key: "UndeadDamageReduction", label: "Undead Damage Reduction", unit: "%" },
+  { key: "DemonDamageReduction", label: "Demon Damage Reduction", unit: "%" },
+  { key: "HeadshotDamageBonus", label: "Headshot Damage Bonus", unit: "%" },
+  { key: "PhysicalDamageBonus", label: "Physical Power Bonus", unit: "%" },
+  { key: "PhysicalDamageBonusFromPower", label: "From Physical Power", indent: true, unit: "%" },
+  { key: "PhysicalDamageBonusFromBonuses", label: "From Bonuses", indent: true, unit: "%" },
+  { key: "MagicalDamageBonus", label: "Magic Power Bonus", unit: "%" },
+  { key: "MagicalDamageBonusFromPower", label: "From Magic Power", indent: true, unit: "%" },
+  { key: "MagicalDamageBonusFromBonuses", label: "From Bonuses", indent: true, unit: "%" },
+  { key: "UndeadDamageBonus", label: "Undead Damage Bonus", unit: "%" },
+  { key: "DemonDamageBonus", label: "Demon Damage Bonus", unit: "%" },
+  { key: "PrimaryWeapon", label: "Primary Weapon", type: "text", slot: "activePrimaryWeapon" },
+  { key: "PrimaryWeaponAttack1", label: "Attack 1", sourceKey: "PhysicalWeaponDamage", slot: "activePrimaryWeapon" },
+  { key: "PrimaryWeaponAttack2", label: "Attack 2", sourceKey: "MagicalWeaponDamage", slot: "activePrimaryWeapon" },
+  { key: "SecondaryWeapon", label: "Secondary Weapon", type: "text", slot: "activeSecondaryWeapon" },
+  { key: "ImpactPower", label: "Impact Power" },
+  { key: "PrimaryWeaponImpactPower", label: "Primary Weapon Impact Power", sourceKey: "ImpactPower", slot: "activePrimaryWeapon" },
+  { key: "SecondaryWeaponImpactPower", label: "Secondary Weapon Impact Power", sourceKey: "ImpactPower", slot: "activeSecondaryWeapon" },
+];
+const BUILDER_STAT_ORDER = BUILDER_STAT_ROWS.map((row) => row.key);
 const DEFAULT_SORT_DIRECTION = {
   sources: "desc",
   items: "desc",
@@ -210,6 +315,351 @@ function setSelectIfAvailable(id, value) {
   if ([...select.options].some((option) => option.value === value)) select.value = value;
 }
 
+function builderSlotById(id) {
+  return BUILDER_SLOTS.find((slot) => slot.id === id) || BUILDER_SLOTS[0];
+}
+
+function activeWeaponSlotId(role) {
+  const set = state.builder.activeWeaponSet || "1";
+  return `weapon${set}${role === "secondary" ? "Secondary" : "Primary"}`;
+}
+
+function resolveBuilderSlotId(slotId) {
+  if (slotId === "activePrimaryWeapon") return activeWeaponSlotId("primary");
+  if (slotId === "activeSecondaryWeapon") return activeWeaponSlotId("secondary");
+  return slotId;
+}
+
+function setSelectedBuilderSlot(slotId) {
+  const slot = builderSlotById(slotId);
+  state.builder.selectedSlot = slot.id;
+  if (slot.weaponSet) state.builder.activeWeaponSet = slot.weaponSet;
+}
+
+function itemSlotId(item) {
+  return item?.slot?.id || "";
+}
+
+function itemIsTwoHanded(item) {
+  return String(item?.hand || "").toLowerCase() === "twohanded";
+}
+
+function pairedWeaponSlotId(slotId) {
+  const slot = builderSlotById(slotId);
+  if (!slot.weaponSet) return "";
+  return `weapon${slot.weaponSet}${slot.weaponRole === "primary" ? "Secondary" : "Primary"}`;
+}
+
+function equippedBuilderItem(slotId) {
+  return state.kit.itemByAsset.get(state.builder.equipped[slotId]);
+}
+
+function weaponSlotBlockReason(slotId) {
+  const slot = builderSlotById(slotId);
+  if (slot.weaponRole !== "secondary") return "";
+  const primary = equippedBuilderItem(pairedWeaponSlotId(slotId));
+  return itemIsTwoHanded(primary) ? `${primary.name} is two-handed` : "";
+}
+
+function slotStatsAreActive(slotId) {
+  const slot = builderSlotById(slotId);
+  return !slot.weaponSet || slot.weaponSet === state.builder.activeWeaponSet;
+}
+
+function itemFitsBuilderSlot(item, slotId) {
+  const slot = builderSlotById(slotId);
+  if (weaponSlotBlockReason(slot.id)) return false;
+  return slot.accepts.includes(itemSlotId(item));
+}
+
+function firstBuilderSlotForItem(item) {
+  const selectedSlot = state.builder.selectedSlot;
+  if (selectedSlot && itemFitsBuilderSlot(item, selectedSlot)) return selectedSlot;
+  const emptySlot = BUILDER_SLOTS.find((slot) => itemFitsBuilderSlot(item, slot.id) && !state.builder.equipped[slot.id]);
+  if (emptySlot) return emptySlot.id;
+  return BUILDER_SLOTS.find((slot) => itemFitsBuilderSlot(item, slot.id))?.id || "";
+}
+
+function selectedBuilderCharacter() {
+  return state.kit.characterById.get(state.builder.characterId) || state.kit.characters[0] || null;
+}
+
+function builderClassAllowsItem(item) {
+  const allowed = item?.allowedClasses || [];
+  const character = selectedBuilderCharacter();
+  if (!allowed.length || !character) return true;
+  return allowed.some((entry) => entry.id === character.id);
+}
+
+function classNamesText(classes) {
+  const values = (classes || []).map((entry) => entry.name).filter(Boolean);
+  return values.length ? values.join(", ") : "All classes";
+}
+
+function statLabel(key) {
+  return String(key || "")
+    .replace(/MagicRegistance/g, "MagicResistance")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+}
+
+function statRank(key) {
+  const index = BUILDER_STAT_ORDER.indexOf(key);
+  return index === -1 ? BUILDER_STAT_ORDER.length : index;
+}
+
+function statValue(value, unit = "") {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return "0";
+  const decimals = unit === "%" ? 1 : 2;
+  const formatted = Math.abs(number % 1) < 0.0001
+    ? number.toLocaleString()
+    : number.toFixed(decimals).replace(/\.?0+$/, "");
+  return `${formatted}${unit || ""}`;
+}
+
+function statRange(entry) {
+  const min = Number(entry?.min ?? 0);
+  const max = Number(entry?.max ?? min);
+  if (Math.abs(min - max) < 0.0001) return statValue(max, entry?.unit);
+  return `${statValue(min, entry?.unit)}-${statValue(max, entry?.unit)}`;
+}
+
+function statStep(entry) {
+  return entry?.unit === "%" ? "0.1" : "1";
+}
+
+function clampStatEntryValue(entry, value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return Number(entry?.max ?? entry?.min ?? 0);
+  const min = Number(entry?.min ?? parsed);
+  const max = Number(entry?.max ?? parsed);
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function defaultPrimaryValuesForItem(item) {
+  return (item?.primary || []).map((entry) => Number(entry.max ?? entry.min ?? 0));
+}
+
+function selectedPrimaryEntry(slotId, index) {
+  const item = equippedBuilderItem(slotId);
+  const entry = item?.primary?.[index];
+  if (!entry) return null;
+  const stored = state.builder.primaryValues[slotId]?.[index];
+  const value = stored === "" || stored == null
+    ? Number(entry.max ?? entry.min ?? 0)
+    : clampStatEntryValue(entry, stored);
+  return { ...entry, value };
+}
+
+function addBuilderStat(totals, entry, source) {
+  const value = Number(entry?.value ?? entry?.max ?? entry?.min ?? 0);
+  if (!Number.isFinite(value) || value === 0) return;
+  const key = entry.statKey || entry.rawKey || entry.propertyId || "Unknown";
+  const current = totals.get(key) || { key, label: entry.label || statLabel(key), value: 0, unit: entry.unit || "", sources: [] };
+  current.value += value;
+  current.sources.push({ source, value, label: entry.label || statLabel(key) });
+  totals.set(key, current);
+}
+
+function addItemStats(totals, slotId, item) {
+  if (!item) return;
+  (item.primary || []).forEach((entry, index) => {
+    addBuilderStat(totals, selectedPrimaryEntry(slotId, index) || { ...entry, value: entry.max ?? entry.min }, item.name);
+  });
+  (item.secondaryPoolIds || []).forEach((_poolId, index) => {
+    const entry = selectedBonusEntry(slotId, index);
+    if (entry) addBuilderStat(totals, entry, item.name);
+  });
+}
+
+function selectedBonusEntry(slotId, index) {
+  const entry = state.builder.bonuses[slotId]?.[index];
+  if (!entry?.propertyId) return null;
+  const pool = state.kit.secondaryPools[entry.poolId];
+  const option = pool?.options?.find((row) => row.propertyId === entry.propertyId);
+  if (!option) return null;
+  const value = Number(entry.value);
+  return {
+    ...option,
+    value: Number.isFinite(value) ? value : Number(option.max ?? option.min ?? 0),
+  };
+}
+
+function builderStatMap() {
+  const totals = new Map();
+  const character = selectedBuilderCharacter();
+  (character?.baseStats || []).forEach((entry) => addBuilderStat(totals, entry, character.name));
+  state.builder.perks.forEach((perkId) => {
+    const perk = state.kit.perkById.get(perkId);
+    (perk?.stats || []).forEach((entry) => addBuilderStat(totals, entry, perk.name));
+  });
+  Object.entries(state.builder.equipped).forEach(([slotId, asset]) => {
+    if (!slotStatsAreActive(slotId)) return;
+    const item = state.kit.itemByAsset.get(asset);
+    addItemStats(totals, slotId, item);
+  });
+  return totals;
+}
+
+function itemStatTotal(slotId, statKey) {
+  const resolvedSlotId = resolveBuilderSlotId(slotId);
+  const item = state.kit.itemByAsset.get(state.builder.equipped[resolvedSlotId]);
+  if (!item || !statKey) return { value: defaultSlotStatValue(resolvedSlotId, statKey), unit: "" };
+  const totals = new Map();
+  addItemStats(totals, resolvedSlotId, item);
+  return totals.get(statKey) || { value: 0, unit: "" };
+}
+
+function defaultSlotStatValue(slotId, statKey) {
+  if (builderSlotById(slotId).weaponRole !== "primary") return 0;
+  if (statKey === "PhysicalWeaponDamage") return BUILDER_DEFAULTS.primaryUnarmedDamage;
+  if (statKey === "ImpactPower") return BUILDER_DEFAULTS.primaryUnarmedImpactPower;
+  return 0;
+}
+
+function directStatValue(totals, ...keys) {
+  return keys.reduce((sum, key) => sum + Number(totals.get(key)?.value || 0), 0);
+}
+
+function curveKeys(tableName, rowName) {
+  const keys = state.kit.curveTables?.[tableName]?.[rowName];
+  return Array.isArray(keys) ? keys : [];
+}
+
+function curveValue(tableName, rowName, input, fallback = 0) {
+  const keys = curveKeys(tableName, rowName);
+  const x = Number(input || 0);
+  if (!keys.length || !Number.isFinite(x)) return fallback;
+  if (x <= Number(keys[0][0])) return Number(keys[0][1] || 0);
+  for (let index = 1; index < keys.length; index += 1) {
+    const previous = keys[index - 1];
+    const next = keys[index];
+    const x1 = Number(previous[0]);
+    const y1 = Number(previous[1]);
+    const x2 = Number(next[0]);
+    const y2 = Number(next[1]);
+    if (x <= x2) {
+      if (Math.abs(x2 - x1) < 0.0001) return y2;
+      const ratio = (x - x1) / (x2 - x1);
+      return y1 + ((y2 - y1) * ratio);
+    }
+  }
+  return Number(keys[keys.length - 1][1] || 0);
+}
+
+function curvePercent(tableName, rowName, input) {
+  return curveValue(tableName, rowName, input) * 100;
+}
+
+function builderDerivedStatValues(totals, character) {
+  const values = new Map();
+  BUILDER_STAT_ROWS.forEach((row) => {
+    if (row.type !== "text") values.set(row.key, directStatValue(totals, row.sourceKey || row.key));
+  });
+
+  const strength = directStatValue(totals, "Strength");
+  const vigor = directStatValue(totals, "Vigor");
+  const agility = directStatValue(totals, "Agility");
+  const dexterity = directStatValue(totals, "Dexterity");
+  const will = directStatValue(totals, "Will");
+  const knowledge = directStatValue(totals, "Knowledge");
+  const resourcefulness = directStatValue(totals, "Resourcefulness");
+
+  const baseHealth = curveValue(
+    "CT_MaxHealthBase",
+    "MaxHealthBase",
+    vigor,
+    character ? 80 : 0,
+  );
+  const health = (baseHealth + directStatValue(totals, "Health")) * (1 + (directStatValue(totals, "MaxHealthBonus") / 100));
+  values.set("Health", Math.ceil(health));
+
+  const moveSpeed = (directStatValue(totals, "MoveSpeed") + curveValue("CT_Agility", "MoveSpeedBase", agility))
+    * (1 + (directStatValue(totals, "MoveSpeedBonus") / 100));
+  values.set("MoveSpeed", Math.round(moveSpeed));
+
+  const actionSpeedInput = (dexterity * 0.75) + (agility * 0.25);
+  values.set("ActionSpeed", curvePercent("CT_ActionSpeed", "ActionSpeed", actionSpeedInput) + directStatValue(totals, "ActionSpeed", "ActionSpeedBonus"));
+  values.set("ManualDexterity", curvePercent("CT_Dexterity", "ManualDexterity", dexterity) + directStatValue(totals, "ManualDexterity", "ManualDexterityBonus"));
+  values.set("SpellCastingSpeed", curvePercent("CT_Knowledge", "SpellCastingSpeed", knowledge) + directStatValue(totals, "SpellCastingSpeed", "SpellCastingSpeedBonus"));
+  values.set("EquipSpeed", curvePercent("CT_Dexterity", "ItemEquipSpeed", dexterity) + directStatValue(totals, "EquipSpeed", "EquipSpeedBonus"));
+  values.set("RegularInteractionSpeed", curvePercent("CT_RegularInteractionSpeedBase", "RegularInteractionSpeed", resourcefulness) + directStatValue(totals, "RegularInteractionSpeed", "RegularInteractionSpeedBonus"));
+  values.set("MagicalInteractionSpeed", curvePercent("CT_Will", "MagicalInteractionSpeed", will) + directStatValue(totals, "MagicalInteractionSpeed", "MagicalInteractionSpeedBonus"));
+  values.set("HealthRecoveryBonus", curvePercent("CT_RecoveryMod", "HealthRecoveryMod", vigor) + directStatValue(totals, "HealthRecoveryBonus"));
+  values.set("SpellRecoveryBonus", curvePercent("CT_RecoveryMod", "MemoryRecoveryMod", knowledge) + directStatValue(totals, "SpellRecoveryBonus"));
+  values.set("MemoryCapacity", curveValue("CT_Knowledge", "MemoryCapacity", knowledge) + directStatValue(totals, "MemoryCapacity"));
+  values.set("Persuasiveness", curveValue("CT_Resourcefulness", "Persuasiveness", resourcefulness) + directStatValue(totals, "Persuasiveness"));
+  values.set("BuffDurationBonus", curvePercent("CT_Will", "BuffDurationMod", will) + directStatValue(totals, "BuffDurationBonus"));
+  values.set("DebuffDurationBonus", curvePercent("CT_Will", "DebuffDurationMod", will) + directStatValue(totals, "DebuffDurationBonus"));
+  values.set("CooldownReductionBonus", curvePercent("CT_Resourcefulness", "CooldownReduction", resourcefulness) + directStatValue(totals, "CooldownReductionBonus"));
+
+  const physicalPower = curveValue("CT_Strength", "PhysicalPower", strength) + directStatValue(totals, "PhysicalPower");
+  const physicalDamageFromPower = curvePercent("CT_PhysicalPower", "PhysicalDamageMod", physicalPower);
+  const physicalDamageFromBonuses = directStatValue(totals, "PhysicalDamageBonus");
+  values.set("PhysicalDamageBonus", physicalDamageFromPower + physicalDamageFromBonuses);
+  values.set("PhysicalDamageBonusFromPower", physicalDamageFromPower);
+  values.set("PhysicalDamageBonusFromBonuses", physicalDamageFromBonuses);
+
+  const magicalPower = curveValue("CT_Will", "MagicalPower", will) + directStatValue(totals, "MagicalPower");
+  const magicalDamageFromPower = curvePercent("CT_MagicalPower", "MagicalDamageMod", magicalPower);
+  const magicalDamageFromBonuses = directStatValue(totals, "MagicalDamageBonus");
+  values.set("MagicalDamageBonus", magicalDamageFromPower + magicalDamageFromBonuses);
+  values.set("MagicalDamageBonusFromPower", magicalDamageFromPower);
+  values.set("MagicalDamageBonusFromBonuses", magicalDamageFromBonuses);
+
+  const armorRating = directStatValue(totals, "ArmorRating");
+  const physicalReductionFromArmor = curvePercent("CT_ArmorRating", "PhysicalReduction", armorRating);
+  const physicalReductionFromBonuses = directStatValue(totals, "PhysicalArmorReduction", "PhysicalArmorReductionBonus");
+  values.set("PhysicalArmorReduction", physicalReductionFromArmor + physicalReductionFromBonuses);
+  values.set("PhysicalArmorReductionFromArmor", physicalReductionFromArmor);
+  values.set("PhysicalArmorReductionBonus", physicalReductionFromBonuses);
+
+  const magicResistance = curveValue("CT_Will", "MagicResistance", will) + directStatValue(totals, "MagicResistance", "MagicalResistance");
+  const magicalReductionFromResistance = curvePercent("CT_MagicResistance", "MagicalReduction", magicResistance);
+  const magicalReductionFromBonuses = directStatValue(totals, "MagicalDamageReduction", "MagicalDamageReductionBonus");
+  values.set("MagicalDamageReduction", magicalReductionFromResistance + magicalReductionFromBonuses);
+  values.set("MagicalDamageReductionFromResistance", magicalReductionFromResistance);
+  values.set("MagicalDamageReductionBonus", magicalReductionFromBonuses);
+  values.set("HeadshotDamageBonus", BUILDER_DEFAULTS.headshotDamageBonus + directStatValue(totals, "HeadshotDamageBonus"));
+
+  return values;
+}
+
+function builderStatRows() {
+  const totals = builderStatMap();
+  const character = selectedBuilderCharacter();
+  const derived = builderDerivedStatValues(totals, character);
+  return BUILDER_STAT_ROWS.map((row) => {
+    const slotId = row.slot ? resolveBuilderSlotId(row.slot) : "";
+    if (row.type === "text") {
+      const item = state.kit.itemByAsset.get(state.builder.equipped[slotId]);
+      const fallback = builderSlotById(slotId).weaponRole === "primary" ? "Bare Hands" : "None";
+      return { ...row, value: item?.name || fallback };
+    }
+    const source = row.slot && row.sourceKey
+      ? itemStatTotal(slotId, row.sourceKey)
+      : totals.get(row.sourceKey || row.key);
+    const value = row.slot && row.sourceKey
+      ? Number(source?.value || 0)
+      : Number(derived.get(row.key) ?? source?.value ?? 0);
+    return {
+      ...row,
+      value,
+      unit: row.unit ?? source?.unit ?? "",
+    };
+  });
+}
+
+function builderStatTotals() {
+  return builderStatRows()
+    .filter((row) => row.type !== "text" && Number(row.value) !== 0)
+    .sort((left, right) => {
+      const rank = statRank(left.key) - statRank(right.key);
+      if (rank) return rank;
+      return left.label.localeCompare(right.label, undefined, { sensitivity: "base" });
+    });
+}
+
 function fillFilters() {
   const filters = state.manifest.filters || {};
   $("itemRarity").innerHTML = optionHtml(filters.rarities || []);
@@ -220,8 +670,24 @@ function fillFilters() {
   $("sourceDiff").innerHTML = optionHtml(filters.diffs || []);
   const kinds = [...new Set(state.sources.map((row) => row.sourceKind).filter(Boolean))].sort();
   $("sourceKind").innerHTML = optionHtml(kinds);
+  const builderRarities = [...new Set(state.kit.items.map((row) => row.rarity).filter(Boolean))]
+    .sort((left, right) => rarityRank(left) - rarityRank(right));
+  $("builderRarity").innerHTML = optionHtml(builderRarities);
+  if ($("builderSlotFilter")) {
+    $("builderSlotFilter").innerHTML = [
+      `<option>Selected</option>`,
+      `<option>All</option>`,
+      ...BUILDER_SLOTS.map((slot) => `<option value="${escapeHtml(slot.id)}">${escapeHtml(slot.label)}</option>`),
+    ].join("");
+  }
+  $("builderCharacter").innerHTML = state.kit.characters.length
+    ? state.kit.characters.map((character) => `<option value="${escapeHtml(character.id)}">${escapeHtml(character.name)}</option>`).join("")
+    : `<option value="">No character data</option>`;
   setSelectIfAvailable("itemDiff", DEFAULT_DIFFICULTY);
   setSelectIfAvailable("sourceDiff", DEFAULT_DIFFICULTY);
+  if ($("builderSlotFilter")) setSelectIfAvailable("builderSlotFilter", state.builder.slotFilter);
+  setSelectIfAvailable("builderRarity", state.builder.rarity);
+  setSelectIfAvailable("builderCharacter", state.builder.characterId);
 }
 
 function formatDate(value) {
@@ -235,14 +701,30 @@ async function loadData() {
   loadFavorites();
   state.manifest = await fetchJson("/data/manifest.json");
   state.currentLuck = clampLuck(state.manifest.luck ?? 0);
-  const [items, sources, rates] = await Promise.all([
+  const [items, sources, rates, kit] = await Promise.all([
     fetchJson(state.manifest.files.items),
     fetchJson(state.manifest.files.sources),
     fetchJson(state.manifest.files.rates),
+    state.manifest.files.kit ? fetchJson(state.manifest.files.kit) : Promise.resolve({}),
   ]);
   state.items = items.rows || [];
   state.sources = sources.rows || [];
   state.rateWeights = rates.rows || {};
+  const kitItems = kit.items || [];
+  const kitCharacters = kit.characters || [];
+  const kitPerks = kit.perks || [];
+  state.kit = {
+    items: kitItems,
+    itemByAsset: new Map(kitItems.map((row) => [row.asset, row])),
+    secondaryPools: kit.secondaryPools || {},
+    propertyTypes: kit.propertyTypes || {},
+    curveTables: kit.curveTables || {},
+    characters: kitCharacters,
+    characterById: new Map(kitCharacters.map((row) => [row.id, row])),
+    perks: kitPerks,
+    perkById: new Map(kitPerks.map((row) => [row.id, row])),
+  };
+  state.builder.characterId = state.builder.characterId || kitCharacters[0]?.id || "";
   state.itemByAsset = new Map(state.items.map((row) => [row.itemAsset, row]));
   state.sourceByKey = new Map(state.sources.map((row) => [sourceKey(row.source, row.sourceKind), row]));
   $("dataStatus").textContent = "";
@@ -352,6 +834,57 @@ function chips(value, className, limit = 5) {
     <span class="chip-list">
       ${visible.map((item) => `<span class="chip ${className} ${className}-${chipClass(item)}">${escapeHtml(item)}</span>`).join("")}
       ${hidden.length > 0 ? `<button type="button" class="chip more-chip" data-more-values="${escapeHtml(encodedChipValues(hidden))}" title="${escapeHtml(hiddenLabel)}" aria-label="${escapeHtml(`Show ${hidden.length} more: ${hiddenLabel}`)}">+${hidden.length}</button>` : ""}
+    </span>
+  `;
+}
+
+function itemAssetKey(row) {
+  return row?.itemAsset || row?.asset || "";
+}
+
+function itemDisplayName(row) {
+  return row?.item || row?.name || "Item";
+}
+
+function itemArt(row) {
+  if (!row) return null;
+  return row.art
+    || state.itemByAsset.get(itemAssetKey(row))?.art
+    || state.kit.itemByAsset.get(itemAssetKey(row))?.art
+    || null;
+}
+
+function itemInitials(row) {
+  return itemDisplayName(row)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "?";
+}
+
+function itemThumbnail(row, variant = "") {
+  const art = itemArt(row);
+  const iconUrl = row?.iconUrl || art?.iconUrl || "";
+  const name = itemDisplayName(row);
+  const classes = [
+    "item-thumb",
+    variant ? `item-thumb-${variant}` : "",
+    row?.rarity ? `item-thumb-${chipClass(row.rarity)}` : "",
+    iconUrl ? "has-image" : "placeholder",
+  ].filter(Boolean).join(" ");
+  if (iconUrl) {
+    return `<span class="${classes}" title="${escapeHtml(name)}"><img src="${escapeHtml(iconUrl)}" alt=""></span>`;
+  }
+  return `<span class="${classes}" title="${escapeHtml(art?.iconAsset || art?.artAsset || name)}"><span>${escapeHtml(itemInitials(row))}</span></span>`;
+}
+
+function itemNameCell(row) {
+  return `
+    <span class="item-name-cell">
+      ${itemThumbnail(row)}
+      <span>${escapeHtml(itemDisplayName(row))}</span>
     </span>
   `;
 }
@@ -796,7 +1329,7 @@ function renderItems() {
     ? selectedRows.map((row) => `
       <tr class="clickable-row" data-open-item="${escapeHtml(row.itemAsset)}" tabindex="0" role="button">
         <td>${favoriteButton(isFavoriteItem(row.itemAsset), "item", row.itemAsset, "Favorite item")}</td>
-        <td>${escapeHtml(row.item)}</td>
+        <td>${itemNameCell(row)}</td>
         <td>${rarity(row.rarity)}</td>
         <td>${categoryChip(row.category)}</td>
         <td>${chips(row.maps || row.map, "map-chip")}</td>
@@ -832,7 +1365,7 @@ function renderFavorites() {
   $("favoriteItemRows").innerHTML = favoriteItems.length
     ? favoriteItems.map((row) => `
       <tr class="clickable-row" data-open-item="${escapeHtml(row.itemAsset)}" tabindex="0" role="button">
-        <td>${escapeHtml(row.item)}</td>
+        <td>${itemNameCell(row)}</td>
         <td>${rarity(row.rarity)}</td>
         <td><button data-open-item="${escapeHtml(row.itemAsset)}">Open</button></td>
         <td><button data-fav-type="item" data-fav-key="${escapeHtml(row.itemAsset)}">Remove</button></td>
@@ -853,11 +1386,259 @@ function renderFavorites() {
     : `<tr><td class="message-row" colspan="4">No favorite sources yet.</td></tr>`;
 }
 
+function filteredBuilderItems() {
+  const search = state.builder.search;
+  const rarityFilter = state.builder.rarity;
+  const selectedSlot = state.builder.selectedSlot;
+  return state.kit.items
+    .filter((item) => {
+      if (rarityFilter !== "All" && item.rarity !== rarityFilter) return false;
+      if (!builderClassAllowsItem(item)) return false;
+      if (selectedSlot && !itemFitsBuilderSlot(item, selectedSlot)) return false;
+      return matchesAnySearchGroup(search, [
+        [item.name, item.asset, item.rarity, item.slot?.label, item.weaponTypes?.join(" "), item.armorType],
+        [(item.allowedClasses || []).map((entry) => entry.name).join(" ")],
+        (item.primary || []).map((entry) => entry.label),
+      ]);
+    })
+    .sort((left, right) => {
+      const rarityResult = rarityRank(right.rarity) - rarityRank(left.rarity);
+      if (rarityResult) return rarityResult;
+      return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
+    });
+}
+
+function renderBuilderPerks() {
+  const character = selectedBuilderCharacter();
+  const perks = (character?.perks || []).map((id) => state.kit.perkById.get(id)).filter(Boolean);
+  $("builderPerkCount").textContent = `${state.builder.perks.length} / ${BUILDER_PERK_LIMIT}`;
+  $("builderPerks").innerHTML = perks.length
+    ? perks.map((perk) => {
+      const active = state.builder.perks.includes(perk.id);
+      const disabled = !active && state.builder.perks.length >= BUILDER_PERK_LIMIT;
+      const stats = (perk.stats || []).map((stat) => `${stat.label} ${statValue(stat.value, stat.unit)}`).join(", ");
+      return `
+        <button
+          type="button"
+          class="builder-perk ${active ? "active" : ""}"
+          data-builder-perk="${escapeHtml(perk.id)}"
+          aria-pressed="${active ? "true" : "false"}"
+          ${disabled ? "disabled" : ""}>
+          <span>${escapeHtml(perk.name)}</span>
+          <small>${escapeHtml(stats || "No direct stat modifier")}</small>
+        </button>
+      `;
+    }).join("")
+    : `<div class="builder-empty">No perks found for this character.</div>`;
+}
+
+function renderBuilderEquipment() {
+  $("builderEquipment").innerHTML = BUILDER_SLOTS.map((slot) => {
+    const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
+    const blockReason = weaponSlotBlockReason(slot.id);
+    const primary = (item?.primary || []).slice(0, 2).map((entry, index) => {
+      const selected = selectedPrimaryEntry(slot.id, index);
+      return `${entry.label} ${statValue(selected?.value ?? entry.max ?? entry.min, entry.unit)}`;
+    }).join(", ");
+    const art = item
+      ? itemThumbnail(item, "equipment")
+      : `<span class="equipment-ghost equipment-ghost-${escapeHtml(slot.id)}" aria-hidden="true"></span>`;
+    return `
+      <button
+        type="button"
+        class="builder-slot builder-slot-${escapeHtml(slot.id)} ${slot.kind || ""} ${state.builder.selectedSlot === slot.id ? "active" : ""} ${slot.weaponSet === state.builder.activeWeaponSet ? "active-set" : ""} ${item ? "filled" : ""} ${blockReason ? "blocked" : ""}"
+        style="grid-area: ${escapeHtml(slot.area)}"
+        data-builder-slot="${escapeHtml(slot.id)}"
+        aria-pressed="${state.builder.selectedSlot === slot.id ? "true" : "false"}"
+        ${blockReason ? `title="${escapeHtml(blockReason)}"` : ""}>
+        ${slot.marker ? `<span class="builder-slot-marker">${escapeHtml(slot.marker)}</span>` : ""}
+        <span class="builder-slot-art">${art}</span>
+        <span class="builder-slot-label">${escapeHtml(slot.label)}</span>
+        ${item ? `
+          <strong>${escapeHtml(item.name)}</strong>
+          <span>${rarity(item.rarity)} ${escapeHtml(item.gearScore || 0)} GS</span>
+          <small>${escapeHtml(primary)}</small>
+        ` : `<strong>${blockReason ? "Blocked" : "Empty"}</strong><span>${escapeHtml(blockReason || slot.accepts.join(" / "))}</span>`}
+      </button>
+    `;
+  }).join("");
+}
+
+function bonusSelect(slotId, item, poolId, index) {
+  const pool = state.kit.secondaryPools[poolId];
+  const selectedEntry = state.builder.bonuses[slotId]?.[index] || {};
+  const options = pool?.options || [];
+  const selectedOption = options.find((option) => option.propertyId === selectedEntry.propertyId);
+  const value = Number.isFinite(Number(selectedEntry.value))
+    ? Number(selectedEntry.value)
+    : Number(selectedOption?.max ?? selectedOption?.min ?? 0);
+  return `
+    <div class="builder-bonus-row">
+      <label>Bonus ${index + 1}
+        <select data-builder-bonus-select="${escapeHtml(slotId)}" data-bonus-index="${index}">
+          <option value="">None</option>
+          ${options.map((option) => `
+            <option value="${escapeHtml(option.propertyId)}" ${option.propertyId === selectedEntry.propertyId ? "selected" : ""}>
+              ${escapeHtml(option.label)} (${escapeHtml(statRange(option))})
+            </option>
+          `).join("")}
+        </select>
+      </label>
+      <label>Value
+        <input
+          type="number"
+          step="${escapeHtml(statStep(selectedOption))}"
+          ${selectedOption ? `min="${escapeHtml(selectedOption.min)}" max="${escapeHtml(selectedOption.max)}"` : ""}
+          value="${Number.isFinite(Number(value)) ? escapeHtml(value) : ""}"
+          data-builder-bonus-value="${escapeHtml(slotId)}"
+          data-bonus-index="${index}"
+          ${selectedOption ? "" : "disabled"}>
+      </label>
+    </div>
+  `;
+}
+
+function primaryValueControl(slotId, entry, index) {
+  const selected = selectedPrimaryEntry(slotId, index) || { ...entry, value: entry.max ?? entry.min };
+  const min = Number(entry.min ?? selected.value ?? 0);
+  const max = Number(entry.max ?? min);
+  const hasRange = Math.abs(max - min) >= 0.0001;
+  if (!hasRange) {
+    return `<span><b>${escapeHtml(entry.label)}</b>${escapeHtml(statValue(selected.value, entry.unit))}</span>`;
+  }
+  return `
+    <label class="builder-primary-row">
+      <span>
+        <b>${escapeHtml(entry.label)}</b>
+        <small>${escapeHtml(statRange(entry))}</small>
+      </span>
+      <input
+        type="number"
+        step="${escapeHtml(statStep(entry))}"
+        min="${escapeHtml(min)}"
+        max="${escapeHtml(max)}"
+        value="${escapeHtml(selected.value)}"
+        data-builder-primary-value="${escapeHtml(slotId)}"
+        data-primary-index="${index}">
+    </label>
+  `;
+}
+
+function renderBuilderBonusPanel() {
+  const slotId = state.builder.selectedSlot;
+  const slot = builderSlotById(slotId);
+  const item = state.kit.itemByAsset.get(state.builder.equipped[slotId]);
+  if (!item) {
+    $("builderBonusPanel").innerHTML = `
+      <div class="builder-bonus-empty">
+        <strong>${escapeHtml(slot.label)}</strong>
+        <span>Pick an item for this slot.</span>
+      </div>
+    `;
+    return;
+  }
+  const primary = (item.primary || []).map((entry, index) => primaryValueControl(slotId, entry, index)).join("");
+  const secondary = (item.secondaryPoolIds || []).map((poolId, index) => bonusSelect(slotId, item, poolId, index)).join("");
+  $("builderBonusPanel").innerHTML = `
+    <div class="builder-bonus-title">
+      <div>
+        <h3>${escapeHtml(item.name)}</h3>
+        <p>${rarity(item.rarity)} ${escapeHtml(item.slot?.label || "")} | ${escapeHtml(classNamesText(item.allowedClasses))}</p>
+      </div>
+      <button type="button" data-unequip-slot="${escapeHtml(slotId)}">Remove</button>
+    </div>
+    <div class="builder-primary-list">${primary || `<span><b>Primary</b>None</span>`}</div>
+    <div class="builder-secondary-list">${secondary || `<div class="builder-empty">No secondary bonus slots.</div>`}</div>
+  `;
+}
+
+function renderBuilderPicker() {
+  const picker = $("builderPicker");
+  const slot = builderSlotById(state.builder.selectedSlot);
+  const blockReason = weaponSlotBlockReason(slot.id);
+  picker.hidden = !state.builder.pickerOpen;
+  $("builderPickerTitle").textContent = slot ? `Pick ${slot.label}` : "Pick Item";
+  $("builderPickerMeta").textContent = blockReason || (slot ? slot.accepts.join(" / ") : "");
+}
+
+function renderBuilderItems() {
+  const rows = filteredBuilderItems();
+  const limited = rows.slice(0, 180);
+  $("builderItemList").innerHTML = limited.length
+    ? limited.map((item) => {
+      const targetSlot = firstBuilderSlotForItem(item);
+      const disabled = !targetSlot;
+      const classes = classNamesText(item.allowedClasses);
+      const primary = (item.primary || []).slice(0, 3).map((entry) => `${entry.label} ${statRange(entry)}`).join(", ");
+      return `
+        <article class="builder-item">
+          ${itemThumbnail(item)}
+          <div>
+            <h3>${escapeHtml(item.name)}</h3>
+            <p>${rarity(item.rarity)} <span>${escapeHtml(item.slot?.label || "")}</span> <span>${escapeHtml(item.gearScore || 0)} GS</span></p>
+            <small>${escapeHtml(primary || classes)}</small>
+          </div>
+          <button type="button" data-equip-item="${escapeHtml(item.asset)}" ${disabled ? "disabled" : ""}>
+            Equip
+          </button>
+        </article>
+      `;
+    }).join("")
+    : `<div class="builder-empty">${escapeHtml(weaponSlotBlockReason(state.builder.selectedSlot) || "No kit items match these filters for this character.")}</div>`;
+}
+
+function renderBuilderStats() {
+  const stats = builderStatRows();
+  const gearScore = Object.values(state.builder.equipped)
+    .map((asset) => Number(state.kit.itemByAsset.get(asset)?.gearScore || 0))
+    .reduce((sum, value) => sum + value, 0);
+  $("builderGearScore").textContent = `${gearScore.toLocaleString()} GS`;
+  $("builderStats").innerHTML = stats.map((row) => {
+    const numeric = row.type !== "text";
+    const value = numeric ? Number(row.value || 0) : row.value;
+    return `
+      <div class="builder-stat ${row.indent ? "indent" : ""} ${numeric && value < 0 ? "negative" : numeric && value > 0 ? "positive" : ""}">
+        <span>${escapeHtml(row.label)}</span>
+        <strong>${escapeHtml(numeric ? statValue(value, row.unit) : value)}</strong>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderBuilderSummary() {
+  const equippedCount = Object.values(state.builder.equipped).filter(Boolean).length;
+  const character = selectedBuilderCharacter();
+  const stats = builderStatTotals();
+  $("builderSummary").innerHTML = [
+    metaPill("Character", character?.name || "None"),
+    metaPill("Equipped", `${equippedCount} / ${BUILDER_SLOTS.length}`),
+    metaPill("Stats", stats.length.toLocaleString()),
+  ].join("");
+}
+
+function renderBuilder() {
+  if (!$("builderView")) return;
+  $("builderSearch").value = state.builder.search;
+  $("builderRarity").value = state.builder.rarity;
+  if ($("builderSlotFilter")) $("builderSlotFilter").value = state.builder.slotFilter;
+  if (state.builder.characterId) $("builderCharacter").value = state.builder.characterId;
+  $("builderCharacterPanel").classList.toggle("collapsed", state.builder.characterCollapsed);
+  $("builderCharacterToggle").setAttribute("aria-expanded", state.builder.characterCollapsed ? "false" : "true");
+  renderBuilderSummary();
+  renderBuilderPerks();
+  renderBuilderEquipment();
+  renderBuilderPicker();
+  renderBuilderBonusPanel();
+  renderBuilderItems();
+  renderBuilderStats();
+}
+
 function render() {
   updateSortButtons();
   renderItems();
   renderSources();
   renderFavorites();
+  renderBuilder();
 }
 
 async function detail(path) {
@@ -953,7 +1734,7 @@ function renderSourceDetail(payload) {
       </button>
     </div>
     ${detailTable(limited, [
-      { label: "Item", sortKey: "item", key: "item" },
+      { label: "Item", sortKey: "item", html: (row) => itemNameCell(row) },
       { label: "Amount", sortKey: "amount", html: (row) => escapeHtml(amountText(row.itemCounts || row.itemCount)), num: true },
       { label: "Rarity", sortKey: "rarity", html: (row) => rarity(row.rarity) },
       { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
@@ -978,6 +1759,13 @@ function renderItemDetail(payload) {
   $("detailTitle").textContent = payload.item?.item || "Item";
   $("detailMeta").textContent = `${payload.item?.rarity || ""} ${payload.item?.category || ""} | ${baseRows.length.toLocaleString()} sources`;
   $("detailContent").innerHTML = `
+    <div class="item-detail-hero">
+      ${itemThumbnail(payload.item, "large")}
+      <div>
+        <strong>${escapeHtml(payload.item?.item || "Item")}</strong>
+        <span>${rarity(payload.item?.rarity || "")} ${categoryChip(payload.item?.category || "")}</span>
+      </div>
+    </div>
     <div class="detail-toolbar item-detail-toolbar">
       <label class="detail-search">Search item sources
         <input id="itemDetailSearch" autocomplete="off" placeholder="Source, kind, map, difficulty, loot table..." value="${escapeHtml(search)}">
@@ -1049,6 +1837,107 @@ function renderActiveDetail() {
   if (state.activeDetail.type === "source") renderSourceDetail(state.activeDetail.payload);
 }
 
+function defaultBonusesForItem(item) {
+  return (item?.secondaryPoolIds || []).map((poolId) => ({ poolId, propertyId: "", value: "" }));
+}
+
+function equipBuilderItem(asset) {
+  const item = state.kit.itemByAsset.get(asset);
+  if (!item || !builderClassAllowsItem(item)) return;
+  const slotId = firstBuilderSlotForItem(item);
+  if (!slotId) return;
+  const slot = builderSlotById(slotId);
+  const equipped = { ...state.builder.equipped, [slotId]: asset };
+  const bonuses = { ...state.builder.bonuses, [slotId]: defaultBonusesForItem(item) };
+  const primaryValues = { ...state.builder.primaryValues, [slotId]: defaultPrimaryValuesForItem(item) };
+  if (slot.weaponRole === "primary" && itemIsTwoHanded(item)) {
+    const pairedSlotId = pairedWeaponSlotId(slotId);
+    delete equipped[pairedSlotId];
+    delete bonuses[pairedSlotId];
+    delete primaryValues[pairedSlotId];
+  }
+  setSelectedBuilderSlot(slotId);
+  state.builder.equipped = equipped;
+  state.builder.primaryValues = primaryValues;
+  state.builder.bonuses = bonuses;
+  renderBuilder();
+}
+
+function unequipBuilderSlot(slotId) {
+  const { [slotId]: _removed, ...equipped } = state.builder.equipped;
+  const { [slotId]: _removedPrimaryValues, ...primaryValues } = state.builder.primaryValues;
+  const { [slotId]: _removedBonuses, ...bonuses } = state.builder.bonuses;
+  state.builder.equipped = equipped;
+  state.builder.primaryValues = primaryValues;
+  state.builder.bonuses = bonuses;
+  renderBuilder();
+}
+
+function clearBuilder() {
+  state.builder.equipped = {};
+  state.builder.primaryValues = {};
+  state.builder.bonuses = {};
+  state.builder.perks = [];
+  state.builder.pickerOpen = false;
+  renderBuilder();
+}
+
+function closeBuilderPicker() {
+  state.builder.pickerOpen = false;
+  renderBuilder();
+}
+
+function toggleBuilderPerk(perkId) {
+  const active = state.builder.perks.includes(perkId);
+  state.builder.perks = active
+    ? state.builder.perks.filter((id) => id !== perkId)
+    : state.builder.perks.length < BUILDER_PERK_LIMIT
+      ? [...state.builder.perks, perkId]
+      : state.builder.perks;
+  renderBuilder();
+}
+
+function setBuilderBonusProperty(slotId, index, propertyId) {
+  const item = state.kit.itemByAsset.get(state.builder.equipped[slotId]);
+  if (!item) return;
+  const bonuses = state.builder.bonuses[slotId] || defaultBonusesForItem(item);
+  const entry = bonuses[index];
+  const poolId = entry?.poolId || item.secondaryPoolIds[index];
+  const pool = state.kit.secondaryPools[poolId];
+  const option = pool?.options?.find((row) => row.propertyId === propertyId);
+  bonuses[index] = {
+    poolId,
+    propertyId,
+    value: option ? option.max : "",
+  };
+  state.builder.bonuses = { ...state.builder.bonuses, [slotId]: bonuses };
+  renderBuilder();
+}
+
+function setBuilderBonusValue(slotId, index, value) {
+  const bonuses = state.builder.bonuses[slotId];
+  if (!bonuses?.[index]) return;
+  const pool = state.kit.secondaryPools[bonuses[index].poolId];
+  const option = pool?.options?.find((row) => row.propertyId === bonuses[index].propertyId);
+  const parsed = Number(value);
+  const nextValue = option && Number.isFinite(parsed)
+    ? Math.max(Number(option.min), Math.min(Number(option.max), parsed))
+    : value;
+  bonuses[index] = { ...bonuses[index], value: nextValue };
+  state.builder.bonuses = { ...state.builder.bonuses, [slotId]: bonuses };
+  renderBuilder();
+}
+
+function setBuilderPrimaryValue(slotId, index, value) {
+  const item = equippedBuilderItem(slotId);
+  const entry = item?.primary?.[index];
+  if (!entry) return;
+  const values = state.builder.primaryValues[slotId] || defaultPrimaryValuesForItem(item);
+  values[index] = clampStatEntryValue(entry, value);
+  state.builder.primaryValues = { ...state.builder.primaryValues, [slotId]: values };
+  renderBuilder();
+}
+
 function openClickableRow(row) {
   if (row.dataset.openItem) {
     openItem(row.dataset.openItem);
@@ -1065,11 +1954,45 @@ function wireEvents() {
       document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
       $(`${state.activeTab}View`).classList.add("active");
       if (state.activeTab === "favorites") renderFavorites();
+      if (state.activeTab === "builder") renderBuilder();
     });
   });
 
   ["itemSearch", "itemRarity", "itemCategory", "itemMap", "itemDiff", "sourceSearch", "sourceMap", "sourceDiff", "sourceKind"]
     .forEach((id) => $(id).addEventListener("input", render));
+
+  $("builderSearch").addEventListener("input", () => {
+    state.builder.search = $("builderSearch").value;
+    renderBuilder();
+  });
+  $("builderRarity").addEventListener("input", () => {
+    state.builder.rarity = $("builderRarity").value || "All";
+    renderBuilder();
+  });
+  $("builderSlotFilter")?.addEventListener("input", () => {
+    state.builder.slotFilter = $("builderSlotFilter").value || "Selected";
+    renderBuilder();
+  });
+  $("builderCharacter").addEventListener("change", () => {
+    state.builder.characterId = $("builderCharacter").value;
+    const character = selectedBuilderCharacter();
+    const allowedPerks = new Set(character?.perks || []);
+    state.builder.perks = state.builder.perks.filter((perkId) => allowedPerks.has(perkId));
+    const equipped = {};
+    const primaryValues = {};
+    const bonuses = {};
+    Object.entries(state.builder.equipped).forEach(([slotId, asset]) => {
+      const item = state.kit.itemByAsset.get(asset);
+      if (!item || !builderClassAllowsItem(item)) return;
+      equipped[slotId] = asset;
+      if (state.builder.primaryValues[slotId]) primaryValues[slotId] = state.builder.primaryValues[slotId];
+      if (state.builder.bonuses[slotId]) bonuses[slotId] = state.builder.bonuses[slotId];
+    });
+    state.builder.equipped = equipped;
+    state.builder.primaryValues = primaryValues;
+    state.builder.bonuses = bonuses;
+    renderBuilder();
+  });
 
   $("luckInput").addEventListener("input", () => {
     const value = clampLuck($("luckInput").value);
@@ -1102,6 +2025,24 @@ function wireEvents() {
       }
       if (button.dataset.openSource) {
         openSource(button.dataset.openSource);
+        return;
+      }
+      if (button.dataset.builderSlot) {
+        setSelectedBuilderSlot(button.dataset.builderSlot);
+        state.builder.pickerOpen = true;
+        renderBuilder();
+        return;
+      }
+      if (button.dataset.equipItem) {
+        equipBuilderItem(button.dataset.equipItem);
+        return;
+      }
+      if (button.dataset.unequipSlot) {
+        unequipBuilderSlot(button.dataset.unequipSlot);
+        return;
+      }
+      if (button.dataset.builderPerk) {
+        toggleBuilderPerk(button.dataset.builderPerk);
         return;
       }
       if (button.dataset.favType === "item") {
@@ -1193,6 +2134,18 @@ function wireEvents() {
       };
       renderItemDetail(state.activeDetail.payload);
       $(input.id)?.focus();
+      return;
+    }
+    if (input.dataset?.builderBonusSelect) {
+      setBuilderBonusProperty(input.dataset.builderBonusSelect, Number(input.dataset.bonusIndex || 0), input.value);
+      return;
+    }
+    if (input.dataset?.builderBonusValue) {
+      setBuilderBonusValue(input.dataset.builderBonusValue, Number(input.dataset.bonusIndex || 0), input.value);
+      return;
+    }
+    if (input.dataset?.builderPrimaryValue) {
+      setBuilderPrimaryValue(input.dataset.builderPrimaryValue, Number(input.dataset.primaryIndex || 0), input.value);
     }
   });
 
@@ -1206,9 +2159,18 @@ function wireEvents() {
     saveFavorites();
     render();
   });
+  $("clearBuilder").addEventListener("click", clearBuilder);
+  $("closeBuilderPicker").addEventListener("click", closeBuilderPicker);
+  $("builderCharacterToggle").addEventListener("click", () => {
+    state.builder.characterCollapsed = !state.builder.characterCollapsed;
+    renderBuilder();
+  });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") hideChipPopover(true);
+    if (event.key === "Escape") {
+      hideChipPopover(true);
+      if (state.builder.pickerOpen) closeBuilderPicker();
+    }
   });
   document.addEventListener("scroll", () => hideChipPopover(true), true);
   window.addEventListener("resize", () => hideChipPopover(true));

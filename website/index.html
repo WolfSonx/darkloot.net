@@ -7,7 +7,7 @@
   <title>DarkLoot</title>
   <link rel="icon" type="image/png" sizes="64x64" href="/src/assets/favicon.png?v=20260506-3">
   <link rel="apple-touch-icon" href="/src/assets/darkloot-mark.png?v=20260506-3">
-  <link rel="stylesheet" href="/src/styles.css?v=20260506-3">
+  <link rel="stylesheet" href="/src/styles.css?v=20260507-5">
 </head>
 <body>
   <header class="app-header">
@@ -23,6 +23,7 @@
     <nav class="tabs app-nav" aria-label="Primary">
       <button class="tab active" data-tab="items">Items</button>
       <button class="tab" data-tab="sources">Sources</button>
+      <button class="tab" data-tab="builder">Kit Builder</button>
       <button class="tab" data-tab="favorites">Favorites</button>
     </nav>
     <div class="header-actions">
@@ -122,6 +123,65 @@
       <div id="sourceTableMeta" class="table-meta" aria-live="polite"></div>
     </section>
 
+    <section id="builderView" class="view">
+      <div class="view-head builder-head">
+        <h2>Kit Builder</h2>
+        <div id="builderSummary" class="builder-summary" aria-live="polite"></div>
+      </div>
+      <div class="builder-layout">
+        <aside class="builder-panel builder-stats-panel">
+          <div class="builder-panel-head">
+            <h3 id="builderStatsTitle">Stats</h3>
+            <span id="builderGearScore" class="builder-count">0 GS</span>
+          </div>
+          <div id="builderStats" class="builder-stats"></div>
+        </aside>
+
+        <section class="builder-playfield">
+          <section class="builder-panel builder-equipment-panel">
+            <div class="builder-panel-head">
+              <h3>Equipment</h3>
+              <button id="clearBuilder" class="danger">Clear</button>
+            </div>
+            <div id="builderEquipment" class="builder-equipment"></div>
+            <div id="builderPicker" class="builder-picker" hidden>
+              <div class="builder-picker-head">
+                <div>
+                  <h3 id="builderPickerTitle">Pick Item</h3>
+                  <p id="builderPickerMeta"></p>
+                </div>
+                <button type="button" id="closeBuilderPicker">Close</button>
+              </div>
+              <div class="builder-browser-filters">
+                <label>Search
+                  <input id="builderSearch" autocomplete="off" placeholder="Search items...">
+                </label>
+                <label>Rarity
+                  <select id="builderRarity"></select>
+                </label>
+              </div>
+              <div id="builderItemList" class="builder-item-list"></div>
+              <div id="builderBonusPanel" class="builder-bonus-panel"></div>
+            </div>
+          </section>
+
+          <aside id="builderCharacterPanel" class="builder-panel builder-character-panel">
+            <button id="builderCharacterToggle" class="builder-character-toggle" type="button" aria-expanded="true">Character</button>
+            <div class="builder-character-body">
+              <label>Character
+                <select id="builderCharacter"></select>
+              </label>
+              <div class="builder-panel-head">
+                <h3>Perks</h3>
+                <span id="builderPerkCount" class="builder-count">0 / 4</span>
+              </div>
+              <div id="builderPerks" class="builder-perks"></div>
+            </div>
+          </aside>
+        </section>
+      </div>
+    </section>
+
     <section id="favoritesView" class="view">
       <div class="view-head">
         <h2>Favorites</h2>
@@ -175,6 +235,6 @@
     <div id="detailContent"></div>
   </dialog>
 
-  <script type="module" src="/src/main.js?v=20260503-6"></script>
+  <script type="module" src="/src/main.js?v=20260507-5"></script>
 </body>
 </html>
