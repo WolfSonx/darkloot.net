@@ -1432,6 +1432,15 @@ function renderBuilderPerks() {
     : `<div class="builder-empty">No perks found for this character.</div>`;
 }
 
+function slotSecondarySummary(slotId, item) {
+  const selected = (item?.secondaryPoolIds || [])
+    .map((_poolId, index) => selectedBonusEntry(slotId, index))
+    .filter(Boolean)
+    .map((entry) => `${entry.label} ${statValue(entry.value, entry.unit)}`);
+  if (selected.length) return selected;
+  return item?.secondaryPoolIds?.length ? ["No secondary bonuses selected"] : [];
+}
+
 function renderBuilderEquipment() {
   $("builderEquipment").innerHTML = BUILDER_SLOTS.map((slot) => {
     const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
@@ -1440,6 +1449,7 @@ function renderBuilderEquipment() {
       const selected = selectedPrimaryEntry(slot.id, index);
       return `${entry.label} ${statValue(selected?.value ?? entry.max ?? entry.min, entry.unit)}`;
     }).join(", ");
+    const secondary = slotSecondarySummary(slot.id, item);
     const art = item
       ? itemThumbnail(item, "equipment")
       : `<span class="equipment-ghost equipment-ghost-${escapeHtml(slot.id)}" aria-hidden="true"></span>`;
@@ -1459,6 +1469,12 @@ function renderBuilderEquipment() {
             <strong>${escapeHtml(item.name)}</strong>
             <span>${rarity(item.rarity)} ${escapeHtml(item.gearScore || 0)} GS</span>
             <small>${escapeHtml(primary)}</small>
+            ${secondary.length ? `
+              <span class="builder-slot-secondary">
+                <b>Secondary</b>
+                ${secondary.map((entry) => `<em>${escapeHtml(entry)}</em>`).join("")}
+              </span>
+            ` : ""}
           </span>
         ` : `
           <span class="builder-slot-info empty">

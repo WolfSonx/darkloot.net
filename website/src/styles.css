@@ -1096,7 +1096,7 @@ th.num .sort-button {
 
 .builder-equipment-panel {
   position: relative;
-  min-height: 760px;
+  min-height: 0;
   overflow: hidden;
   background:
     radial-gradient(ellipse at 50% 42%, rgba(104, 110, 113, .25), transparent 34%),
@@ -1181,19 +1181,20 @@ th.num .sort-button {
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(14, minmax(28px, 1fr));
-  grid-template-rows: repeat(9, 66px);
+  grid-template-rows: repeat(9, minmax(0, 1fr));
   grid-template-areas:
     "weapon1Primary weapon1Primary weapon1Secondary weapon1Secondary . . head head . . weapon2Primary weapon2Primary weapon2Secondary weapon2Secondary"
     "weapon1Primary weapon1Primary weapon1Secondary weapon1Secondary . . head head necklace . weapon2Primary weapon2Primary weapon2Secondary weapon2Secondary"
     "weapon1Primary weapon1Primary weapon1Secondary weapon1Secondary . . chest chest cloak cloak weapon2Primary weapon2Primary weapon2Secondary weapon2Secondary"
     ". . . . . . chest chest cloak cloak . . . ."
-    ". . ring1 . . . chest chest cloak cloak . ring2 . ."
-    ". . hands hands . . legs legs . . feet feet . ."
-    ". . hands hands . . legs legs . . feet feet . ."
+    ". . . . . . chest chest cloak cloak . . . ."
+    ". . . . ring1 . legs legs . ring2 . . . ."
     ". . . . . . legs legs . . . . . ."
-    ". . . . . . legs legs . . . . . .";
+    ". . hands hands . . legs legs . . feet feet . ."
+    ". . hands hands . . legs legs . . feet feet . .";
   gap: 14px;
-  min-height: 650px;
+  aspect-ratio: 14 / 9;
+  min-height: 0;
   padding: 22px 22px 28px;
 }
 
@@ -1292,13 +1293,13 @@ th.num .sort-button {
 .builder-slot-art {
   position: absolute;
   z-index: 1;
-  inset: 6px;
+  inset: 4px;
   display: grid;
   place-items: center;
 }
 
 .builder-slot.weapon .builder-slot-art {
-  inset-top: 30px;
+  top: 30px;
 }
 
 .builder-slot-label {
@@ -1361,6 +1362,28 @@ th.num .sort-button {
   color: var(--faint);
   font-size: 10px;
   line-height: 1.2;
+}
+
+.builder-slot-secondary {
+  display: grid;
+  gap: 2px;
+  border-top: 1px solid rgba(207, 211, 214, .16);
+  margin-top: 2px;
+  padding-top: 4px;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.builder-slot-secondary b {
+  color: var(--gold);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.builder-slot-secondary em {
+  font-style: normal;
+  overflow-wrap: anywhere;
 }
 
 .equipment-ghost {
