@@ -1455,10 +1455,17 @@ function renderBuilderEquipment() {
         <span class="builder-slot-art">${art}</span>
         <span class="builder-slot-label">${escapeHtml(slot.label)}</span>
         ${item ? `
-          <strong>${escapeHtml(item.name)}</strong>
-          <span>${rarity(item.rarity)} ${escapeHtml(item.gearScore || 0)} GS</span>
-          <small>${escapeHtml(primary)}</small>
-        ` : `<strong>${blockReason ? "Blocked" : "Empty"}</strong><span>${escapeHtml(blockReason || slot.accepts.join(" / "))}</span>`}
+          <span class="builder-slot-info">
+            <strong>${escapeHtml(item.name)}</strong>
+            <span>${rarity(item.rarity)} ${escapeHtml(item.gearScore || 0)} GS</span>
+            <small>${escapeHtml(primary)}</small>
+          </span>
+        ` : `
+          <span class="builder-slot-info empty">
+            <strong>${blockReason ? "Blocked" : "Empty"}</strong>
+            <span>${escapeHtml(blockReason || slot.accepts.join(" / "))}</span>
+          </span>
+        `}
       </button>
     `;
   }).join("");
