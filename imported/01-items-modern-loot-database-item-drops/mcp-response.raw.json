@@ -1,0 +1,24 @@
+{
+  "id": 501,
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [
+      {
+        "text": "{\"name\":\"projects/15785509076495052768/screens/55b7e9cbe6844f3da51dda9d338aa750\",\"title\":\"Modern Loot Database - Item Drops\",\"screenshot\":{\"name\":\"projects/15785509076495052768/files/acd8eff8cc0c46a5aa8e5ec666a3758b\",\"downloadUrl\":\"https://lh3.googleusercontent.com/aida/ADBb0uiYj3CZV_b8wf-E1PGWl2eWMtbBoLXwPxIj_5izROVjRP51S-PLo25LIanU1LTbnm4habszo6Eta5Kp3FEvVCyXwVb7Dlf7_55zbBY6Plo9OUHG1BCLQf5ZdnX7MGbklDeNYfd6DSVUC3VrkqTPoGk071sU6V2RpfkINJ0q9UIQY6hCa3-IwYNq1rW1BIcQg7k0bBfcm1lHLC1wOYT5dpI3F1P0rt-XA0oCLxUMvTP0jiz88JgAMczpE9dM\"},\"htmlCode\":{},\"width\":\"1376\",\"height\":\"768\",\"deviceType\":\"DESKTOP\"}",
+        "type": "text"
+      }
+    ],
+    "structuredContent": {
+      "deviceType": "DESKTOP",
+      "height": "768",
+      "htmlCode": {},
+      "name": "projects/15785509076495052768/screens/55b7e9cbe6844f3da51dda9d338aa750",
+      "screenshot": {
+        "downloadUrl": "https://lh3.googleusercontent.com/aida/ADBb0uiYj3CZV_b8wf-E1PGWl2eWMtbBoLXwPxIj_5izROVjRP51S-PLo25LIanU1LTbnm4habszo6Eta5Kp3FEvVCyXwVb7Dlf7_55zbBY6Plo9OUHG1BCLQf5ZdnX7MGbklDeNYfd6DSVUC3VrkqTPoGk071sU6V2RpfkINJ0q9UIQY6hCa3-IwYNq1rW1BIcQg7k0bBfcm1lHLC1wOYT5dpI3F1P0rt-XA0oCLxUMvTP0jiz88JgAMczpE9dM",
+        "name": "projects/15785509076495052768/files/acd8eff8cc0c46a5aa8e5ec666a3758b"
+      },
+      "title": "Modern Loot Database - Item Drops",
+      "width": "1376"
+    }
+  }
+}

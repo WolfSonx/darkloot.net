@@ -7,7 +7,7 @@
   <title>DarkLoot</title>
   <link rel="icon" type="image/png" sizes="64x64" href="/src/assets/favicon.png?v=20260506-3">
   <link rel="apple-touch-icon" href="/src/assets/darkloot-mark.png?v=20260506-3">
-  <link rel="stylesheet" href="/src/styles.css?v=20260507-8">
+  <link rel="stylesheet" href="/src/styles.css?v=20260507-9">
 </head>
 <body>
   <header class="app-header">
@@ -50,7 +50,7 @@
         <h2>Item Drops</h2>
       </div>
       <div class="filters">
-        <label class="wide">Search item or source
+        <label class="wide">Search item
           <input id="itemSearch" autocomplete="off" placeholder="Gold key, wolf pelt, falchion...">
         </label>
         <label>Rarity
@@ -91,7 +91,7 @@
         <h2>Loot Sources</h2>
       </div>
       <div class="filters source-filters">
-        <label class="wide">Search source or item
+        <label class="wide">Search source
           <input id="sourceSearch" autocomplete="off" placeholder="Skeleton champion, ornate chest, gold key...">
         </label>
         <label>Map
@@ -171,6 +171,7 @@
               <label>Character
                 <select id="builderCharacter"></select>
               </label>
+              <div id="builderCharacterCurrent" class="builder-character-current"></div>
               <div class="builder-panel-head">
                 <h3>Perks</h3>
                 <span id="builderPerkCount" class="builder-count">0 / 4</span>
@@ -179,6 +180,20 @@
             </div>
           </aside>
         </section>
+
+        <aside class="builder-panel builder-saved-panel">
+          <div class="builder-panel-head">
+            <h3>Saved Kits</h3>
+            <span id="builderSavedKitCount" class="builder-count">0</span>
+          </div>
+          <div class="builder-save-controls">
+            <label>Name
+              <input id="builderKitName" autocomplete="off" placeholder="Kit name">
+            </label>
+            <button id="saveBuilderKit" type="button">Save</button>
+          </div>
+          <div id="builderSavedKits" class="builder-saved-kits"></div>
+        </aside>
       </div>
     </section>
 
@@ -235,6 +250,6 @@
     <div id="detailContent"></div>
   </dialog>
 
-  <script type="module" src="/src/main.js?v=20260507-8"></script>
+  <script type="module" src="/src/main.js?v=20260507-9"></script>
 </body>
 </html>

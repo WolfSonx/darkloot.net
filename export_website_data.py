@@ -162,6 +162,13 @@ RARITY_ALIASES = {
     "Normal": "Common",
     "Legend": "Legendary",
 }
+CONDITIONAL_STAT_PERK_IDS = {
+    "Id_Perk_Trickster",
+}
+PERK_ICON_ALIASES = {
+    "Id_Perk_ComboAttack": "CombinationAttack",
+    "Id_Perk_HideMastery": "HideExpert",
+}
 
 
 def slug_for(*parts: object) -> str:
@@ -279,6 +286,33 @@ def icon_raster_url(icon_json_path: Path | None, icon_asset: str, output_dir: Pa
     target = target_dir / f"{target_name}{source.suffix.lower()}"
     shutil.copy2(source, target)
     return f"/assets/item-icons/{target.name}"
+
+
+def public_asset_url_from_source(source: Path, output_dir: Path, asset_folder: str) -> str:
+    if not source.exists():
+        return ""
+    target_dir = output_dir.parent / "assets" / asset_folder
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / source.name
+    shutil.copy2(source, target)
+    return f"/assets/{asset_folder}/{target.name}"
+
+
+def class_icon_url(generated_root: Path, output_dir: Path, class_id: str, size: str = "S") -> str:
+    if not class_id:
+        return ""
+    content_root = generated_root.parents[2]
+    source = content_root / "UI" / "Resources" / "IconClass" / f"ClassIcon_{size}_{class_id}.png"
+    return public_asset_url_from_source(source, output_dir, "class-icons")
+
+
+def perk_icon_url(generated_root: Path, output_dir: Path, perk_id: str) -> str:
+    token = PERK_ICON_ALIASES.get(str(perk_id or ""), str(perk_id or "").removeprefix("Id_Perk_"))
+    if not token:
+        return ""
+    content_root = generated_root.parents[2]
+    source = content_root / "UI" / "Resources" / "IconPerk" / f"Icon_Perk_{token}.png"
+    return public_asset_url_from_source(source, output_dir, "perk-icons")
 
 
 def item_art_from_reference(generated_root: Path, output_dir: Path, art_reference: object) -> dict:
@@ -559,7 +593,7 @@ def load_property_assets(generated_root: Path, property_types: dict) -> dict:
     return properties
 
 
-def load_requirement_classes(generated_root: Path) -> dict:
+def load_requirement_classes(generated_root: Path, output_dir: Path) -> dict:
     requirements = {}
     requirement_dir = generated_root.parent / "DT_Item" / "ItemRequirement"
     for path in requirement_dir.glob("*.json"):
@@ -569,10 +603,14 @@ def load_requirement_classes(generated_root: Path) -> dict:
         name = asset.get("Name") or path.stem
         item = ((asset.get("Properties") or {}).get("Item") or {})
         class_assets = asset_names(item.get("ClassRequirements"))
-        requirements[name] = [
-            {"id": class_key(class_asset), "name": humanize_identifier(class_asset)}
-            for class_asset in class_assets
-        ]
+        requirements[name] = []
+        for class_asset in class_assets:
+            class_id = class_key(class_asset)
+            entry = {"id": class_id, "name": humanize_identifier(class_asset)}
+            icon_url = class_icon_url(generated_root, output_dir, class_id)
+            if icon_url:
+                entry["iconUrl"] = icon_url
+            requirements[name].append(entry)
     return requirements
 
 
@@ -612,7 +650,7 @@ def load_curve_tables(generated_root: Path) -> dict:
     return tables
 
 
-def load_perks(generated_root: Path, status_effects: dict) -> dict:
+def load_perks(generated_root: Path, output_dir: Path, status_effects: dict) -> dict:
     perks = {}
     perk_dir = generated_root / "Perk" / "Perk"
     for path in perk_dir.glob("*.json"):
@@ -639,7 +677,7 @@ def load_perks(generated_root: Path, status_effects: dict) -> dict:
                 stats.append({**stat, "source": effect_id})
         class_assets = asset_names(props.get("Classes"))
         class_ids = sorted({class_key(class_asset) for class_asset in class_assets})
-        perks[name] = {
+        perk = {
             "id": name,
             "name": localized_text(props.get("Name"), humanize_identifier(name)),
             "classes": class_ids,
@@ -648,10 +686,16 @@ def load_perks(generated_root: Path, status_effects: dict) -> dict:
             "stats": stats,
             "canUse": bool(props.get("CanUse", True)),
         }
+        icon_url = perk_icon_url(generated_root, output_dir, name)
+        if icon_url:
+            perk["iconUrl"] = icon_url
+        if name in CONDITIONAL_STAT_PERK_IDS:
+            perk["conditionalStats"] = True
+        perks[name] = perk
     return perks
 
 
-def load_characters(generated_root: Path, perks: dict, character_effects: dict) -> list[dict]:
+def load_characters(generated_root: Path, output_dir: Path, perks: dict, character_effects: dict) -> list[dict]:
     characters = []
     character_dir = generated_root.parent / "DT_PlayerCharacter" / "PlayerCharacter"
     for path in character_dir.glob("Id_PlayerCharacter_*.json"):
@@ -678,14 +722,18 @@ def load_characters(generated_root: Path, perks: dict, character_effects: dict) 
                 continue
             for stat in character_effects.get(effect_id, {}).get("stats", []):
                 base_stats.append({**stat, "source": effect_id})
-        characters.append({
+        character = {
             "id": key,
             "asset": name,
             "name": localized_text(props.get("Name"), humanize_identifier(name)),
             "perks": sorted(perk_ids, key=lambda perk_id: perks[perk_id]["name"].lower()),
             "effects": effect_ids,
             "baseStats": base_stats,
-        })
+        }
+        icon_url = class_icon_url(generated_root, output_dir, key)
+        if icon_url:
+            character["iconUrl"] = icon_url
+        characters.append(character)
     characters.sort(key=lambda row: row["name"].lower())
     return characters
 
@@ -755,15 +803,15 @@ def load_kit_items(generated_root: Path, public_items: list[dict], property_asse
     return kit_items
 
 
-def build_kit_builder_data(generated_root: Path, public_items: list[dict], item_art: dict) -> dict:
+def build_kit_builder_data(generated_root: Path, output_dir: Path, public_items: list[dict], item_art: dict) -> dict:
     property_types = load_property_types(generated_root)
     property_assets = load_property_assets(generated_root, property_types)
-    requirements = load_requirement_classes(generated_root)
+    requirements = load_requirement_classes(generated_root, output_dir)
     status_effects = load_status_effects(generated_root)
     character_effects = load_character_effects(generated_root)
     curve_tables = load_curve_tables(generated_root)
-    perks = load_perks(generated_root, status_effects)
-    characters = load_characters(generated_root, perks, character_effects)
+    perks = load_perks(generated_root, output_dir, status_effects)
+    characters = load_characters(generated_root, output_dir, perks, character_effects)
     kit_items = load_kit_items(generated_root, public_items, property_assets, requirements, item_art)
     secondary_pool_ids = sorted({pool_id for item in kit_items for pool_id in item["secondaryPoolIds"]})
     secondary_pools = {
@@ -1048,7 +1096,7 @@ def export_website_data(cache_path: Path, output_dir: Path, root: Path, luck: in
     write_json(output_dir / "quests.json", {"dataVersion": DATA_VERSION, "rows": []})
     write_json(output_dir / "maps.json", {"dataVersion": DATA_VERSION, "rows": []})
     if generated_root.exists():
-        kit_builder = build_kit_builder_data(generated_root, items, item_art)
+        kit_builder = build_kit_builder_data(generated_root, output_dir, items, item_art)
     else:
         kit_builder = {
             "dataVersion": DATA_VERSION,

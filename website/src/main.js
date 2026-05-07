@@ -31,6 +31,7 @@
   sourceByKey: new Map(),
   rateWeights: {},
   favorites: { items: [], sources: [] },
+  savedKits: [],
   chipPopover: { target: null, pinned: false },
   activeTab: "items",
   detailCache: new Map(),
@@ -43,9 +44,17 @@
 };
 
 const FAVORITES_KEY = "darkloot:favorites:v1";
+const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
 const BUILDER_PERK_LIMIT = 4;
+const BUILDER_CONDITIONAL_STAT_PERKS = new Set([
+  "Id_Perk_Trickster",
+]);
+const PERK_ICON_ALIASES = {
+  Id_Perk_ComboAttack: "CombinationAttack",
+  Id_Perk_HideMastery: "HideExpert",
+};
 const BUILDER_DEFAULTS = {
   headshotDamageBonus: 150,
   primaryUnarmedDamage: 8,
@@ -271,6 +280,159 @@ function saveFavorites() {
   localStorage.setItem(FAVORITES_KEY, JSON.stringify(state.favorites));
 }
 
+function plainObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value ?? {}));
+}
+
+function savedKitId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `kit-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeSavedKit(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const equipped = {};
+  Object.entries(plainObject(raw.equipped)).forEach(([slotId, asset]) => {
+    if (BUILDER_SLOTS.some((slot) => slot.id === slotId) && typeof asset === "string") {
+      equipped[slotId] = asset;
+    }
+  });
+  return {
+    id: String(raw.id || savedKitId()),
+    name: String(raw.name || "Saved Kit").trim() || "Saved Kit",
+    createdAt: String(raw.createdAt || raw.updatedAt || new Date().toISOString()),
+    updatedAt: String(raw.updatedAt || raw.createdAt || new Date().toISOString()),
+    characterId: String(raw.characterId || ""),
+    selectedSlot: String(raw.selectedSlot || "weapon1Primary"),
+    activeWeaponSet: String(raw.activeWeaponSet || "1"),
+    equipped,
+    primaryValues: cloneJson(raw.primaryValues),
+    bonuses: cloneJson(raw.bonuses),
+    perks: Array.isArray(raw.perks) ? raw.perks.map(String).slice(0, BUILDER_PERK_LIMIT) : [],
+  };
+}
+
+function loadSavedKits() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SAVED_KITS_KEY) || "[]");
+    state.savedKits = Array.isArray(parsed) ? parsed.map(normalizeSavedKit).filter(Boolean) : [];
+  } catch {
+    state.savedKits = [];
+  }
+}
+
+function saveSavedKits() {
+  localStorage.setItem(SAVED_KITS_KEY, JSON.stringify(state.savedKits));
+}
+
+function currentBuilderKit(name, existing = null) {
+  const now = new Date().toISOString();
+  return {
+    id: existing?.id || savedKitId(),
+    name,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    characterId: state.builder.characterId,
+    selectedSlot: state.builder.selectedSlot,
+    activeWeaponSet: state.builder.activeWeaponSet,
+    equipped: cloneJson(state.builder.equipped),
+    primaryValues: cloneJson(state.builder.primaryValues),
+    bonuses: cloneJson(state.builder.bonuses),
+    perks: [...state.builder.perks],
+  };
+}
+
+function defaultSavedKitName() {
+  const character = selectedBuilderCharacter();
+  return `${character?.name || "Kit"} ${state.savedKits.length + 1}`;
+}
+
+function savedPrimaryValuesForItem(item, values) {
+  const defaults = defaultPrimaryValuesForItem(item);
+  if (!Array.isArray(values)) return defaults;
+  return defaults.map((defaultValue, index) => {
+    const entry = item?.primary?.[index];
+    return entry ? clampStatEntryValue(entry, values[index]) : defaultValue;
+  });
+}
+
+function savedBonusesForItem(item, bonuses) {
+  return (item?.secondaryPoolIds || []).map((poolId, index) => {
+    const entry = Array.isArray(bonuses) ? bonuses[index] : null;
+    const pool = state.kit.secondaryPools[poolId];
+    const option = pool?.options?.find((row) => row.propertyId === entry?.propertyId);
+    return {
+      poolId,
+      propertyId: option ? entry.propertyId : "",
+      value: option ? clampStatEntryValue(option, entry.value) : "",
+    };
+  });
+}
+
+function saveCurrentBuilderKit() {
+  const input = $("builderKitName");
+  const name = (input?.value || "").trim() || defaultSavedKitName();
+  const existingIndex = state.savedKits.findIndex((kit) => kit.name.toLowerCase() === name.toLowerCase());
+  const existing = existingIndex >= 0 ? state.savedKits[existingIndex] : null;
+  const kit = currentBuilderKit(name, existing);
+  state.savedKits = existing
+    ? state.savedKits.map((row, index) => (index === existingIndex ? kit : row))
+    : [kit, ...state.savedKits];
+  saveSavedKits();
+  if (input) input.value = name;
+  renderBuilder();
+}
+
+function loadBuilderKit(kitId) {
+  const kit = state.savedKits.find((row) => row.id === kitId);
+  if (!kit) return;
+  state.builder.characterId = state.kit.characterById.has(kit.characterId)
+    ? kit.characterId
+    : state.kit.characters[0]?.id || "";
+  state.builder.activeWeaponSet = kit.activeWeaponSet === "2" ? "2" : "1";
+  state.builder.selectedSlot = BUILDER_SLOTS.some((slot) => slot.id === kit.selectedSlot)
+    ? kit.selectedSlot
+    : "weapon1Primary";
+  state.builder.search = "";
+  state.builder.rarity = "All";
+  state.builder.pickerOpen = false;
+
+  const equipped = {};
+  const primaryValues = {};
+  const bonuses = {};
+  BUILDER_SLOTS.forEach((slot) => {
+    const asset = kit.equipped?.[slot.id];
+    const item = state.kit.itemByAsset.get(asset);
+    if (!item || !slot.accepts.includes(itemSlotId(item)) || !builderClassAllowsItem(item)) return;
+    if (slot.weaponRole === "secondary" && itemIsTwoHanded(state.kit.itemByAsset.get(equipped[pairedWeaponSlotId(slot.id)]))) return;
+    equipped[slot.id] = asset;
+    primaryValues[slot.id] = savedPrimaryValuesForItem(item, kit.primaryValues?.[slot.id]);
+    bonuses[slot.id] = savedBonusesForItem(item, kit.bonuses?.[slot.id]);
+  });
+
+  const character = selectedBuilderCharacter();
+  const allowedPerks = new Set(character?.perks || []);
+  state.builder.equipped = equipped;
+  state.builder.primaryValues = primaryValues;
+  state.builder.bonuses = bonuses;
+  state.builder.perks = (kit.perks || [])
+    .filter((perkId) => allowedPerks.has(perkId) && state.kit.perkById.has(perkId))
+    .slice(0, BUILDER_PERK_LIMIT);
+  const input = $("builderKitName");
+  if (input) input.value = kit.name;
+  renderBuilder();
+}
+
+function deleteSavedKit(kitId) {
+  state.savedKits = state.savedKits.filter((kit) => kit.id !== kitId);
+  saveSavedKits();
+  renderBuilder();
+}
+
 function isFavoriteItem(asset) {
   return state.favorites.items.includes(asset);
 }
@@ -396,6 +558,43 @@ function classNamesText(classes) {
   return values.length ? values.join(", ") : "All classes";
 }
 
+function assetFileToken(value) {
+  return String(value || "")
+    .replace(/^Id_Perk_/, "")
+    .replace(/^Id_PlayerCharacter_/, "")
+    .replace(/^ClassIcon_[SLX]+_/, "")
+    .replace(/[^a-z0-9]/gi, "");
+}
+
+function classIconUrl(row, size = "S") {
+  if (row?.iconUrl) return row.iconUrl;
+  const token = assetFileToken(row?.id || row?.name || "Common");
+  return `/assets/class-icons/ClassIcon_${size}_${token || "Common"}.png`;
+}
+
+function perkIconUrl(perk) {
+  if (perk?.iconUrl) return perk.iconUrl;
+  const token = PERK_ICON_ALIASES[perk?.id] || assetFileToken(perk?.id || perk?.name);
+  return `/assets/perk-icons/Icon_Perk_${token}.png`;
+}
+
+function iconImage(url, className, title) {
+  return `
+    <span class="${escapeHtml(className)}" title="${escapeHtml(title)}" aria-hidden="true">
+      <img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.hidden=true">
+    </span>
+  `;
+}
+
+function builderPerkStatsArePassive(perk) {
+  return perk && !perk.conditionalStats && !BUILDER_CONDITIONAL_STAT_PERKS.has(perk.id);
+}
+
+function builderPerkSummary(perk) {
+  if (!builderPerkStatsArePassive(perk)) return "Conditional bonus";
+  return (perk.stats || []).map((stat) => `${stat.label} ${statValue(stat.value, stat.unit)}`).join(", ") || "No direct stat modifier";
+}
+
 function statLabel(key) {
   return String(key || "")
     .replace(/MagicRegistance/g, "MagicResistance")
@@ -491,6 +690,7 @@ function builderStatMap() {
   (character?.baseStats || []).forEach((entry) => addBuilderStat(totals, entry, character.name));
   state.builder.perks.forEach((perkId) => {
     const perk = state.kit.perkById.get(perkId);
+    if (!builderPerkStatsArePassive(perk)) return;
     (perk?.stats || []).forEach((entry) => addBuilderStat(totals, entry, perk.name));
   });
   Object.entries(state.builder.equipped).forEach(([slotId, asset]) => {
@@ -699,6 +899,7 @@ function formatDate(value) {
 
 async function loadData() {
   loadFavorites();
+  loadSavedKits();
   state.manifest = await fetchJson("/data/manifest.json");
   state.currentLuck = clampLuck(state.manifest.luck ?? 0);
   const [items, sources, rates, kit] = await Promise.all([
@@ -864,20 +1065,38 @@ function itemInitials(row) {
     .toUpperCase() || "?";
 }
 
+function itemThumbStyle(row) {
+  const art = itemArt(row);
+  const width = Math.max(1, Number(row?.inventory?.width || 1));
+  const height = Math.max(1, Number(row?.inventory?.height || 1));
+  const iconWidth = Math.max(1, Number(art?.iconSize?.width || width));
+  const iconHeight = Math.max(1, Number(art?.iconSize?.height || height));
+  return [
+    `--item-inventory-width:${width}`,
+    `--item-inventory-height:${height}`,
+    `--item-icon-aspect:${(iconWidth / iconHeight).toFixed(4)}`,
+  ].join(";");
+}
+
 function itemThumbnail(row, variant = "") {
   const art = itemArt(row);
   const iconUrl = row?.iconUrl || art?.iconUrl || "";
   const name = itemDisplayName(row);
+  const variantClasses = String(variant || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((value) => `item-thumb-${value}`);
   const classes = [
     "item-thumb",
-    variant ? `item-thumb-${variant}` : "",
+    ...variantClasses,
     row?.rarity ? `item-thumb-${chipClass(row.rarity)}` : "",
     iconUrl ? "has-image" : "placeholder",
   ].filter(Boolean).join(" ");
+  const style = itemThumbStyle(row);
   if (iconUrl) {
-    return `<span class="${classes}" title="${escapeHtml(name)}"><img src="${escapeHtml(iconUrl)}" alt=""></span>`;
+    return `<span class="${classes}" style="${escapeHtml(style)}" title="${escapeHtml(name)}"><img src="${escapeHtml(iconUrl)}" alt=""></span>`;
   }
-  return `<span class="${classes}" title="${escapeHtml(art?.iconAsset || art?.artAsset || name)}"><span>${escapeHtml(itemInitials(row))}</span></span>`;
+  return `<span class="${classes}" style="${escapeHtml(style)}" title="${escapeHtml(art?.iconAsset || art?.artAsset || name)}"><span>${escapeHtml(itemInitials(row))}</span></span>`;
 }
 
 function itemNameCell(row) {
@@ -1416,20 +1635,68 @@ function renderBuilderPerks() {
     ? perks.map((perk) => {
       const active = state.builder.perks.includes(perk.id);
       const disabled = !active && state.builder.perks.length >= BUILDER_PERK_LIMIT;
-      const stats = (perk.stats || []).map((stat) => `${stat.label} ${statValue(stat.value, stat.unit)}`).join(", ");
+      const conditional = !builderPerkStatsArePassive(perk);
       return `
         <button
           type="button"
-          class="builder-perk ${active ? "active" : ""}"
+          class="builder-perk ${active ? "active" : ""} ${conditional ? "conditional" : ""}"
           data-builder-perk="${escapeHtml(perk.id)}"
           aria-pressed="${active ? "true" : "false"}"
           ${disabled ? "disabled" : ""}>
-          <span>${escapeHtml(perk.name)}</span>
-          <small>${escapeHtml(stats || "No direct stat modifier")}</small>
+          <span class="builder-perk-title">
+            ${iconImage(perkIconUrl(perk), "builder-perk-icon", perk.name)}
+            <span>${escapeHtml(perk.name)}</span>
+          </span>
+          <small>${escapeHtml(builderPerkSummary(perk))}</small>
         </button>
       `;
     }).join("")
     : `<div class="builder-empty">No perks found for this character.</div>`;
+}
+
+function renderBuilderCharacter() {
+  const target = $("builderCharacterCurrent");
+  if (!target) return;
+  const character = selectedBuilderCharacter();
+  target.innerHTML = character
+    ? `
+      ${iconImage(classIconUrl(character), "builder-class-icon", character.name)}
+      <div>
+        <strong>${escapeHtml(character.name)}</strong>
+        <span>${escapeHtml((character.perks || []).length.toLocaleString())} perks</span>
+      </div>
+    `
+    : "";
+}
+
+function savedKitEquippedCount(kit) {
+  return Object.values(kit.equipped || {}).filter(Boolean).length;
+}
+
+function savedKitCharacterName(kit) {
+  return state.kit.characterById.get(kit.characterId)?.name || kit.characterId || "Unknown";
+}
+
+function renderBuilderSavedKits() {
+  if (!$("builderSavedKits")) return;
+  $("builderSavedKitCount").textContent = state.savedKits.length.toLocaleString();
+  $("builderSavedKits").innerHTML = state.savedKits.length
+    ? state.savedKits.map((kit) => `
+      <article class="builder-saved-kit">
+        <div class="builder-saved-kit-main">
+          ${iconImage(classIconUrl({ id: kit.characterId, name: savedKitCharacterName(kit) }), "builder-class-icon small", savedKitCharacterName(kit))}
+          <div>
+            <h4>${escapeHtml(kit.name)}</h4>
+            <p>${escapeHtml(savedKitCharacterName(kit))} | ${savedKitEquippedCount(kit)} items | ${escapeHtml(formatDate(kit.updatedAt))}</p>
+          </div>
+        </div>
+        <div class="builder-saved-kit-actions">
+          <button type="button" data-load-builder-kit="${escapeHtml(kit.id)}">Load</button>
+          <button type="button" class="danger" data-delete-builder-kit="${escapeHtml(kit.id)}">Delete</button>
+        </div>
+      </article>
+    `).join("")
+    : `<div class="builder-empty">No saved kits yet.</div>`;
 }
 
 function slotSecondarySummary(slotId, item) {
@@ -1451,7 +1718,7 @@ function renderBuilderEquipment() {
     }).join(", ");
     const secondary = slotSecondarySummary(slot.id, item);
     const art = item
-      ? itemThumbnail(item, "equipment")
+      ? itemThumbnail(item, slot.kind === "weapon" ? "equipment weapon-equipment" : "equipment")
       : `<span class="equipment-ghost equipment-ghost-${escapeHtml(slot.id)}" aria-hidden="true"></span>`;
     return `
       <button
@@ -1648,12 +1915,14 @@ function renderBuilder() {
   $("builderCharacterPanel").classList.toggle("collapsed", state.builder.characterCollapsed);
   $("builderCharacterToggle").setAttribute("aria-expanded", state.builder.characterCollapsed ? "false" : "true");
   renderBuilderSummary();
+  renderBuilderCharacter();
   renderBuilderPerks();
   renderBuilderEquipment();
   renderBuilderPicker();
   renderBuilderBonusPanel();
   renderBuilderItems();
   renderBuilderStats();
+  renderBuilderSavedKits();
 }
 
 function render() {
@@ -2068,6 +2337,14 @@ function wireEvents() {
         toggleBuilderPerk(button.dataset.builderPerk);
         return;
       }
+      if (button.dataset.loadBuilderKit) {
+        loadBuilderKit(button.dataset.loadBuilderKit);
+        return;
+      }
+      if (button.dataset.deleteBuilderKit) {
+        deleteSavedKit(button.dataset.deleteBuilderKit);
+        return;
+      }
       if (button.dataset.favType === "item") {
         toggleFavoriteItem(button.dataset.favKey);
         return;
@@ -2184,6 +2461,12 @@ function wireEvents() {
   });
   $("clearBuilder").addEventListener("click", clearBuilder);
   $("closeBuilderPicker").addEventListener("click", closeBuilderPicker);
+  $("saveBuilderKit").addEventListener("click", saveCurrentBuilderKit);
+  $("builderKitName").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    saveCurrentBuilderKit();
+  });
   $("builderCharacterToggle").addEventListener("click", () => {
     state.builder.characterCollapsed = !state.builder.characterCollapsed;
     renderBuilder();

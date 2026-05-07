@@ -1,0 +1,24 @@
+{
+  "id": 502,
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [
+      {
+        "text": "{\"name\":\"projects/15785509076495052768/screens/856e78493de64ef1be6507f7d4405856\",\"title\":\"Modern Loot Sources - Bestiary & Map\",\"screenshot\":{\"name\":\"projects/15785509076495052768/files/f79553bef11d4db8a78b65cb3f0c5be4\",\"downloadUrl\":\"https://lh3.googleusercontent.com/aida/ADBb0uiZ2j6Dq44gljal-9UrdAE9RDVOAZNl6bycOVB_YGGK9YAuLKHPjaL8fSOlVIX3DfsCkkqAo_M2K6UTGj_JZqATk6v51ql5xvc8V5wuY2WTxNmvhxgKgZMoDXfvRSQ8rP4SmXVEuGu4UcfMqxNCae-69uz74306DlFFr0oy40q17LrcBJVHUrm_uhcMWEczit6UUQaY5Vgbr9Kt6naiGc4HQqZvv2d0h3eCkWcT9w1YrCYzJUy6v5vEUFg4\"},\"htmlCode\":{},\"width\":\"1376\",\"height\":\"768\",\"deviceType\":\"DESKTOP\"}",
+        "type": "text"
+      }
+    ],
+    "structuredContent": {
+      "deviceType": "DESKTOP",
+      "height": "768",
+      "htmlCode": {},
+      "name": "projects/15785509076495052768/screens/856e78493de64ef1be6507f7d4405856",
+      "screenshot": {
+        "downloadUrl": "https://lh3.googleusercontent.com/aida/ADBb0uiZ2j6Dq44gljal-9UrdAE9RDVOAZNl6bycOVB_YGGK9YAuLKHPjaL8fSOlVIX3DfsCkkqAo_M2K6UTGj_JZqATk6v51ql5xvc8V5wuY2WTxNmvhxgKgZMoDXfvRSQ8rP4SmXVEuGu4UcfMqxNCae-69uz74306DlFFr0oy40q17LrcBJVHUrm_uhcMWEczit6UUQaY5Vgbr9Kt6naiGc4HQqZvv2d0h3eCkWcT9w1YrCYzJUy6v5vEUFg4",
+        "name": "projects/15785509076495052768/files/f79553bef11d4db8a78b65cb3f0c5be4"
+      },
+      "title": "Modern Loot Sources - Bestiary & Map",
+      "width": "1376"
+    }
+  }
+}
