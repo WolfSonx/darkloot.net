@@ -72,9 +72,16 @@ MODULE_MAP_NAMES = {
 }
 MODULE_D_FILE_MAPS = {"firedeep", "shipgraveyard"}
 SOURCE_MAP_EXCLUSIONS: dict[tuple[str, str], set[str]] = {}
+# Manual source map overrides keep generated dungeon rows aligned with current spawn rules.
 SOURCE_MAP_INCLUSIONS = {
     ("Boss", "Demon Overseer"): {"Inferno"},
+    ("Boss", "Ghost King"): {"Crypts"},
+    ("Boss", "Lich"): {"Crypts"},
+    ("Boss", "Skeleton Warlord"): {"Crypts"},
     ("Monster", "Demon Overseer"): {"Inferno"},
+    ("Monster", "Ghost King"): {"Crypts"},
+    ("Monster", "Lich"): {"Crypts"},
+    ("Monster", "Skeleton Warlord"): {"Crypts"},
 }
 
 
@@ -598,10 +605,9 @@ class WebIndex:
         excluded_maps = source_map_exclusions(row["source"], row["source_kind"])
         included_maps = source_map_inclusions(row["source"], row["source_kind"])
         row_maps = set(row["maps"]) - excluded_maps
-        source_maps = self.source_location_maps(row) - excluded_maps
         if included_maps:
-            row_maps &= included_maps
-            source_maps &= included_maps
+            return row_maps & included_maps
+        source_maps = self.source_location_maps(row) - excluded_maps
         if source_maps:
             return row_maps & source_maps
         return row_maps
@@ -630,6 +636,13 @@ class WebIndex:
         for source in sources:
             for key in self.source_keys_for_query(source, kind):
                 for location in self.source_spawn_locations.get(key, ()):
+                    location_map = str(location.get("map") or "")
+                    excluded_maps = source_map_exclusions(key[0], key[1])
+                    included_maps = source_map_inclusions(key[0], key[1])
+                    if location_map in excluded_maps:
+                        continue
+                    if included_maps and location_map not in included_maps:
+                        continue
                     location_key = str(location.get("key") or "")
                     dedupe_key = location_key or "|".join(
                         str(location.get(field) or "")
