@@ -250,7 +250,7 @@ SPECIAL_WORDS = {
 }
 
 NORMAL_HOARD_SOURCE = "Normal Hoard"
-SUPER_HOARD_SOURCE = "Hoard After Key or Boss"
+SUPER_HOARD_SOURCE = "Hoard After Key"
 
 
 @dataclass(frozen=True)
