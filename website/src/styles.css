@@ -1,19 +1,46 @@
+:root {
+  color-scheme: dark;
+  --bg: #090d12;
+  --panel: #121922;
+  --panel-2: #1a2430;
+  --panel-3: #243242;
+  --surface: rgba(18, 25, 34, .86);
+  --surface-strong: rgba(28, 39, 52, .94);
+  --line: #34465a;
+  --line-soft: #223040;
+  --text: #f3f6f8;
+  --muted: #b5c0cc;
+  --faint: #7c8996;
+  --accent: #4bd6bc;
+  --accent-2: #f2bd55;
+  --green: var(--accent);
+  --gold: var(--accent-2);
+  --red: #f27f74;
+  --blue: #6ab7ff;
+  --violet: #c18cff;
+  --rose: #f47c9d;
+  --ember: #ff915f;
+  --lime: #a9db65;
+  --input: #0d141d;
+  --shadow: 0 18px 55px rgba(0, 0, 0, .26);
+  --shadow-soft: 0 10px 28px rgba(0, 0, 0, .18);
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
-  margin: var(--space-0);
+  margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 4% 22%, rgba(255, 145, 95, .18), transparent 17%),
-    radial-gradient(circle at 96% 18%, rgba(242, 189, 85, .12), transparent 20%),
+    linear-gradient(132deg, rgba(75, 214, 188, .085) 0 21%, transparent 21% 100%),
+    linear-gradient(230deg, rgba(242, 189, 85, .08) 0 17%, transparent 17% 100%),
     repeating-linear-gradient(90deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 96px),
-    linear-gradient(180deg, var(--color-stone-800) 0, var(--bg) 320px, var(--color-stone-900) 100%);
+    linear-gradient(180deg, #121925 0, var(--bg) 320px, #090b0f 100%);
   color: var(--text);
-  font-family: var(--font-body);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-body);
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 14px;
 }
 
 body::before {
@@ -25,8 +52,8 @@ body::before {
 }
 
 ::selection {
-  background: rgba(242, 189, 85, .34);
-  color: var(--color-parchment-50);
+  background: rgba(75, 214, 188, .28);
+  color: #fff;
 }
 
 button,
@@ -37,20 +64,20 @@ select {
 }
 
 button {
-  min-height: var(--space-19);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, var(--color-wood-700), var(--color-stone-700));
+  min-height: 32px;
+  border: 1px solid rgba(98, 124, 151, .54);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #263342, #192331);
   color: var(--text);
-  padding: var(--space-0) var(--space-10);
+  padding: 0 11px;
   cursor: pointer;
-  box-shadow: var(--shadow-inset), 0 6px 16px rgba(0, 0, 0, .18);
-  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease, color var(--duration-fast) ease, transform var(--duration-fast) ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 6px 16px rgba(0, 0, 0, .12);
+  transition: background .12s ease, border-color .12s ease, color .12s ease, transform .12s ease;
 }
 
 button:hover {
-  border-color: var(--gold);
-  background: linear-gradient(180deg, var(--color-gold-700), var(--color-wood-800));
+  border-color: var(--green);
+  background: linear-gradient(180deg, #2c3b4d, #1d2a39);
   transform: translateY(-1px);
 }
 
@@ -63,19 +90,19 @@ input,
 select {
   width: 100%;
   min-height: 34px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border: 1px solid rgba(83, 105, 128, .72);
+  border-radius: 6px;
   background: linear-gradient(180deg, #101925, var(--input));
   color: var(--text);
-  padding: var(--space-0) var(--space-9);
+  padding: 0 10px;
   outline: none;
-  box-shadow: var(--shadow-inset);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
 }
 
 input:focus,
 select:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 2px rgba(242, 189, 85, .20), var(--shadow-inset);
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(75, 214, 188, .18), inset 0 1px 0 rgba(255, 255, 255, .04);
 }
 
 select option,
@@ -91,18 +118,18 @@ select option:checked {
 
 .app-header {
   position: sticky;
-  top: var(--space-0);
-  z-index: var(--z-sticky);
+  top: 0;
+  z-index: 3;
   display: grid;
   grid-template-columns: minmax(210px, 1fr) auto minmax(280px, 1fr);
   align-items: center;
-  gap: var(--space-13);
-  padding: var(--space-11) var(--space-15) var(--space-10);
-  border-bottom: 1px solid var(--line);
-  border-top: var(--space-0);
+  gap: 16px;
+  padding: 12px 20px 11px;
+  border-bottom: 1px solid rgba(74, 95, 118, .82);
+  border-top: 0;
   background:
-    linear-gradient(90deg, rgba(255, 145, 95, .12), transparent 36%, rgba(242, 189, 85, .12)),
-    linear-gradient(180deg, rgba(25, 22, 16, .97), rgba(10, 10, 8, .97));
+    linear-gradient(90deg, rgba(75, 214, 188, .13), transparent 36%, rgba(242, 189, 85, .10)),
+    linear-gradient(180deg, rgba(24, 34, 45, .96), rgba(15, 21, 29, .96));
   box-shadow: 0 14px 44px rgba(0, 0, 0, .26);
   backdrop-filter: blur(14px);
 }
@@ -112,15 +139,15 @@ select option:checked {
   position: absolute;
   inset: 0 0 auto;
   height: 3px;
-  background: linear-gradient(90deg, var(--ember), var(--gold) 48%, var(--color-parchment-300));
+  background: linear-gradient(90deg, var(--accent), var(--gold) 48%, var(--violet));
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: var(--space-11);
+  gap: 12px;
   justify-self: start;
-  min-width: var(--space-0);
+  min-width: 0;
 }
 
 .brand-mark {
@@ -128,13 +155,13 @@ select option:checked {
   place-items: center;
   width: 42px;
   height: 42px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
+  border: 1px solid rgba(242, 189, 85, .72);
+  border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(242, 189, 85, .25), rgba(255, 145, 95, .12)),
-    var(--panel);
+    linear-gradient(135deg, rgba(242, 189, 85, .22), rgba(75, 214, 188, .11)),
+    #121922;
   overflow: hidden;
-  box-shadow: var(--shadow-inset), 0 9px 22px rgba(0, 0, 0, .22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 9px 22px rgba(0, 0, 0, .22);
 }
 
 .brand-mark img {
@@ -152,10 +179,9 @@ p {
 }
 
 h1 {
-  font-family: var(--font-heading);
-  font-size: var(--font-size-2xl);
+  font-size: 23px;
   letter-spacing: 0;
-  line-height: var(--line-height-tight);
+  line-height: 1;
 }
 
 .brand p,
