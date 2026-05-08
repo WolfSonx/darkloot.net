@@ -879,6 +879,17 @@ th.num .sort-button {
   line-height: 1;
 }
 
+#itemRows .item-name-cell {
+  grid-template-columns: 58px minmax(0, 1fr);
+  min-height: 60px;
+}
+
+#itemRows .item-thumb {
+  justify-self: center;
+  width: var(--item-list-thumb-width, 34px);
+  height: var(--item-list-thumb-height, 34px);
+}
+
 .item-thumb img {
   display: block;
   width: 100%;

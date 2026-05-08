@@ -1138,10 +1138,15 @@ function itemThumbStyle(row) {
   const height = Math.max(1, Number(row?.inventory?.height || 1));
   const iconWidth = Math.max(1, Number(art?.iconSize?.width || width));
   const iconHeight = Math.max(1, Number(art?.iconSize?.height || height));
+  const listScale = Math.min(52 / iconWidth, 58 / iconHeight);
+  const listWidth = Math.max(16, Math.min(52, iconWidth * listScale));
+  const listHeight = Math.max(34, Math.min(58, iconHeight * listScale));
   return [
     `--item-inventory-width:${width}`,
     `--item-inventory-height:${height}`,
     `--item-icon-aspect:${(iconWidth / iconHeight).toFixed(4)}`,
+    `--item-list-thumb-width:${listWidth.toFixed(1)}px`,
+    `--item-list-thumb-height:${listHeight.toFixed(1)}px`,
   ].join(";");
 }
 
