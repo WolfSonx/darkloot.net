@@ -21,6 +21,7 @@
     rarity: "All",
     slotFilter: "Selected",
     pickerOpen: false,
+    pickerMode: "items",
     characterCollapsed: false,
     equipped: {},
     primaryValues: {},
@@ -134,6 +135,9 @@ const BUILDER_STAT_ROWS = [
   { key: "SecondaryWeaponImpactPower", label: "Secondary Weapon Impact Power", sourceKey: "ImpactPower", slot: "activeSecondaryWeapon" },
 ];
 const BUILDER_STAT_ORDER = BUILDER_STAT_ROWS.map((row) => row.key);
+const STAT_CONTRIBUTION_KEYS = {
+  PhysicalWeaponDamage: ["PhysicalWeaponDamage", "AdditionalWeaponDamage", "PhysicalDamageBase"],
+};
 const DEFAULT_SORT_DIRECTION = {
   sources: "desc",
   items: "desc",
@@ -363,8 +367,7 @@ function savedPrimaryValuesForItem(item, values) {
 function savedBonusesForItem(item, bonuses) {
   return (item?.secondaryPoolIds || []).map((poolId, index) => {
     const entry = Array.isArray(bonuses) ? bonuses[index] : null;
-    const pool = state.kit.secondaryPools[poolId];
-    const option = pool?.options?.find((row) => row.propertyId === entry?.propertyId);
+    const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === entry?.propertyId);
     return {
       poolId,
       propertyId: option ? entry.propertyId : "",
@@ -400,6 +403,7 @@ function loadBuilderKit(kitId) {
   state.builder.search = "";
   state.builder.rarity = "All";
   state.builder.pickerOpen = false;
+  state.builder.pickerMode = "items";
 
   const equipped = {};
   const primaryValues = {};
@@ -650,6 +654,20 @@ function selectedPrimaryEntry(slotId, index) {
   return { ...entry, value };
 }
 
+function statIdentity(entry) {
+  return entry?.statKey || entry?.rawKey || entry?.propertyId || "";
+}
+
+function primaryStatIdentitiesForItem(item) {
+  return new Set((item?.primary || []).map(statIdentity).filter(Boolean));
+}
+
+function secondaryOptionsForItem(item, poolId) {
+  const pool = state.kit.secondaryPools[poolId];
+  const primaryStats = primaryStatIdentitiesForItem(item);
+  return (pool?.options || []).filter((option) => !primaryStats.has(statIdentity(option)));
+}
+
 function addBuilderStat(totals, entry, source) {
   const value = Number(entry?.value ?? entry?.max ?? entry?.min ?? 0);
   if (!Number.isFinite(value) || value === 0) return;
@@ -674,8 +692,9 @@ function addItemStats(totals, slotId, item) {
 function selectedBonusEntry(slotId, index) {
   const entry = state.builder.bonuses[slotId]?.[index];
   if (!entry?.propertyId) return null;
-  const pool = state.kit.secondaryPools[entry.poolId];
-  const option = pool?.options?.find((row) => row.propertyId === entry.propertyId);
+  const item = equippedBuilderItem(slotId);
+  const poolId = entry.poolId || item?.secondaryPoolIds?.[index];
+  const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === entry.propertyId);
   if (!option) return null;
   const value = Number(entry.value);
   return {
@@ -707,7 +726,14 @@ function itemStatTotal(slotId, statKey) {
   if (!item || !statKey) return { value: defaultSlotStatValue(resolvedSlotId, statKey), unit: "" };
   const totals = new Map();
   addItemStats(totals, resolvedSlotId, item);
-  return totals.get(statKey) || { value: 0, unit: "" };
+  const keys = STAT_CONTRIBUTION_KEYS[statKey] || [statKey];
+  const matching = keys.map((key) => totals.get(key)).filter(Boolean);
+  if (!matching.length) return { value: 0, unit: "" };
+  return {
+    ...matching[0],
+    key: statKey,
+    value: directStatValue(totals, ...keys),
+  };
 }
 
 function defaultSlotStatValue(slotId, statKey) {
@@ -1755,9 +1781,8 @@ function renderBuilderEquipment() {
 }
 
 function bonusSelect(slotId, item, poolId, index) {
-  const pool = state.kit.secondaryPools[poolId];
   const selectedEntry = state.builder.bonuses[slotId]?.[index] || {};
-  const options = pool?.options || [];
+  const options = secondaryOptionsForItem(item, poolId);
   const selectedOption = options.find((option) => option.propertyId === selectedEntry.propertyId);
   const value = Number.isFinite(Number(selectedEntry.value))
     ? Number(selectedEntry.value)
@@ -1766,7 +1791,7 @@ function bonusSelect(slotId, item, poolId, index) {
     <div class="builder-bonus-row">
       <label>Bonus ${index + 1}
         <select data-builder-bonus-select="${escapeHtml(slotId)}" data-bonus-index="${index}">
-          <option value="">None</option>
+          <option value="" ${selectedOption ? "" : "selected"}>None</option>
           ${options.map((option) => `
             <option value="${escapeHtml(option.propertyId)}" ${option.propertyId === selectedEntry.propertyId ? "selected" : ""}>
               ${escapeHtml(option.label)} (${escapeHtml(statRange(option))})
@@ -1835,7 +1860,10 @@ function renderBuilderBonusPanel() {
         <h3>${escapeHtml(item.name)}</h3>
         <p>${rarity(item.rarity)} ${escapeHtml(item.slot?.label || "")} | ${escapeHtml(classNamesText(item.allowedClasses))}</p>
       </div>
-      <button type="button" data-unequip-slot="${escapeHtml(slotId)}">Remove</button>
+      <div class="builder-bonus-actions">
+        <button type="button" data-change-builder-item="${escapeHtml(slotId)}">Change Item</button>
+        <button type="button" data-unequip-slot="${escapeHtml(slotId)}">Remove</button>
+      </div>
     </div>
     <div class="builder-primary-list">${primary || `<span><b>Primary</b>None</span>`}</div>
     <div class="builder-secondary-list">${secondary || `<div class="builder-empty">No secondary bonus slots.</div>`}</div>
@@ -1846,9 +1874,16 @@ function renderBuilderPicker() {
   const picker = $("builderPicker");
   const slot = builderSlotById(state.builder.selectedSlot);
   const blockReason = weaponSlotBlockReason(slot.id);
+  const item = equippedBuilderItem(slot.id);
+  const mode = state.builder.pickerMode === "stats" && item ? "stats" : "items";
+  state.builder.pickerMode = mode;
   picker.hidden = !state.builder.pickerOpen;
-  $("builderPickerTitle").textContent = slot ? `Pick ${slot.label}` : "Pick Item";
-  $("builderPickerMeta").textContent = blockReason || (slot ? slot.accepts.join(" / ") : "");
+  picker.classList.toggle("builder-picker-items", mode === "items");
+  picker.classList.toggle("builder-picker-stats", mode === "stats");
+  $("builderPickerTitle").textContent = mode === "stats" ? "Secondary Stats" : `Pick ${slot.label}`;
+  $("builderPickerMeta").textContent = mode === "stats"
+    ? `${item.name} | ${slot.label}`
+    : blockReason || slot.accepts.join(" / ");
 }
 
 function renderBuilderItems() {
@@ -2152,6 +2187,8 @@ function equipBuilderItem(asset) {
   state.builder.equipped = equipped;
   state.builder.primaryValues = primaryValues;
   state.builder.bonuses = bonuses;
+  state.builder.pickerOpen = true;
+  state.builder.pickerMode = "stats";
   renderBuilder();
 }
 
@@ -2162,6 +2199,7 @@ function unequipBuilderSlot(slotId) {
   state.builder.equipped = equipped;
   state.builder.primaryValues = primaryValues;
   state.builder.bonuses = bonuses;
+  if (state.builder.selectedSlot === slotId) state.builder.pickerMode = "items";
   renderBuilder();
 }
 
@@ -2171,6 +2209,7 @@ function clearBuilder() {
   state.builder.bonuses = {};
   state.builder.perks = [];
   state.builder.pickerOpen = false;
+  state.builder.pickerMode = "items";
   renderBuilder();
 }
 
@@ -2195,11 +2234,10 @@ function setBuilderBonusProperty(slotId, index, propertyId) {
   const bonuses = state.builder.bonuses[slotId] || defaultBonusesForItem(item);
   const entry = bonuses[index];
   const poolId = entry?.poolId || item.secondaryPoolIds[index];
-  const pool = state.kit.secondaryPools[poolId];
-  const option = pool?.options?.find((row) => row.propertyId === propertyId);
+  const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === propertyId);
   bonuses[index] = {
     poolId,
-    propertyId,
+    propertyId: option ? option.propertyId : "",
     value: option ? option.max : "",
   };
   state.builder.bonuses = { ...state.builder.bonuses, [slotId]: bonuses };
@@ -2209,8 +2247,9 @@ function setBuilderBonusProperty(slotId, index, propertyId) {
 function setBuilderBonusValue(slotId, index, value) {
   const bonuses = state.builder.bonuses[slotId];
   if (!bonuses?.[index]) return;
-  const pool = state.kit.secondaryPools[bonuses[index].poolId];
-  const option = pool?.options?.find((row) => row.propertyId === bonuses[index].propertyId);
+  const item = equippedBuilderItem(slotId);
+  const poolId = bonuses[index].poolId || item?.secondaryPoolIds?.[index];
+  const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === bonuses[index].propertyId);
   const parsed = Number(value);
   const nextValue = option && Number.isFinite(parsed)
     ? Math.max(Number(option.min), Math.min(Number(option.max), parsed))
@@ -2322,11 +2361,19 @@ function wireEvents() {
       if (button.dataset.builderSlot) {
         setSelectedBuilderSlot(button.dataset.builderSlot);
         state.builder.pickerOpen = true;
+        state.builder.pickerMode = equippedBuilderItem(state.builder.selectedSlot) ? "stats" : "items";
         renderBuilder();
         return;
       }
       if (button.dataset.equipItem) {
         equipBuilderItem(button.dataset.equipItem);
+        return;
+      }
+      if (button.dataset.changeBuilderItem) {
+        setSelectedBuilderSlot(button.dataset.changeBuilderItem);
+        state.builder.pickerOpen = true;
+        state.builder.pickerMode = "items";
+        renderBuilder();
         return;
       }
       if (button.dataset.unequipSlot) {

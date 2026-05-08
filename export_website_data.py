@@ -105,6 +105,9 @@ PERCENT_STAT_KEYS = {
     "UndeadDamageReduction",
 }
 ITEM_PROPERTY_EXCLUDED_STAT_KEYS = {"Primitive"}
+ITEM_PROPERTY_STAT_KEY_OVERRIDES = {
+    "Id_ItemPropertyType_Effect_PhysicalWeaponDamageAdd": "AdditionalWeaponDamage",
+}
 STAT_EXPORT_SUFFIXES = (
     "Base",
     "Add",
@@ -413,6 +416,59 @@ def tag_leaf(value: object) -> str:
     return text
 
 
+def tag_text(value: object) -> str:
+    if isinstance(value, dict):
+        value = value.get("TagName") or value.get("Name") or value.get("AssetPathName") or value.get("ObjectName")
+    return str(value or "")
+
+
+def localization_key_for_tag(value: object) -> str:
+    text = tag_text(value)
+    if not text:
+        return ""
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_")
+    return f"Text_Code_DCDataBlueprintLibrary_{slug}" if slug else ""
+
+
+def find_content_root(path: Path) -> Path | None:
+    for candidate in (path, *path.parents):
+        if candidate.name == "Content":
+            return candidate
+        if (candidate / "Localization").exists():
+            return candidate
+    return None
+
+
+def load_game_localization(generated_root: Path) -> dict[str, str]:
+    content_root = find_content_root(generated_root)
+    if not content_root:
+        return {}
+    localization_root = content_root / "Localization" / "Game" / "en"
+    candidates = [localization_root / "Game.json", *localization_root.glob("*.json")]
+    strings: dict[str, str] = {}
+    for path in candidates:
+        if not path.exists():
+            continue
+        data = read_asset(path)
+        if not isinstance(data, dict):
+            continue
+        for namespace in data.values():
+            if not isinstance(namespace, dict):
+                continue
+            for key, value in namespace.items():
+                if isinstance(key, str) and isinstance(value, str) and value.strip():
+                    strings.setdefault(key, value.strip())
+    return strings
+
+
+def localized_tag_label(localization: dict[str, str], *tags: object, fallback: str) -> str:
+    for tag in tags:
+        key = localization_key_for_tag(tag)
+        if key and localization.get(key):
+            return localization[key]
+    return fallback
+
+
 def normalize_rarity(value: object) -> str:
     leaf = tag_leaf(value)
     return RARITY_ALIASES.get(leaf, leaf)
@@ -521,7 +577,8 @@ def load_effect_assets(paths: list[Path]) -> dict:
     return effects
 
 
-def load_property_types(generated_root: Path) -> dict:
+def load_property_types(generated_root: Path, localization: dict[str, str] | None = None) -> dict:
+    localization = localization or {}
     property_types = {}
     type_dir = generated_root / "ItemProperty" / "ItemPropertyType"
     for path in type_dir.glob("*.json"):
@@ -530,16 +587,19 @@ def load_property_types(generated_root: Path) -> dict:
             continue
         name = asset.get("Name") or path.stem
         props = asset.get("Properties") or {}
-        property_type = tag_leaf(props.get("PropertyType")) or humanize_identifier(name)
-        effect_type = tag_leaf(props.get("EffectType"))
-        stat_key = normalize_stat_key(effect_type or property_type or name)
+        property_type_tag = tag_text(props.get("PropertyType"))
+        effect_type_tag = tag_text(props.get("EffectType"))
+        property_type = tag_leaf(property_type_tag) or humanize_identifier(name)
+        effect_type = tag_leaf(effect_type_tag)
+        stat_key = ITEM_PROPERTY_STAT_KEY_OVERRIDES.get(name) or normalize_stat_key(effect_type or property_type or name)
+        property_label = localized_tag_label(localization, property_type_tag, fallback=humanize_identifier(property_type))
         value_ratio = props.get("ValueRatio")
         property_types[name] = {
             "id": name,
             "statKey": stat_key,
             "rawKey": effect_type or property_type,
-            "label": humanize_identifier(stat_key),
-            "propertyLabel": humanize_identifier(property_type),
+            "label": localized_tag_label(localization, property_type_tag, effect_type_tag, fallback=humanize_identifier(stat_key)),
+            "propertyLabel": property_label,
             "valueRatio": value_ratio if isinstance(value_ratio, (int, float)) else None,
         }
     return property_types
@@ -804,7 +864,8 @@ def load_kit_items(generated_root: Path, public_items: list[dict], property_asse
 
 
 def build_kit_builder_data(generated_root: Path, output_dir: Path, public_items: list[dict], item_art: dict) -> dict:
-    property_types = load_property_types(generated_root)
+    localization = load_game_localization(generated_root)
+    property_types = load_property_types(generated_root, localization)
     property_assets = load_property_assets(generated_root, property_types)
     requirements = load_requirement_classes(generated_root, output_dir)
     status_effects = load_status_effects(generated_root)
@@ -834,6 +895,7 @@ def build_kit_builder_data(generated_root: Path, output_dir: Path, public_items:
             "statusEffectStats": "Direct numeric status-effect fields are exported for perks when present.",
             "baseCharacterStats": "Class base stats are loaded from V2/PlayerCharacter/PlayerCharacterEffect, with DT_PlayerCharacter as a fallback.",
             "derivedStatCurves": "Curve tables are loaded from Data/GameplayAbility/CT_*.json when exported.",
+            "localizedStatLabels": f"Loaded {len(localization):,} English game localization strings for item property labels.",
         },
     }
 

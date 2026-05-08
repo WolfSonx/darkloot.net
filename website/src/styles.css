@@ -1574,6 +1574,13 @@ th.num .sort-button {
   font-size: 12px;
 }
 
+.builder-bonus-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .builder-primary-list {
   display: flex;
   flex-wrap: wrap;
@@ -1675,6 +1682,18 @@ th.num .sort-button {
 
 .builder-picker[hidden] {
   display: none;
+}
+
+.builder-picker-items .builder-bonus-panel,
+.builder-picker-stats .builder-browser-filters,
+.builder-picker-stats .builder-item-list {
+  display: none;
+}
+
+.builder-picker-stats .builder-bonus-panel {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
 }
 
 .builder-picker-head {
