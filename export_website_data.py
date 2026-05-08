@@ -1126,8 +1126,6 @@ def build_indexes(output_dir: Path, state: AppState) -> tuple[list[dict], list[d
             "items": "/data/items-index.json",
             "sources": "/data/sources-index.json",
             "rates": "/data/rates.json",
-            "quests": "/data/quests.json",
-            "maps": "/data/maps.json",
             "kit": "/data/kit-builder.json",
         },
         "stats": stats,
@@ -1155,8 +1153,6 @@ def export_website_data(cache_path: Path, output_dir: Path, root: Path, luck: in
     write_json(output_dir / "items-index.json", {"dataVersion": DATA_VERSION, "rows": items})
     write_json(output_dir / "sources-index.json", {"dataVersion": DATA_VERSION, "rows": sources})
     write_json(output_dir / "rates.json", {"dataVersion": DATA_VERSION, "rows": result.rate_weights})
-    write_json(output_dir / "quests.json", {"dataVersion": DATA_VERSION, "rows": []})
-    write_json(output_dir / "maps.json", {"dataVersion": DATA_VERSION, "rows": []})
     if generated_root.exists():
         kit_builder = build_kit_builder_data(generated_root, output_dir, items, item_art)
     else:

@@ -13,13 +13,17 @@
     perks: [],
     perkById: new Map(),
   },
+  kitReady: false,
+  kitPromise: null,
+  itemSearchIndex: new Map(),
+  sourceSearchIndex: new Map(),
+  kitSearchIndex: new Map(),
   builder: {
     characterId: "",
     selectedSlot: "weapon1Primary",
     activeWeaponSet: "1",
     search: "",
     rarity: "All",
-    slotFilter: "Selected",
     pickerOpen: false,
     pickerMode: "items",
     characterCollapsed: false,
@@ -182,18 +186,21 @@ function terms(value) {
     .filter(Boolean);
 }
 
-function matchesSearchParts(parts, haystack) {
-  const textParts = terms(haystack);
-  return parts.every((part) => textParts.some((textPart) => textPart.startsWith(part)));
+function searchGroupTokens(groups) {
+  return groups.map((group) => terms((Array.isArray(group) ? group : [group]).filter(Boolean).join(" ")));
 }
 
-function matchesAnySearchGroup(needle, groups) {
-  const parts = terms(needle);
+function buildSearchIndex(rows, groupFn) {
+  return new Map(rows.map((row) => [row, searchGroupTokens(groupFn(row))]));
+}
+
+function matchesSearchParts(parts, haystack) {
+  return parts.every((part) => haystack.some((textPart) => textPart.startsWith(part)));
+}
+
+function matchesSearchGroups(parts, groups) {
   if (!parts.length) return true;
-  return groups.some((group) => {
-    const text = group.filter(Boolean).join(" ");
-    return matchesSearchParts(parts, text);
-  });
+  return (groups || []).some((group) => matchesSearchParts(parts, group));
 }
 
 function sourceKey(source, kind) {
@@ -451,7 +458,7 @@ function toggleFavoriteItem(asset) {
     ? state.favorites.items.filter((value) => value !== asset)
     : [...state.favorites.items, asset];
   saveFavorites();
-  render();
+  renderFavoriteState();
   renderActiveDetail();
 }
 
@@ -462,7 +469,7 @@ function toggleFavoriteSource(source, kind) {
     ? state.favorites.sources.filter((value) => value !== key)
     : [...state.favorites.sources, key];
   saveFavorites();
-  render();
+  renderFavoriteState();
   renderActiveDetail();
 }
 
@@ -896,22 +903,17 @@ function fillFilters() {
   $("sourceDiff").innerHTML = optionHtml(filters.diffs || []);
   const kinds = [...new Set(state.sources.map((row) => row.sourceKind).filter(Boolean))].sort();
   $("sourceKind").innerHTML = optionHtml(kinds);
+  setSelectIfAvailable("itemDiff", DEFAULT_DIFFICULTY);
+  setSelectIfAvailable("sourceDiff", DEFAULT_DIFFICULTY);
+}
+
+function fillBuilderFilters() {
   const builderRarities = [...new Set(state.kit.items.map((row) => row.rarity).filter(Boolean))]
     .sort((left, right) => rarityRank(left) - rarityRank(right));
   $("builderRarity").innerHTML = optionHtml(builderRarities);
-  if ($("builderSlotFilter")) {
-    $("builderSlotFilter").innerHTML = [
-      `<option>Selected</option>`,
-      `<option>All</option>`,
-      ...BUILDER_SLOTS.map((slot) => `<option value="${escapeHtml(slot.id)}">${escapeHtml(slot.label)}</option>`),
-    ].join("");
-  }
   $("builderCharacter").innerHTML = state.kit.characters.length
     ? state.kit.characters.map((character) => `<option value="${escapeHtml(character.id)}">${escapeHtml(character.name)}</option>`).join("")
     : `<option value="">No character data</option>`;
-  setSelectIfAvailable("itemDiff", DEFAULT_DIFFICULTY);
-  setSelectIfAvailable("sourceDiff", DEFAULT_DIFFICULTY);
-  if ($("builderSlotFilter")) setSelectIfAvailable("builderSlotFilter", state.builder.slotFilter);
   setSelectIfAvailable("builderRarity", state.builder.rarity);
   setSelectIfAvailable("builderCharacter", state.builder.characterId);
 }
@@ -928,30 +930,16 @@ async function loadData() {
   loadSavedKits();
   state.manifest = await fetchJson("/data/manifest.json");
   state.currentLuck = clampLuck(state.manifest.luck ?? 0);
-  const [items, sources, rates, kit] = await Promise.all([
+  const [items, sources, rates] = await Promise.all([
     fetchJson(state.manifest.files.items),
     fetchJson(state.manifest.files.sources),
     fetchJson(state.manifest.files.rates),
-    state.manifest.files.kit ? fetchJson(state.manifest.files.kit) : Promise.resolve({}),
   ]);
   state.items = items.rows || [];
   state.sources = sources.rows || [];
   state.rateWeights = rates.rows || {};
-  const kitItems = kit.items || [];
-  const kitCharacters = kit.characters || [];
-  const kitPerks = kit.perks || [];
-  state.kit = {
-    items: kitItems,
-    itemByAsset: new Map(kitItems.map((row) => [row.asset, row])),
-    secondaryPools: kit.secondaryPools || {},
-    propertyTypes: kit.propertyTypes || {},
-    curveTables: kit.curveTables || {},
-    characters: kitCharacters,
-    characterById: new Map(kitCharacters.map((row) => [row.id, row])),
-    perks: kitPerks,
-    perkById: new Map(kitPerks.map((row) => [row.id, row])),
-  };
-  state.builder.characterId = state.builder.characterId || kitCharacters[0]?.id || "";
+  state.itemSearchIndex = buildSearchIndex(state.items, itemSearchGroups);
+  state.sourceSearchIndex = buildSearchIndex(state.sources, sourceSearchGroups);
   state.itemByAsset = new Map(state.items.map((row) => [row.itemAsset, row]));
   state.sourceByKey = new Map(state.sources.map((row) => [sourceKey(row.source, row.sourceKind), row]));
   $("dataStatus").textContent = "";
@@ -959,6 +947,51 @@ async function loadData() {
   $("updatedAt").textContent = formatDate(state.manifest.generatedAt);
   fillFilters();
   render();
+}
+
+async function loadKitData() {
+  if (state.kitReady) return state.kit;
+  if (!state.kitPromise) {
+    state.kitPromise = (async () => {
+      const kit = state.manifest.files.kit ? await fetchJson(state.manifest.files.kit) : {};
+      const kitItems = kit.items || [];
+      const kitCharacters = kit.characters || [];
+      const kitPerks = kit.perks || [];
+      state.kit = {
+        items: kitItems,
+        itemByAsset: new Map(kitItems.map((row) => [row.asset, row])),
+        secondaryPools: kit.secondaryPools || {},
+        propertyTypes: kit.propertyTypes || {},
+        curveTables: kit.curveTables || {},
+        characters: kitCharacters,
+        characterById: new Map(kitCharacters.map((row) => [row.id, row])),
+        perks: kitPerks,
+        perkById: new Map(kitPerks.map((row) => [row.id, row])),
+      };
+      state.kitSearchIndex = buildSearchIndex(kitItems, builderItemSearchGroups);
+      state.builder.characterId = state.builder.characterId || kitCharacters[0]?.id || "";
+      state.kitReady = true;
+      fillBuilderFilters();
+      return state.kit;
+    })().catch((error) => {
+      state.kitPromise = null;
+      throw error;
+    });
+  }
+  return state.kitPromise;
+}
+
+function loadKitDataForBuilder() {
+  loadKitData()
+    .then(() => {
+      if (state.activeTab === "builder") renderBuilder();
+    })
+    .catch((error) => {
+      console.error(error);
+      if ($("builderItemList")) {
+        $("builderItemList").innerHTML = `<div class="builder-empty">Could not load kit data: ${escapeHtml(error.message)}</div>`;
+      }
+    });
 }
 
 function selected(id) {
@@ -998,14 +1031,22 @@ function itemDetailSearchGroups(row) {
   ];
 }
 
+function builderItemSearchGroups(item) {
+  return [
+    [item.name, item.asset, item.rarity, item.slot?.label, item.weaponTypes?.join(" "), item.armorType],
+    [(item.allowedClasses || []).map((entry) => entry.name).join(" ")],
+    (item.primary || []).map((entry) => entry.label),
+  ];
+}
+
 function filteredItems() {
-  const search = $("itemSearch").value;
+  const search = terms($("itemSearch").value);
   const rarity = selected("itemRarity");
   const category = selected("itemCategory");
   const map = selected("itemMap");
   const diff = selected("itemDiff");
   return state.items.filter((row) => {
-    if (!matchesAnySearchGroup(search, itemSearchGroups(row))) return false;
+    if (!matchesSearchGroups(search, state.itemSearchIndex.get(row))) return false;
     if (rarity !== "All" && row.rarity !== rarity) return false;
     if (category !== "All" && row.category !== category) return false;
     if (map !== "All" && !(row.maps || []).includes(map)) return false;
@@ -1015,12 +1056,12 @@ function filteredItems() {
 }
 
 function filteredSources() {
-  const search = $("sourceSearch").value;
+  const search = terms($("sourceSearch").value);
   const map = selected("sourceMap");
   const diff = selected("sourceDiff");
   const kind = selected("sourceKind");
   return state.sources.filter((row) => {
-    if (!matchesAnySearchGroup(search, sourceSearchGroups(row))) return false;
+    if (!matchesSearchGroups(search, state.sourceSearchIndex.get(row))) return false;
     if (map !== "All" && !(row.mapValues || []).includes(map)) return false;
     if (diff !== "All" && !(row.diffValues || []).includes(diff)) return false;
     if (kind !== "All" && row.sourceKind !== kind) return false;
@@ -1344,6 +1385,32 @@ function groupedSourceDetailRows(rows) {
   });
 }
 
+function sourceDetailModel(payload) {
+  const cacheKey = String(state.currentLuck);
+  if (payload._sourceDetailModel?.cacheKey === cacheKey) return payload._sourceDetailModel;
+  const groupedRows = groupedSourceDetailRows(payload.rows || []);
+  const model = {
+    cacheKey,
+    groupedRows,
+    filterOptions: sourceDetailFilterOptions(groupedRows),
+    searchIndex: buildSearchIndex(groupedRows, sourceDetailSearchGroups),
+  };
+  payload._sourceDetailModel = model;
+  return model;
+}
+
+function itemDetailModel(payload) {
+  if (payload._itemDetailModel) return payload._itemDetailModel;
+  const baseRows = payload.rows || [];
+  const model = {
+    baseRows,
+    filterOptions: itemDetailFilterOptions(baseRows),
+    searchIndex: buildSearchIndex(baseRows, itemDetailSearchGroups),
+  };
+  payload._itemDetailModel = model;
+  return model;
+}
+
 function selectedSourceDetailFilters() {
   return {
     rarity: "All",
@@ -1519,7 +1586,9 @@ function setSort(list, key) {
     ? (current.direction === "asc" ? "desc" : "asc")
     : (DEFAULT_SORT_DIRECTION[key] || "asc");
   state.sort[list] = { key, direction };
-  render();
+  updateSortButtons();
+  if (list === "items") renderItems();
+  if (list === "sources") renderSources();
 }
 
 function setSourceDetailSort(key) {
@@ -1632,7 +1701,7 @@ function renderFavorites() {
 }
 
 function filteredBuilderItems() {
-  const search = state.builder.search;
+  const search = terms(state.builder.search);
   const rarityFilter = state.builder.rarity;
   const selectedSlot = state.builder.selectedSlot;
   return state.kit.items
@@ -1640,11 +1709,7 @@ function filteredBuilderItems() {
       if (rarityFilter !== "All" && item.rarity !== rarityFilter) return false;
       if (!builderClassAllowsItem(item)) return false;
       if (selectedSlot && !itemFitsBuilderSlot(item, selectedSlot)) return false;
-      return matchesAnySearchGroup(search, [
-        [item.name, item.asset, item.rarity, item.slot?.label, item.weaponTypes?.join(" "), item.armorType],
-        [(item.allowedClasses || []).map((entry) => entry.name).join(" ")],
-        (item.primary || []).map((entry) => entry.label),
-      ]);
+      return matchesSearchGroups(search, state.kitSearchIndex.get(item));
     })
     .sort((left, right) => {
       const rarityResult = rarityRank(right.rarity) - rarityRank(left.rarity);
@@ -1945,10 +2010,23 @@ function renderBuilder() {
   if (!$("builderView")) return;
   $("builderSearch").value = state.builder.search;
   $("builderRarity").value = state.builder.rarity;
-  if ($("builderSlotFilter")) $("builderSlotFilter").value = state.builder.slotFilter;
   if (state.builder.characterId) $("builderCharacter").value = state.builder.characterId;
   $("builderCharacterPanel").classList.toggle("collapsed", state.builder.characterCollapsed);
   $("builderCharacterToggle").setAttribute("aria-expanded", state.builder.characterCollapsed ? "false" : "true");
+  if (!state.kitReady) {
+    const message = state.kitPromise ? "Loading kit data..." : "Kit data is not loaded yet.";
+    $("builderSummary").innerHTML = metaPill("Status", state.kitPromise ? "Loading" : "Idle");
+    $("builderCharacterCurrent").innerHTML = "";
+    $("builderPerkCount").textContent = `0 / ${BUILDER_PERK_LIMIT}`;
+    $("builderPerks").innerHTML = `<div class="builder-empty">${escapeHtml(message)}</div>`;
+    renderBuilderEquipment();
+    renderBuilderPicker();
+    renderBuilderBonusPanel();
+    $("builderItemList").innerHTML = `<div class="builder-empty">${escapeHtml(message)}</div>`;
+    renderBuilderStats();
+    renderBuilderSavedKits();
+    return;
+  }
   renderBuilderSummary();
   renderBuilderCharacter();
   renderBuilderPerks();
@@ -1965,7 +2043,24 @@ function render() {
   renderItems();
   renderSources();
   renderFavorites();
-  renderBuilder();
+  if (state.activeTab === "builder") renderBuilder();
+}
+
+function renderActiveTab() {
+  updateSortButtons();
+  if (state.activeTab === "items") renderItems();
+  if (state.activeTab === "sources") renderSources();
+  if (state.activeTab === "favorites") renderFavorites();
+  if (state.activeTab === "builder") {
+    if (!state.kitReady) loadKitDataForBuilder();
+    renderBuilder();
+  }
+}
+
+function renderFavoriteState() {
+  renderFavorites();
+  if (state.activeTab === "items") renderItems();
+  if (state.activeTab === "sources") renderSources();
 }
 
 async function detail(path) {
@@ -2014,12 +2109,12 @@ function detailTable(rows, columns, rowAttrs = () => "") {
 
 function renderSourceDetail(payload) {
   const search = state.activeDetail?.type === "source" ? state.activeDetail.search || "" : "";
+  const searchParts = terms(search);
   const filters = selectedSourceDetailFilters();
   const sort = state.activeDetail?.type === "source" ? state.activeDetail.sort || { key: "chance", direction: "desc" } : { key: "chance", direction: "desc" };
-  const groupedRows = groupedSourceDetailRows(payload.rows || []);
-  const filterOptions = sourceDetailFilterOptions(groupedRows);
+  const { groupedRows, filterOptions, searchIndex } = sourceDetailModel(payload);
   const rows = groupedRows
-    .filter((row) => matchesAnySearchGroup(search, sourceDetailSearchGroups(row)))
+    .filter((row) => matchesSearchGroups(searchParts, searchIndex.get(row)))
     .filter((row) => sourceDetailFilterMatches(row, filters))
     .map((row, index) => ({ row, index }))
     .sort((left, right) => {
@@ -2075,11 +2170,11 @@ function renderSourceDetail(payload) {
 
 function renderItemDetail(payload) {
   const search = state.activeDetail?.type === "item" ? state.activeDetail.search || "" : "";
+  const searchParts = terms(search);
   const filters = selectedItemDetailFilters();
-  const baseRows = payload.rows || [];
-  const filterOptions = itemDetailFilterOptions(baseRows);
+  const { baseRows, filterOptions, searchIndex } = itemDetailModel(payload);
   const rows = baseRows
-    .filter((row) => matchesAnySearchGroup(search, itemDetailSearchGroups(row)))
+    .filter((row) => matchesSearchGroups(searchParts, searchIndex.get(row)))
     .filter((row) => itemDetailFilterMatches(row, filters))
     .sort((a, b) => chanceValue(b, "chanceValue") - chanceValue(a, "chanceValue"));
   const limited = rows.slice(0, 500);
@@ -2284,13 +2379,15 @@ function wireEvents() {
       document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
       document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
       $(`${state.activeTab}View`).classList.add("active");
-      if (state.activeTab === "favorites") renderFavorites();
-      if (state.activeTab === "builder") renderBuilder();
+      renderActiveTab();
     });
   });
 
-  ["itemSearch", "itemRarity", "itemCategory", "itemMap", "itemDiff", "sourceSearch", "sourceMap", "sourceDiff", "sourceKind"]
-    .forEach((id) => $(id).addEventListener("input", render));
+  ["itemSearch", "itemRarity", "itemCategory", "itemMap", "itemDiff"]
+    .forEach((id) => $(id).addEventListener("input", renderItems));
+
+  ["sourceSearch", "sourceMap", "sourceDiff", "sourceKind"]
+    .forEach((id) => $(id).addEventListener("input", renderSources));
 
   $("builderSearch").addEventListener("input", () => {
     state.builder.search = $("builderSearch").value;
@@ -2298,10 +2395,6 @@ function wireEvents() {
   });
   $("builderRarity").addEventListener("input", () => {
     state.builder.rarity = $("builderRarity").value || "All";
-    renderBuilder();
-  });
-  $("builderSlotFilter")?.addEventListener("input", () => {
-    state.builder.slotFilter = $("builderSlotFilter").value || "Selected";
     renderBuilder();
   });
   $("builderCharacter").addEventListener("change", () => {
@@ -2329,7 +2422,6 @@ function wireEvents() {
     const value = clampLuck($("luckInput").value);
     state.currentLuck = value;
     $("luckInput").value = String(value);
-    render();
     renderActiveDetail();
   });
 
@@ -2504,7 +2596,7 @@ function wireEvents() {
   $("clearFavorites").addEventListener("click", () => {
     state.favorites = { items: [], sources: [] };
     saveFavorites();
-    render();
+    renderFavoriteState();
   });
   $("clearBuilder").addEventListener("click", clearBuilder);
   $("closeBuilderPicker").addEventListener("click", closeBuilderPicker);

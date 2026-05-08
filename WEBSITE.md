@@ -43,8 +43,6 @@ website/public/data/items-index.json
 website/public/data/sources-index.json
 website/public/data/details/items/*.json
 website/public/data/details/sources/*.json
-website/public/data/quests.json
-website/public/data/maps.json
 ```
 
 Items and sources load first. Detailed item/source data loads only when a player opens a row.
@@ -81,11 +79,4 @@ Use the `*.pages.dev` URL first to confirm the deploy works, then attach `darklo
 
 ## Later Features
 
-Quests and maps already have placeholder data files:
-
-```text
-website/public/data/quests.json
-website/public/data/maps.json
-```
-
-When those features are ready, extend `export_website_data.py` to populate those files from your internal files.
+When quests or map pages are ready, extend `export_website_data.py` to emit only the data files the runtime loads.
