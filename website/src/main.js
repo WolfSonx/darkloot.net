@@ -31,6 +31,7 @@
     primaryValues: {},
     bonuses: {},
     perks: [],
+    confirmAction: null,
   },
   itemByAsset: new Map(),
   sourceByKey: new Map(),
@@ -38,6 +39,7 @@
   favorites: { items: [], sources: [] },
   savedKits: [],
   chipPopover: { target: null, pinned: false },
+  slotTooltip: { target: null },
   activeTab: "items",
   detailCache: new Map(),
   currentLuck: 0,
@@ -50,6 +52,7 @@
 
 const FAVORITES_KEY = "darkloot:favorites:v1";
 const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
+const APP_BUILD_ID = "20260508-4";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
 const BUILDER_PERK_LIMIT = 4;
@@ -130,13 +133,6 @@ const BUILDER_STAT_ROWS = [
   { key: "MagicalDamageBonusFromBonuses", label: "From Bonuses", indent: true, unit: "%" },
   { key: "UndeadDamageBonus", label: "Undead Damage Bonus", unit: "%" },
   { key: "DemonDamageBonus", label: "Demon Damage Bonus", unit: "%" },
-  { key: "PrimaryWeapon", label: "Primary Weapon", type: "text", slot: "activePrimaryWeapon" },
-  { key: "PrimaryWeaponAttack1", label: "Attack 1", sourceKey: "PhysicalWeaponDamage", slot: "activePrimaryWeapon" },
-  { key: "PrimaryWeaponAttack2", label: "Attack 2", sourceKey: "MagicalWeaponDamage", slot: "activePrimaryWeapon" },
-  { key: "SecondaryWeapon", label: "Secondary Weapon", type: "text", slot: "activeSecondaryWeapon" },
-  { key: "ImpactPower", label: "Impact Power" },
-  { key: "PrimaryWeaponImpactPower", label: "Primary Weapon Impact Power", sourceKey: "ImpactPower", slot: "activePrimaryWeapon" },
-  { key: "SecondaryWeaponImpactPower", label: "Secondary Weapon Impact Power", sourceKey: "ImpactPower", slot: "activeSecondaryWeapon" },
 ];
 const BUILDER_STAT_ORDER = BUILDER_STAT_ROWS.map((row) => row.key);
 const STAT_CONTRIBUTION_KEYS = {
@@ -340,6 +336,23 @@ function saveSavedKits() {
   localStorage.setItem(SAVED_KITS_KEY, JSON.stringify(state.savedKits));
 }
 
+function builderConfirmKey(action, id = "") {
+  return `${action}:${id}`;
+}
+
+function isBuilderConfirming(action, id = "") {
+  return state.builder.confirmAction === builderConfirmKey(action, id);
+}
+
+function clearBuilderConfirmation() {
+  state.builder.confirmAction = null;
+}
+
+function requestBuilderConfirmation(action, id = "") {
+  state.builder.confirmAction = builderConfirmKey(action, id);
+  renderBuilder();
+}
+
 function currentBuilderKit(name, existing = null) {
   const now = new Date().toISOString();
   return {
@@ -392,6 +405,7 @@ function saveCurrentBuilderKit() {
   state.savedKits = existing
     ? state.savedKits.map((row, index) => (index === existingIndex ? kit : row))
     : [kit, ...state.savedKits];
+  clearBuilderConfirmation();
   saveSavedKits();
   if (input) input.value = name;
   renderBuilder();
@@ -400,6 +414,7 @@ function saveCurrentBuilderKit() {
 function loadBuilderKit(kitId) {
   const kit = state.savedKits.find((row) => row.id === kitId);
   if (!kit) return;
+  clearBuilderConfirmation();
   state.builder.characterId = state.kit.characterById.has(kit.characterId)
     ? kit.characterId
     : state.kit.characters[0]?.id || "";
@@ -440,8 +455,17 @@ function loadBuilderKit(kitId) {
 
 function deleteSavedKit(kitId) {
   state.savedKits = state.savedKits.filter((kit) => kit.id !== kitId);
+  clearBuilderConfirmation();
   saveSavedKits();
   renderBuilder();
+}
+
+function confirmOrDeleteSavedKit(kitId) {
+  if (!isBuilderConfirming("delete", kitId)) {
+    requestBuilderConfirmation("delete", kitId);
+    return;
+  }
+  deleteSavedKit(kitId);
 }
 
 function isFavoriteItem(asset) {
@@ -473,10 +497,24 @@ function toggleFavoriteSource(source, kind) {
   renderActiveDetail();
 }
 
-async function fetchJson(path) {
-  const response = await fetch(path);
+function versionedUrl(path, version) {
+  if (!version) return path;
+  const joiner = String(path).includes("?") ? "&" : "?";
+  return `${path}${joiner}v=${encodeURIComponent(version)}`;
+}
+
+async function fetchJson(path, version = "", options = {}) {
+  const response = await fetch(versionedUrl(path, version), options);
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.json();
+}
+
+function dataVersionToken() {
+  return [
+    state.manifest?.appVersion,
+    state.manifest?.generatedAt,
+    APP_BUILD_ID,
+  ].filter(Boolean).join("-");
 }
 
 function optionHtml(values, label = "All") {
@@ -504,9 +542,12 @@ function resolveBuilderSlotId(slotId) {
 }
 
 function setSelectedBuilderSlot(slotId) {
+  const previousSlot = state.builder.selectedSlot;
   const slot = builderSlotById(slotId);
+  clearBuilderConfirmation();
   state.builder.selectedSlot = slot.id;
   if (slot.weaponSet) state.builder.activeWeaponSet = slot.weaponSet;
+  if (previousSlot && previousSlot !== slot.id) state.builder.search = "";
 }
 
 function itemSlotId(item) {
@@ -798,13 +839,14 @@ function builderDerivedStatValues(totals, character) {
   const knowledge = directStatValue(totals, "Knowledge");
   const resourcefulness = directStatValue(totals, "Resourcefulness");
 
+  const maxHealthRating = (strength * 0.25) + (vigor * 0.75);
   const baseHealth = curveValue(
     "CT_MaxHealthBase",
     "MaxHealthBase",
-    vigor,
+    maxHealthRating,
     character ? 80 : 0,
   );
-  const health = (baseHealth + directStatValue(totals, "Health")) * (1 + (directStatValue(totals, "MaxHealthBonus") / 100));
+  const health = (baseHealth * (1 + (directStatValue(totals, "MaxHealthBonus") / 100))) + directStatValue(totals, "Health");
   values.set("Health", Math.ceil(health));
 
   const moveSpeed = (directStatValue(totals, "MoveSpeed") + curveValue("CT_Agility", "MoveSpeedBase", agility))
@@ -928,12 +970,13 @@ function formatDate(value) {
 async function loadData() {
   loadFavorites();
   loadSavedKits();
-  state.manifest = await fetchJson("/data/manifest.json");
+  state.manifest = await fetchJson("/data/manifest.json", `${APP_BUILD_ID}-${Date.now()}`, { cache: "no-store" });
   state.currentLuck = clampLuck(state.manifest.luck ?? 0);
+  const dataVersion = dataVersionToken();
   const [items, sources, rates] = await Promise.all([
-    fetchJson(state.manifest.files.items),
-    fetchJson(state.manifest.files.sources),
-    fetchJson(state.manifest.files.rates),
+    fetchJson(state.manifest.files.items, dataVersion),
+    fetchJson(state.manifest.files.sources, dataVersion),
+    fetchJson(state.manifest.files.rates, dataVersion),
   ]);
   state.items = items.rows || [];
   state.sources = sources.rows || [];
@@ -953,7 +996,7 @@ async function loadKitData() {
   if (state.kitReady) return state.kit;
   if (!state.kitPromise) {
     state.kitPromise = (async () => {
-      const kit = state.manifest.files.kit ? await fetchJson(state.manifest.files.kit) : {};
+      const kit = state.manifest.files.kit ? await fetchJson(state.manifest.files.kit, dataVersionToken()) : {};
       const kitItems = kit.items || [];
       const kitCharacters = kit.characters || [];
       const kitPerks = kit.perks || [];
@@ -1777,21 +1820,30 @@ function renderBuilderSavedKits() {
   if (!$("builderSavedKits")) return;
   $("builderSavedKitCount").textContent = state.savedKits.length.toLocaleString();
   $("builderSavedKits").innerHTML = state.savedKits.length
-    ? state.savedKits.map((kit) => `
-      <article class="builder-saved-kit">
-        <div class="builder-saved-kit-main">
-          ${iconImage(classIconUrl({ id: kit.characterId, name: savedKitCharacterName(kit) }), "builder-class-icon small", savedKitCharacterName(kit))}
-          <div>
-            <h4>${escapeHtml(kit.name)}</h4>
-            <p>${escapeHtml(savedKitCharacterName(kit))} | ${savedKitEquippedCount(kit)} items | ${escapeHtml(formatDate(kit.updatedAt))}</p>
+    ? state.savedKits.map((kit) => {
+      const confirmingDelete = isBuilderConfirming("delete", kit.id);
+      return `
+        <article class="builder-saved-kit">
+          <div class="builder-saved-kit-main">
+            ${iconImage(classIconUrl({ id: kit.characterId, name: savedKitCharacterName(kit) }), "builder-class-icon small", savedKitCharacterName(kit))}
+            <div>
+              <h4>${escapeHtml(kit.name)}</h4>
+              <p>${escapeHtml(savedKitCharacterName(kit))} | ${savedKitEquippedCount(kit)} items | ${escapeHtml(formatDate(kit.updatedAt))}</p>
+            </div>
           </div>
-        </div>
-        <div class="builder-saved-kit-actions">
-          <button type="button" data-load-builder-kit="${escapeHtml(kit.id)}">Load</button>
-          <button type="button" class="danger" data-delete-builder-kit="${escapeHtml(kit.id)}">Delete</button>
-        </div>
-      </article>
-    `).join("")
+          <div class="builder-saved-kit-actions">
+            <button type="button" data-load-builder-kit="${escapeHtml(kit.id)}">Load</button>
+            <button
+              type="button"
+              class="danger ${confirmingDelete ? "confirming" : ""}"
+              data-delete-builder-kit="${escapeHtml(kit.id)}"
+              aria-pressed="${confirmingDelete ? "true" : "false"}">
+              ${confirmingDelete ? "Confirm Delete" : "Delete"}
+            </button>
+          </div>
+        </article>
+      `;
+    }).join("")
     : `<div class="builder-empty">No saved kits yet.</div>`;
 }
 
@@ -1804,15 +1856,137 @@ function slotSecondarySummary(slotId, item) {
   return item?.secondaryPoolIds?.length ? ["No secondary bonuses selected"] : [];
 }
 
+function slotPrimarySummary(slotId, item, limit = Infinity) {
+  const entries = item?.primary || [];
+  const limited = Number.isFinite(limit) ? entries.slice(0, limit) : entries;
+  return limited.map((entry, index) => {
+    const selected = selectedPrimaryEntry(slotId, index);
+    return `${entry.label} ${statValue(selected?.value ?? entry.max ?? entry.min, entry.unit)}`;
+  });
+}
+
+function builderSlotAriaLabel(slot, item, blockReason) {
+  if (item) return `${slot.label}: ${item.name}, ${item.rarity}, ${item.gearScore || 0} gear score`;
+  return `${slot.label}: ${blockReason ? `blocked, ${blockReason}` : "empty"}`;
+}
+
+function builderSlotTooltipElement() {
+  let tooltip = $("builderSlotTooltip");
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.id = "builderSlotTooltip";
+    tooltip.className = "builder-slot-tooltip";
+    tooltip.setAttribute("role", "tooltip");
+    tooltip.hidden = true;
+    document.body.appendChild(tooltip);
+  }
+  return tooltip;
+}
+
+function builderSlotTooltipHtml(slotId) {
+  const slot = builderSlotById(slotId);
+  const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
+  const blockReason = weaponSlotBlockReason(slot.id);
+  if (!item) {
+    return `
+      <div class="builder-slot-tooltip-empty">
+        <strong>${escapeHtml(slot.label)}</strong>
+        <span>${escapeHtml(blockReason || slot.accepts.join(" / "))}</span>
+      </div>
+    `;
+  }
+  const primary = slotPrimarySummary(slot.id, item);
+  const secondary = slotSecondarySummary(slot.id, item);
+  return `
+    <div class="builder-slot-tooltip-head">
+      ${itemThumbnail(item, "tooltip")}
+      <div>
+        <h3>${escapeHtml(item.name)}</h3>
+        <p>${rarity(item.rarity)} <span>${escapeHtml(item.slot?.label || slot.label)}</span> <span>${escapeHtml(item.gearScore || 0)} GS</span></p>
+      </div>
+    </div>
+    <div class="builder-slot-tooltip-section">
+      <b>Primary</b>
+      ${primary.length
+        ? primary.map((entry) => `<span>${escapeHtml(entry)}</span>`).join("")
+        : `<span>None</span>`}
+    </div>
+    ${secondary.length ? `
+      <div class="builder-slot-tooltip-section secondary">
+        <b>Secondary</b>
+        ${secondary.map((entry) => `<span>${escapeHtml(entry)}</span>`).join("")}
+      </div>
+    ` : ""}
+    <div class="builder-slot-tooltip-meta">
+      <span><b>Slot</b>${escapeHtml(item.slot?.label || slot.label)}</span>
+      <span><b>Classes</b>${escapeHtml(classNamesText(item.allowedClasses))}</span>
+    </div>
+  `;
+}
+
+function positionBuilderSlotTooltip(target, tooltip) {
+  const margin = 12;
+  const rect = target.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const roomRight = window.innerWidth - rect.right;
+  const roomLeft = rect.left;
+  const placeRight = roomRight >= tooltipRect.width + margin || roomRight >= roomLeft;
+  const rawLeft = placeRight
+    ? rect.right + margin
+    : rect.left - tooltipRect.width - margin;
+  const left = Math.min(
+    Math.max(margin, rawLeft),
+    Math.max(margin, window.innerWidth - tooltipRect.width - margin),
+  );
+  const rawTop = rect.top + ((rect.height - tooltipRect.height) / 2);
+  const top = Math.min(
+    Math.max(margin, rawTop),
+    Math.max(margin, window.innerHeight - tooltipRect.height - margin),
+  );
+  tooltip.dataset.side = placeRight ? "right" : "left";
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function showBuilderSlotTooltip(target) {
+  const slotId = target?.dataset?.builderSlot;
+  if (!slotId || !$("builderView")?.classList.contains("active")) return;
+  const tooltip = builderSlotTooltipElement();
+  tooltip.innerHTML = builderSlotTooltipHtml(slotId);
+  tooltip.hidden = false;
+  target.setAttribute("aria-describedby", "builderSlotTooltip");
+  state.slotTooltip = { target };
+  requestAnimationFrame(() => positionBuilderSlotTooltip(target, tooltip));
+}
+
+function syncBuilderSlotTooltip(event) {
+  const slot = event.target?.closest?.("button[data-builder-slot]");
+  if (!slot) {
+    if (state.slotTooltip.target) hideBuilderSlotTooltip(true);
+    return;
+  }
+  const tooltip = builderSlotTooltipElement();
+  if (state.slotTooltip.target !== slot || tooltip.hidden) {
+    showBuilderSlotTooltip(slot);
+    return;
+  }
+  positionBuilderSlotTooltip(slot, tooltip);
+}
+
+function hideBuilderSlotTooltip(force = false) {
+  const target = state.slotTooltip.target;
+  if (!force && target?.matches(":hover, :focus-visible")) return;
+  target?.removeAttribute("aria-describedby");
+  state.slotTooltip = { target: null };
+  const tooltip = $("builderSlotTooltip");
+  if (tooltip) tooltip.hidden = true;
+}
+
 function renderBuilderEquipment() {
+  hideBuilderSlotTooltip(true);
   $("builderEquipment").innerHTML = BUILDER_SLOTS.map((slot) => {
     const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
     const blockReason = weaponSlotBlockReason(slot.id);
-    const primary = (item?.primary || []).slice(0, 2).map((entry, index) => {
-      const selected = selectedPrimaryEntry(slot.id, index);
-      return `${entry.label} ${statValue(selected?.value ?? entry.max ?? entry.min, entry.unit)}`;
-    }).join(", ");
-    const secondary = slotSecondarySummary(slot.id, item);
     const art = item
       ? itemThumbnail(item, slot.kind === "weapon" ? "equipment weapon-equipment" : "equipment")
       : `<span class="equipment-ghost equipment-ghost-${escapeHtml(slot.id)}" aria-hidden="true"></span>`;
@@ -1823,28 +1997,11 @@ function renderBuilderEquipment() {
         style="grid-area: ${escapeHtml(slot.area)}"
         data-builder-slot="${escapeHtml(slot.id)}"
         aria-pressed="${state.builder.selectedSlot === slot.id ? "true" : "false"}"
+        aria-label="${escapeHtml(builderSlotAriaLabel(slot, item, blockReason))}"
         ${blockReason ? `title="${escapeHtml(blockReason)}"` : ""}>
         ${slot.marker ? `<span class="builder-slot-marker">${escapeHtml(slot.marker)}</span>` : ""}
         <span class="builder-slot-art">${art}</span>
         <span class="builder-slot-label">${escapeHtml(slot.label)}</span>
-        ${item ? `
-          <span class="builder-slot-info">
-            <strong>${escapeHtml(item.name)}</strong>
-            <span>${rarity(item.rarity)} ${escapeHtml(item.gearScore || 0)} GS</span>
-            <small>${escapeHtml(primary)}</small>
-            ${secondary.length ? `
-              <span class="builder-slot-secondary">
-                <b>Secondary</b>
-                ${secondary.map((entry) => `<em>${escapeHtml(entry)}</em>`).join("")}
-              </span>
-            ` : ""}
-          </span>
-        ` : `
-          <span class="builder-slot-info empty">
-            <strong>${blockReason ? "Blocked" : "Empty"}</strong>
-            <span>${escapeHtml(blockReason || slot.accepts.join(" / "))}</span>
-          </span>
-        `}
       </button>
     `;
   }).join("");
@@ -2011,8 +2168,23 @@ function renderBuilderSummary() {
   ].join("");
 }
 
+function renderBuilderActionStates() {
+  const clearButton = $("clearBuilder");
+  if (!clearButton) return;
+  const confirmingClear = isBuilderConfirming("clear");
+  clearButton.textContent = confirmingClear ? "Confirm Clear" : "Clear";
+  clearButton.classList.toggle("confirming", confirmingClear);
+  clearButton.setAttribute("aria-pressed", confirmingClear ? "true" : "false");
+  if (confirmingClear) {
+    clearButton.title = "Click again to clear the builder";
+  } else {
+    clearButton.removeAttribute("title");
+  }
+}
+
 function renderBuilder() {
   if (!$("builderView")) return;
+  renderBuilderActionStates();
   $("builderSearch").value = state.builder.search;
   $("builderRarity").value = state.builder.rarity;
   if (state.builder.characterId) $("builderCharacter").value = state.builder.characterId;
@@ -2273,6 +2445,7 @@ function equipBuilderItem(asset) {
   if (!item || !builderClassAllowsItem(item)) return;
   const slotId = firstBuilderSlotForItem(item);
   if (!slotId) return;
+  clearBuilderConfirmation();
   const slot = builderSlotById(slotId);
   const equipped = { ...state.builder.equipped, [slotId]: asset };
   const bonuses = { ...state.builder.bonuses, [slotId]: defaultBonusesForItem(item) };
@@ -2293,6 +2466,7 @@ function equipBuilderItem(asset) {
 }
 
 function unequipBuilderSlot(slotId) {
+  clearBuilderConfirmation();
   const { [slotId]: _removed, ...equipped } = state.builder.equipped;
   const { [slotId]: _removedPrimaryValues, ...primaryValues } = state.builder.primaryValues;
   const { [slotId]: _removedBonuses, ...bonuses } = state.builder.bonuses;
@@ -2304,6 +2478,7 @@ function unequipBuilderSlot(slotId) {
 }
 
 function clearBuilder() {
+  clearBuilderConfirmation();
   state.builder.equipped = {};
   state.builder.primaryValues = {};
   state.builder.bonuses = {};
@@ -2313,12 +2488,22 @@ function clearBuilder() {
   renderBuilder();
 }
 
+function confirmOrClearBuilder() {
+  if (!isBuilderConfirming("clear")) {
+    requestBuilderConfirmation("clear");
+    return;
+  }
+  clearBuilder();
+}
+
 function closeBuilderPicker() {
+  clearBuilderConfirmation();
   state.builder.pickerOpen = false;
   renderBuilder();
 }
 
 function toggleBuilderPerk(perkId) {
+  clearBuilderConfirmation();
   const active = state.builder.perks.includes(perkId);
   state.builder.perks = active
     ? state.builder.perks.filter((id) => id !== perkId)
@@ -2331,6 +2516,7 @@ function toggleBuilderPerk(perkId) {
 function setBuilderBonusProperty(slotId, index, propertyId) {
   const item = state.kit.itemByAsset.get(state.builder.equipped[slotId]);
   if (!item) return;
+  clearBuilderConfirmation();
   const bonuses = state.builder.bonuses[slotId] || defaultBonusesForItem(item);
   const entry = bonuses[index];
   const poolId = entry?.poolId || item.secondaryPoolIds[index];
@@ -2347,6 +2533,7 @@ function setBuilderBonusProperty(slotId, index, propertyId) {
 function setBuilderBonusValue(slotId, index, value) {
   const bonuses = state.builder.bonuses[slotId];
   if (!bonuses?.[index]) return;
+  clearBuilderConfirmation();
   const item = equippedBuilderItem(slotId);
   const poolId = bonuses[index].poolId || item?.secondaryPoolIds?.[index];
   const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === bonuses[index].propertyId);
@@ -2363,6 +2550,7 @@ function setBuilderPrimaryValue(slotId, index, value) {
   const item = equippedBuilderItem(slotId);
   const entry = item?.primary?.[index];
   if (!entry) return;
+  clearBuilderConfirmation();
   const values = state.builder.primaryValues[slotId] || defaultPrimaryValuesForItem(item);
   values[index] = clampStatEntryValue(entry, value);
   state.builder.primaryValues = { ...state.builder.primaryValues, [slotId]: values };
@@ -2381,6 +2569,7 @@ function wireEvents() {
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeTab = button.dataset.tab;
+      clearBuilderConfirmation();
       document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
       document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
       $(`${state.activeTab}View`).classList.add("active");
@@ -2395,14 +2584,17 @@ function wireEvents() {
     .forEach((id) => $(id).addEventListener("input", renderSources));
 
   $("builderSearch").addEventListener("input", () => {
+    clearBuilderConfirmation();
     state.builder.search = $("builderSearch").value;
     renderBuilder();
   });
   $("builderRarity").addEventListener("input", () => {
+    clearBuilderConfirmation();
     state.builder.rarity = $("builderRarity").value || "All";
     renderBuilder();
   });
   $("builderCharacter").addEventListener("change", () => {
+    clearBuilderConfirmation();
     state.builder.characterId = $("builderCharacter").value;
     const character = selectedBuilderCharacter();
     const allowedPerks = new Set(character?.perks || []);
@@ -2486,7 +2678,7 @@ function wireEvents() {
         return;
       }
       if (button.dataset.deleteBuilderKit) {
-        deleteSavedKit(button.dataset.deleteBuilderKit);
+        confirmOrDeleteSavedKit(button.dataset.deleteBuilderKit);
         return;
       }
       if (button.dataset.favType === "item") {
@@ -2515,23 +2707,43 @@ function wireEvents() {
   });
 
   document.body.addEventListener("mouseover", (event) => {
+    const slot = event.target.closest("button[data-builder-slot]");
+    if (slot && !slot.contains(event.relatedTarget)) showBuilderSlotTooltip(slot);
     const button = event.target.closest("button[data-more-values]");
     if (!button || button.contains(event.relatedTarget)) return;
     showChipPopover(button);
   });
 
   document.body.addEventListener("mouseout", (event) => {
+    const slot = event.target.closest("button[data-builder-slot]");
+    if (slot && !slot.contains(event.relatedTarget)) hideBuilderSlotTooltip(true);
     const button = event.target.closest("button[data-more-values]");
     if (!button || button.contains(event.relatedTarget)) return;
     hideChipPopover();
   });
 
+  document.body.addEventListener("pointerover", (event) => {
+    const slot = event.target.closest("button[data-builder-slot]");
+    if (slot && !slot.contains(event.relatedTarget)) showBuilderSlotTooltip(slot);
+  });
+
+  document.body.addEventListener("pointerout", (event) => {
+    const slot = event.target.closest("button[data-builder-slot]");
+    if (slot && !slot.contains(event.relatedTarget)) hideBuilderSlotTooltip(true);
+  });
+
+  document.body.addEventListener("mousemove", syncBuilderSlotTooltip);
+  document.body.addEventListener("pointermove", syncBuilderSlotTooltip);
+
   document.body.addEventListener("focusin", (event) => {
+    const slot = event.target.closest("button[data-builder-slot]");
+    if (slot) showBuilderSlotTooltip(slot);
     const button = event.target.closest("button[data-more-values]");
     if (button) showChipPopover(button);
   });
 
   document.body.addEventListener("focusout", (event) => {
+    if (event.target.closest("button[data-builder-slot]")) hideBuilderSlotTooltip(true);
     if (event.target.closest("button[data-more-values]")) hideChipPopover();
   });
 
@@ -2603,7 +2815,7 @@ function wireEvents() {
     saveFavorites();
     renderFavoriteState();
   });
-  $("clearBuilder").addEventListener("click", clearBuilder);
+  $("clearBuilder").addEventListener("click", confirmOrClearBuilder);
   $("closeBuilderPicker").addEventListener("click", closeBuilderPicker);
   $("saveBuilderKit").addEventListener("click", saveCurrentBuilderKit);
   $("builderKitName").addEventListener("keydown", (event) => {
@@ -2619,11 +2831,18 @@ function wireEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       hideChipPopover(true);
+      hideBuilderSlotTooltip(true);
       if (state.builder.pickerOpen) closeBuilderPicker();
     }
   });
-  document.addEventListener("scroll", () => hideChipPopover(true), true);
-  window.addEventListener("resize", () => hideChipPopover(true));
+  document.addEventListener("scroll", () => {
+    hideChipPopover(true);
+    hideBuilderSlotTooltip(true);
+  }, true);
+  window.addEventListener("resize", () => {
+    hideChipPopover(true);
+    hideBuilderSlotTooltip(true);
+  });
 }
 
 wireEvents();

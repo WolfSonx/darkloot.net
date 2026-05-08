@@ -86,6 +86,17 @@ button.danger {
   color: #ffd4d0;
 }
 
+button.danger.confirming {
+  border-color: rgba(242, 189, 85, .82);
+  background: linear-gradient(180deg, rgba(128, 88, 24, .86), rgba(87, 55, 19, .92));
+  color: #ffe0a3;
+}
+
+button.danger.confirming:hover {
+  border-color: var(--gold);
+  background: linear-gradient(180deg, rgba(148, 102, 29, .9), rgba(100, 63, 22, .95));
+}
+
 input,
 select {
   width: 100%;
@@ -1405,75 +1416,137 @@ th.num .sort-button {
   text-shadow: 0 1px 1px #000;
 }
 
-.builder-slot-info {
-  position: absolute;
-  z-index: 6;
-  left: 7px;
-  right: 7px;
-  bottom: 7px;
+.builder-slot-tooltip {
+  position: fixed;
+  z-index: 80;
   display: grid;
-  gap: 3px;
-  border: 1px solid rgba(207, 211, 214, .22);
+  gap: 14px;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  border: 1px solid rgba(135, 176, 194, .55);
+  border-radius: 6px;
+  padding: 16px;
   background:
-    linear-gradient(180deg, rgba(18, 18, 18, .92), rgba(6, 6, 6, .94));
-  box-shadow: 0 12px 22px rgba(0, 0, 0, .42);
-  padding: 6px;
-  opacity: 0;
+    linear-gradient(180deg, rgba(19, 39, 48, .96), rgba(8, 9, 10, .96) 34%),
+    #080a0c;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .08),
+    0 20px 48px rgba(0, 0, 0, .58);
+  color: #e9edf0;
   pointer-events: none;
-  transform: translateY(8px);
-  transition: opacity .12s ease, transform .12s ease;
 }
 
-.builder-slot:hover .builder-slot-info,
-.builder-slot:focus-visible .builder-slot-info {
-  opacity: 1;
-  transform: translateY(0);
+.builder-slot-tooltip[hidden] {
+  display: none;
 }
 
-.builder-slot-info strong {
-  display: block;
-  overflow-wrap: anywhere;
-  color: #f7fbff;
-  font-size: 12px;
-  line-height: 1.2;
+.builder-slot-tooltip::before {
+  content: "";
+  position: absolute;
+  top: 54px;
+  width: 10px;
+  height: 10px;
+  border: inherit;
+  border-top: 0;
+  border-right: 0;
+  background: rgba(15, 27, 33, .96);
+  transform: rotate(45deg);
 }
 
-.builder-slot-info > span {
-  color: var(--muted);
-  font-size: 11px;
+.builder-slot-tooltip[data-side="right"]::before {
+  left: -6px;
 }
 
-.builder-slot-info small {
-  display: -webkit-box;
-  width: 100%;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--faint);
-  font-size: 10px;
-  line-height: 1.2;
+.builder-slot-tooltip[data-side="left"]::before {
+  right: -6px;
+  transform: rotate(225deg);
 }
 
-.builder-slot-secondary {
+.builder-slot-tooltip-head {
   display: grid;
-  gap: 2px;
-  border-top: 1px solid rgba(207, 211, 214, .16);
-  margin-top: 2px;
-  padding-top: 4px;
-  color: var(--faint);
-  font-size: 10px;
-  line-height: 1.2;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid rgba(28, 166, 229, .42);
+  padding-bottom: 12px;
 }
 
-.builder-slot-secondary b {
-  color: var(--gold);
-  font-size: 10px;
+.builder-slot-tooltip-head h3 {
+  margin: 0 0 7px;
+  color: #25b8ff;
+  font-size: 22px;
+  font-family: Georgia, serif;
+  font-weight: 700;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+.builder-slot-tooltip-head p,
+.builder-slot-tooltip-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 10px;
+  align-items: center;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.item-thumb-tooltip {
+  width: 58px;
+  height: 58px;
+}
+
+.builder-slot-tooltip-section {
+  display: grid;
+  gap: 8px;
+}
+
+.builder-slot-tooltip-section b {
+  color: rgba(232, 226, 211, .72);
+  font-size: 11px;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 
-.builder-slot-secondary em {
-  font-style: normal;
-  overflow-wrap: anywhere;
+.builder-slot-tooltip-section span {
+  color: #f2f5f7;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.builder-slot-tooltip-section.secondary span {
+  color: #25b8ff;
+}
+
+.builder-slot-tooltip-meta {
+  border-top: 1px solid rgba(207, 211, 214, .16);
+  padding-top: 12px;
+}
+
+.builder-slot-tooltip-meta span {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.builder-slot-tooltip-meta b {
+  color: rgba(232, 226, 211, .5);
+}
+
+.builder-slot-tooltip-empty {
+  display: grid;
+  gap: 6px;
+}
+
+.builder-slot-tooltip-empty strong {
+  color: #f7fbff;
+  font-size: 16px;
+}
+
+.builder-slot-tooltip-empty span {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .equipment-ghost {
