@@ -59,6 +59,8 @@ const BUILDER_PERK_LIMIT = 4;
 const BUILDER_CONDITIONAL_STAT_PERKS = new Set([
   "Id_Perk_Trickster",
 ]);
+const BUILDER_WEAPON_MASTERY_PERK_ID = "Id_Perk_WeaponMastery";
+const BUILDER_DEMON_ARMOR_PERK_ID = "Id_Perk_DemonArmor";
 const PERK_ICON_ALIASES = {
   Id_Perk_ComboAttack: "CombinationAttack",
   Id_Perk_HideMastery: "HideExpert",
@@ -440,6 +442,11 @@ function loadBuilderKit(kitId) {
   state.builder.rarity = "All";
   state.builder.pickerOpen = false;
   state.builder.pickerMode = "items";
+  const character = selectedBuilderCharacter();
+  const allowedPerks = new Set(character?.perks || []);
+  state.builder.perks = (kit.perks || [])
+    .filter((perkId) => allowedPerks.has(perkId) && state.kit.perkById.has(perkId))
+    .slice(0, BUILDER_PERK_LIMIT);
 
   const equipped = {};
   const primaryValues = {};
@@ -454,14 +461,9 @@ function loadBuilderKit(kitId) {
     bonuses[slot.id] = savedBonusesForItem(item, kit.bonuses?.[slot.id]);
   });
 
-  const character = selectedBuilderCharacter();
-  const allowedPerks = new Set(character?.perks || []);
   state.builder.equipped = equipped;
   state.builder.primaryValues = primaryValues;
   state.builder.bonuses = bonuses;
-  state.builder.perks = (kit.perks || [])
-    .filter((perkId) => allowedPerks.has(perkId) && state.kit.perkById.has(perkId))
-    .slice(0, BUILDER_PERK_LIMIT);
   const input = $("builderKitName");
   if (input) input.value = kit.name;
   renderBuilder();
@@ -612,11 +614,53 @@ function selectedBuilderCharacter() {
   return state.kit.characterById.get(state.builder.characterId) || state.kit.characters[0] || null;
 }
 
+function builderHasPerk(perkId) {
+  return state.builder.perks.includes(perkId);
+}
+
+function builderItemIsWeapon(item) {
+  return item?.itemType === "Weapon" || ["Primary", "Secondary"].includes(itemSlotId(item));
+}
+
+function builderItemIsFighterOrClericPlate(item, allowedClasses) {
+  return item?.itemType === "Armor"
+    && item.armorType === "Plate"
+    && allowedClasses.some((entry) => entry.id === "Fighter" || entry.id === "Cleric");
+}
+
+function builderPerkAllowsItem(item, character, allowedClasses) {
+  if (character?.id === "Fighter" && builderHasPerk(BUILDER_WEAPON_MASTERY_PERK_ID) && builderItemIsWeapon(item)) {
+    return true;
+  }
+  if (character?.id === "Warlock" && builderHasPerk(BUILDER_DEMON_ARMOR_PERK_ID) && builderItemIsFighterOrClericPlate(item, allowedClasses)) {
+    return true;
+  }
+  return false;
+}
+
 function builderClassAllowsItem(item) {
   const allowed = item?.allowedClasses || [];
   const character = selectedBuilderCharacter();
   if (!allowed.length || !character) return true;
-  return allowed.some((entry) => entry.id === character.id);
+  return allowed.some((entry) => entry.id === character.id) || builderPerkAllowsItem(item, character, allowed);
+}
+
+function pruneBuilderEquipmentForCurrentRules() {
+  const equipped = {};
+  const primaryValues = {};
+  const bonuses = {};
+  BUILDER_SLOTS.forEach((slot) => {
+    const asset = state.builder.equipped[slot.id];
+    const item = state.kit.itemByAsset.get(asset);
+    if (!item || !slot.accepts.includes(itemSlotId(item)) || !builderClassAllowsItem(item)) return;
+    if (slot.weaponRole === "secondary" && itemIsTwoHanded(state.kit.itemByAsset.get(equipped[pairedWeaponSlotId(slot.id)]))) return;
+    equipped[slot.id] = asset;
+    if (state.builder.primaryValues[slot.id]) primaryValues[slot.id] = state.builder.primaryValues[slot.id];
+    if (state.builder.bonuses[slot.id]) bonuses[slot.id] = state.builder.bonuses[slot.id];
+  });
+  state.builder.equipped = equipped;
+  state.builder.primaryValues = primaryValues;
+  state.builder.bonuses = bonuses;
 }
 
 function classNamesText(classes) {
@@ -2562,6 +2606,7 @@ function toggleBuilderPerk(perkId) {
     : state.builder.perks.length < BUILDER_PERK_LIMIT
       ? [...state.builder.perks, perkId]
       : state.builder.perks;
+  pruneBuilderEquipmentForCurrentRules();
   renderBuilder();
 }
 
@@ -2651,19 +2696,7 @@ function wireEvents() {
     const character = selectedBuilderCharacter();
     const allowedPerks = new Set(character?.perks || []);
     state.builder.perks = state.builder.perks.filter((perkId) => allowedPerks.has(perkId));
-    const equipped = {};
-    const primaryValues = {};
-    const bonuses = {};
-    Object.entries(state.builder.equipped).forEach(([slotId, asset]) => {
-      const item = state.kit.itemByAsset.get(asset);
-      if (!item || !builderClassAllowsItem(item)) return;
-      equipped[slotId] = asset;
-      if (state.builder.primaryValues[slotId]) primaryValues[slotId] = state.builder.primaryValues[slotId];
-      if (state.builder.bonuses[slotId]) bonuses[slotId] = state.builder.bonuses[slotId];
-    });
-    state.builder.equipped = equipped;
-    state.builder.primaryValues = primaryValues;
-    state.builder.bonuses = bonuses;
+    pruneBuilderEquipmentForCurrentRules();
     renderBuilder();
   });
 
