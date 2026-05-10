@@ -14,7 +14,7 @@
   <meta property="og:image" content="https://darkloot.net/assets/darkloot-mark.png">
   <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png?v=20260508-1">
   <link rel="apple-touch-icon" href="/assets/darkloot-mark.png?v=20260508-1">
-  <link rel="stylesheet" href="/src/styles.css?v=20260508-4">
+  <link rel="stylesheet" href="/src/styles.css?v=20260510-1">
 </head>
 <body>
   <header class="app-header">
@@ -252,11 +252,17 @@
         <h2 id="detailTitle">Details</h2>
         <p id="detailMeta"></p>
       </div>
-      <button id="closeDetail" aria-label="Close">Close</button>
+      <div class="dialog-actions">
+        <label class="detail-luck">
+          <span>Luck</span>
+          <input id="detailLuckInput" type="number" min="0" max="500" step="1" value="0" aria-label="Luck for this popup">
+        </label>
+        <button id="closeDetail" aria-label="Close">Close</button>
+      </div>
     </div>
     <div id="detailContent"></div>
   </dialog>
 
-  <script type="module" src="/src/main.js?v=20260508-4"></script>
+  <script type="module" src="/src/main.js?v=20260510-1"></script>
 </body>
 </html>

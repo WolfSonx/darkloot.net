@@ -83,6 +83,9 @@ SOURCE_MAP_INCLUSIONS = {
     ("Monster", "Lich"): {"Crypts"},
     ("Monster", "Skeleton Warlord"): {"Crypts"},
 }
+MODULE_SOURCE_ALIASES = {
+    ("Ice Abyss", "Chest Special"): {("Golden Chest (Gold Chest)", "Prop")},
+}
 
 
 def is_monster_source_kind(kind: str) -> bool:
@@ -718,6 +721,15 @@ class WebIndex:
                 ):
                     for variant in match_key_variants(str(name)):
                         possible_keys.update(spawner_to_sources.get(variant, set()))
+            for name in (
+                location.get("spawner", ""),
+                humanize_asset(location.get("spawnerAsset", "")),
+                location.get("preview", ""),
+                humanize_asset(location.get("previewAsset", "")),
+            ):
+                aliases = set(MODULE_SOURCE_ALIASES.get((str(location.get("map") or ""), str(name or "")), set()))
+                aliases.update(MODULE_SOURCE_ALIASES.get(("*", str(name or "")), set()))
+                possible_keys.update(alias for alias in aliases if alias in self.source_rows)
             for source_key in possible_keys:
                 location_key = str(location.get("key") or "")
                 if location_key and location_key in linked_keys[source_key]:

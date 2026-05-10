@@ -52,7 +52,7 @@
 
 const FAVORITES_KEY = "darkloot:favorites:v1";
 const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
-const APP_BUILD_ID = "20260508-4";
+const APP_BUILD_ID = "20260510-1";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
 const BUILDER_PERK_LIMIT = 4;
@@ -269,6 +269,20 @@ function baseChanceValue(row) {
 
 function baseChanceText(row) {
   return percent(baseChanceValue(row));
+}
+
+function syncLuckInputs() {
+  const value = String(state.currentLuck);
+  ["luckInput", "detailLuckInput"].forEach((id) => {
+    const input = $(id);
+    if (input && input.value !== value) input.value = value;
+  });
+}
+
+function setCurrentLuck(value) {
+  state.currentLuck = clampLuck(value);
+  syncLuckInputs();
+  renderActiveDetail();
 }
 
 function loadFavorites() {
@@ -986,7 +1000,7 @@ async function loadData() {
   state.itemByAsset = new Map(state.items.map((row) => [row.itemAsset, row]));
   state.sourceByKey = new Map(state.sources.map((row) => [sourceKey(row.source, row.sourceKind), row]));
   $("dataStatus").textContent = "";
-  $("luckInput").value = String(state.currentLuck);
+  syncLuckInputs();
   $("updatedAt").textContent = formatDate(state.manifest.generatedAt);
   fillFilters();
   render();
@@ -1486,8 +1500,43 @@ function sourceDetailFilterMatches(row, filters) {
   return true;
 }
 
+function itemDetailScenarioMatches(row, filters) {
+  if (filters.map !== "All" && row.map !== filters.map) return false;
+  if (filters.diff !== "All" && row.diff !== filters.diff) return false;
+  return true;
+}
+
+function itemDetailBestScenario(row, filters, metric = "chance") {
+  const scenarios = Array.isArray(row.scenarioBests) ? row.scenarioBests : [];
+  let best = null;
+  let bestValue = -1;
+  scenarios.forEach((scenario) => {
+    if (!itemDetailScenarioMatches(scenario, filters)) return;
+    const value = metric === "base"
+      ? baseChanceValue(scenario)
+      : chanceValue(scenario, "chanceValue");
+    if (!best || value > bestValue) {
+      best = scenario;
+      bestValue = value;
+    }
+  });
+  return best || row;
+}
+
+function itemDetailBestBaseChanceValue(row, filters) {
+  return baseChanceValue(itemDetailBestScenario(row, filters, "base"));
+}
+
+function itemDetailBestLuckChanceValue(row, filters) {
+  return chanceValue(itemDetailBestScenario(row, filters, "chance"), "chanceValue");
+}
+
 function itemDetailFilterMatches(row, filters) {
   if (filters.kind !== "All" && row.sourceKind !== filters.kind) return false;
+  const scenarios = Array.isArray(row.scenarioBests) ? row.scenarioBests : [];
+  if (scenarios.length && (filters.map !== "All" || filters.diff !== "All")) {
+    return scenarios.some((scenario) => itemDetailScenarioMatches(scenario, filters));
+  }
   if (filters.map !== "All" && !splitValues(row.mapValues || row.maps).includes(filters.map)) return false;
   if (filters.diff !== "All" && !splitValues(row.diffValues || row.diffs).includes(filters.diff)) return false;
   return true;
@@ -2353,7 +2402,7 @@ function renderItemDetail(payload) {
   const rows = baseRows
     .filter((row) => matchesSearchGroups(searchParts, searchIndex.get(row)))
     .filter((row) => itemDetailFilterMatches(row, filters))
-    .sort((a, b) => chanceValue(b, "chanceValue") - chanceValue(a, "chanceValue"));
+    .sort((a, b) => itemDetailBestLuckChanceValue(b, filters) - itemDetailBestLuckChanceValue(a, filters));
   const limited = rows.slice(0, 500);
   $("detailTitle").textContent = payload.item?.item || "Item";
   $("detailMeta").textContent = `${payload.item?.rarity || ""} ${payload.item?.category || ""} | ${baseRows.length.toLocaleString()} sources`;
@@ -2388,8 +2437,8 @@ function renderItemDetail(payload) {
       { label: "Kind", html: (row) => kindChip(row.sourceKind) },
       { label: "Maps", html: (row) => chips(row.mapValues || row.maps, "map-chip") },
       { label: "Difficulties", html: (row) => chips(row.diffValues || row.diffs, "diff-chip") },
-      { label: "Best Base Chance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
-      { label: "Best Chance With Luck", html: (row) => escapeHtml(chanceText(row, "chanceValue", "chance")), num: true },
+      { label: "Best Base Chance", html: (row) => escapeHtml(percent(itemDetailBestBaseChanceValue(row, filters))), num: true },
+      { label: "Best Chance With Luck", html: (row) => escapeHtml(percent(itemDetailBestLuckChanceValue(row, filters))), num: true },
       { label: "Open", className: "detail-action-cell", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
     ], (row) => `class="clickable-row" data-open-source="${escapeHtml(sourceLookupKey(row))}" tabindex="0" role="button"`)}
   `;
@@ -2401,6 +2450,7 @@ async function openItem(asset) {
   $("detailTitle").textContent = item.item;
   $("detailMeta").textContent = "Loading item details...";
   $("detailContent").innerHTML = "";
+  syncLuckInputs();
   if (!$("detailDialog").open) $("detailDialog").showModal();
   const payload = await detail(item.detailPath);
   state.activeDetail = {
@@ -2418,6 +2468,7 @@ async function openSource(key) {
   $("detailTitle").textContent = row.source;
   $("detailMeta").textContent = "Loading source drops...";
   $("detailContent").innerHTML = "";
+  syncLuckInputs();
   if (!$("detailDialog").open) $("detailDialog").showModal();
   const payload = await detail(row.detailPath);
   state.activeDetail = {
@@ -2432,6 +2483,7 @@ async function openSource(key) {
 
 function renderActiveDetail() {
   if (!$("detailDialog").open || !state.activeDetail) return;
+  syncLuckInputs();
   if (state.activeDetail.type === "item") renderItemDetail(state.activeDetail.payload);
   if (state.activeDetail.type === "source") renderSourceDetail(state.activeDetail.payload);
 }
@@ -2615,11 +2667,8 @@ function wireEvents() {
     renderBuilder();
   });
 
-  $("luckInput").addEventListener("input", () => {
-    const value = clampLuck($("luckInput").value);
-    state.currentLuck = value;
-    $("luckInput").value = String(value);
-    renderActiveDetail();
+  ["luckInput", "detailLuckInput"].forEach((id) => {
+    $(id).addEventListener("input", () => setCurrentLuck($(id).value));
   });
 
   document.body.addEventListener("click", (event) => {
@@ -2806,6 +2855,9 @@ function wireEvents() {
   });
 
   $("closeDetail").addEventListener("click", () => $("detailDialog").close());
+  $("detailDialog").addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) $("detailDialog").close();
+  });
   $("detailDialog").addEventListener("close", () => {
     state.activeDetail = null;
     hideChipPopover(true);

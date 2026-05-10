@@ -16,6 +16,8 @@ from loot_spawn_web import (
     filter_exact_source_rows,
     filter_item_source_rows,
     item_source_summary,
+    difficulty_sort_key,
+    map_sort_key,
     rows_with_luck,
     scan_luck,
     sort_detail_rows,
@@ -962,9 +964,49 @@ def best_item_source_row(base_rows: list[dict], source_row: dict) -> dict | None
     return best
 
 
-def public_item_source_row(row: dict, raw_row: dict | None = None) -> dict:
+def source_row_matches_summary(row: dict, source_row: dict) -> bool:
+    source_values = set(source_row.get("sourceValues") or [source_row["source"]])
+    return row["source_kind"] == source_row["sourceKind"] and row["source"] in source_values
+
+
+def public_item_scenario_best(row: dict, map_name: str, diff: str) -> dict:
+    public = {
+        "map": map_name,
+        "diff": diff,
+        "baseAtLeastOneValue": row["base_at_least_one"],
+        "chanceValue": row["dyn_at_least_one"],
+    }
+    return attach_luck_model(public, row)
+
+
+def item_source_scenario_bests(base_rows: list[dict], source_row: dict, index) -> list[dict]:
+    best_by_scenario: dict[tuple[str, str], dict] = {}
+    for row in base_rows:
+        if not source_row_matches_summary(row, source_row):
+            continue
+        row_maps = index.row_location_maps(row) if index else set(row["maps"])
+        if index and not row_maps:
+            continue
+        for map_name in row_maps:
+            for diff in row["diffs"]:
+                key = (map_name, diff)
+                best = best_by_scenario.get(key)
+                if best is None or row["dyn_at_least_one"] > best["dyn_at_least_one"]:
+                    best_by_scenario[key] = row
+    return [
+        public_item_scenario_best(best_by_scenario[(map_name, diff)], map_name, diff)
+        for map_name, diff in sorted(
+            best_by_scenario,
+            key=lambda value: (map_sort_key(value[0]), difficulty_sort_key(value[1])),
+        )
+    ]
+
+
+def public_item_source_row(row: dict, raw_row: dict | None = None, scenario_bests: list[dict] | None = None) -> dict:
     cleaned = dict(row)
     cleaned.pop("spawnLocations", None)
+    if scenario_bests:
+        cleaned["scenarioBests"] = scenario_bests
     return attach_luck_model(cleaned, raw_row)
 
 
@@ -1068,7 +1110,11 @@ def export_item_details(output_dir: Path, state: AppState, items: list[dict]) ->
             },
             "total": len(source_rows),
             "rows": [
-                public_item_source_row(source_row, best_item_source_row(base_rows, source_row))
+                public_item_source_row(
+                    source_row,
+                    best_item_source_row(base_rows, source_row),
+                    item_source_scenario_bests(base_rows, source_row, index),
+                )
                 for source_row in source_rows
             ],
         }
