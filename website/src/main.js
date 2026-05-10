@@ -52,7 +52,7 @@
 
 const FAVORITES_KEY = "darkloot:favorites:v1";
 const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
-const APP_BUILD_ID = "20260510-1";
+const APP_BUILD_ID = "20260510-2";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
 const BUILDER_PERK_LIMIT = 4;
@@ -61,6 +61,21 @@ const BUILDER_CONDITIONAL_STAT_PERKS = new Set([
 ]);
 const BUILDER_WEAPON_MASTERY_PERK_ID = "Id_Perk_WeaponMastery";
 const BUILDER_DEMON_ARMOR_PERK_ID = "Id_Perk_DemonArmor";
+const BUILDER_PERK_STAT_OVERRIDES = {
+  Id_Perk_DefenseMastery: [
+    { statKey: "ItemArmorRatingMod", label: "Armor Rating Bonus", value: 15, unit: "%" },
+  ],
+  Id_Perk_Malice: [
+    { statKey: "WillMod", label: "Will Bonus", value: 15, unit: "%" },
+  ],
+  Id_Perk_ProjectileResistance: [
+    { statKey: "ProjectileReduction", label: "Projectile Damage Reduction", value: 10, unit: "%" },
+  ],
+  Id_Perk_Swift: [
+    { statKey: "MoveSpeedArmorPenaltyReduction", label: "Armor Move Speed Penalty Reduction", value: 30, unit: "%" },
+  ],
+  Id_Perk_Jokester: [],
+};
 const PERK_ICON_ALIASES = {
   Id_Perk_ComboAttack: "CombinationAttack",
   Id_Perk_HideMastery: "HideExpert",
@@ -700,9 +715,18 @@ function builderPerkStatsArePassive(perk) {
   return perk && !perk.conditionalStats && !BUILDER_CONDITIONAL_STAT_PERKS.has(perk.id);
 }
 
+function builderPerkStatEntries(perk) {
+  if (!perk) return [];
+  if (Object.prototype.hasOwnProperty.call(BUILDER_PERK_STAT_OVERRIDES, perk.id)) {
+    return BUILDER_PERK_STAT_OVERRIDES[perk.id];
+  }
+  return builderPerkStatsArePassive(perk) ? perk.stats || [] : [];
+}
+
 function builderPerkSummary(perk) {
-  if (!builderPerkStatsArePassive(perk)) return "Conditional bonus";
-  return (perk.stats || []).map((stat) => `${stat.label} ${statValue(stat.value, stat.unit)}`).join(", ") || "No direct stat modifier";
+  const entries = builderPerkStatEntries(perk);
+  if (entries.length) return entries.map((stat) => `${stat.label} ${statValue(stat.value, stat.unit)}`).join(", ");
+  return builderPerkStatsArePassive(perk) ? "No direct stat modifier" : "Conditional bonus";
 }
 
 function statLabel(key) {
@@ -815,14 +839,22 @@ function builderStatMap() {
   (character?.baseStats || []).forEach((entry) => addBuilderStat(totals, entry, character.name));
   state.builder.perks.forEach((perkId) => {
     const perk = state.kit.perkById.get(perkId);
-    if (!builderPerkStatsArePassive(perk)) return;
-    (perk?.stats || []).forEach((entry) => addBuilderStat(totals, entry, perk.name));
+    builderPerkStatEntries(perk).forEach((entry) => addBuilderStat(totals, entry, perk.name));
   });
   Object.entries(state.builder.equipped).forEach(([slotId, asset]) => {
     if (!slotStatsAreActive(slotId)) return;
     const item = state.kit.itemByAsset.get(asset);
     addItemStats(totals, slotId, item);
   });
+  const armorMoveSpeedPenalty = activeArmorMoveSpeedPenalty();
+  const armorMoveSpeedPenaltyReduction = directStatValue(totals, "MoveSpeedArmorPenaltyReduction");
+  if (armorMoveSpeedPenalty < 0 && armorMoveSpeedPenaltyReduction > 0) {
+    addBuilderStat(totals, {
+      statKey: "MoveSpeed",
+      label: "Move Speed",
+      value: Math.abs(armorMoveSpeedPenalty) * (armorMoveSpeedPenaltyReduction / 100),
+    }, "Swift");
+  }
   return totals;
 }
 
@@ -851,6 +883,31 @@ function defaultSlotStatValue(slotId, statKey) {
 
 function directStatValue(totals, ...keys) {
   return keys.reduce((sum, key) => sum + Number(totals.get(key)?.value || 0), 0);
+}
+
+function statValueWithPercentMod(totals, statKey, modKey) {
+  return directStatValue(totals, statKey) * (1 + (directStatValue(totals, modKey) / 100));
+}
+
+function activeArmorMoveSpeedPenalty() {
+  return Object.entries(state.builder.equipped).reduce((sum, [slotId, asset]) => {
+    if (!slotStatsAreActive(slotId)) return sum;
+    const item = state.kit.itemByAsset.get(asset);
+    if (item?.itemType !== "Armor") return sum;
+    const primaryPenalty = (item.primary || []).reduce((primarySum, _entry, index) => {
+      const selected = selectedPrimaryEntry(slotId, index);
+      return selected?.statKey === "MoveSpeed" && Number(selected.value) < 0
+        ? primarySum + Number(selected.value)
+        : primarySum;
+    }, 0);
+    const secondaryPenalty = (item.secondaryPoolIds || []).reduce((secondarySum, _poolId, index) => {
+      const selected = selectedBonusEntry(slotId, index);
+      return selected?.statKey === "MoveSpeed" && Number(selected.value) < 0
+        ? secondarySum + Number(selected.value)
+        : secondarySum;
+    }, 0);
+    return sum + primaryPenalty + secondaryPenalty;
+  }, 0);
 }
 
 function curveKeys(tableName, rowName) {
@@ -893,9 +950,10 @@ function builderDerivedStatValues(totals, character) {
   const vigor = directStatValue(totals, "Vigor");
   const agility = directStatValue(totals, "Agility");
   const dexterity = directStatValue(totals, "Dexterity");
-  const will = directStatValue(totals, "Will");
+  const will = statValueWithPercentMod(totals, "Will", "WillMod");
   const knowledge = directStatValue(totals, "Knowledge");
   const resourcefulness = directStatValue(totals, "Resourcefulness");
+  values.set("Will", will);
 
   const maxHealthRating = (strength * 0.25) + (vigor * 0.75);
   const baseHealth = curveValue(
@@ -940,7 +998,8 @@ function builderDerivedStatValues(totals, character) {
   values.set("MagicalDamageBonusFromPower", magicalDamageFromPower);
   values.set("MagicalDamageBonusFromBonuses", magicalDamageFromBonuses);
 
-  const armorRating = directStatValue(totals, "ArmorRating");
+  const armorRating = statValueWithPercentMod(totals, "ArmorRating", "ItemArmorRatingMod");
+  values.set("ArmorRating", armorRating);
   const physicalReductionFromArmor = curvePercent("CT_ArmorRating", "PhysicalReduction", armorRating);
   const physicalReductionFromBonuses = directStatValue(totals, "PhysicalArmorReduction", "PhysicalArmorReductionBonus");
   values.set("PhysicalArmorReduction", physicalReductionFromArmor + physicalReductionFromBonuses);
