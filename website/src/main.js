@@ -837,10 +837,6 @@ function builderStatMap() {
   const totals = new Map();
   const character = selectedBuilderCharacter();
   (character?.baseStats || []).forEach((entry) => addBuilderStat(totals, entry, character.name));
-  state.builder.perks.forEach((perkId) => {
-    const perk = state.kit.perkById.get(perkId);
-    builderPerkStatEntries(perk).forEach((entry) => addBuilderStat(totals, entry, perk.name));
-  });
   Object.entries(state.builder.equipped).forEach(([slotId, asset]) => {
     if (!slotStatsAreActive(slotId)) return;
     const item = state.kit.itemByAsset.get(asset);
