@@ -867,6 +867,42 @@ def parse_loot_drop(path: Path, resolver: AssetResolver | None = None) -> LootDr
     )
 
 
+def single_item_fallback_choice_stats(drop: LootDropTable) -> list[ChoiceStat]:
+    real_choices = [choice for choice in drop.real_choices if 0 <= choice.grade <= MAX_LUCK_GRADE]
+    unique_items = {
+        (choice.item_asset, choice.item_name, choice.rarity)
+        for choice in real_choices
+    }
+    if len(unique_items) != 1 or not drop.empty_choices:
+        return []
+
+    counts = Counter(
+        (choice.item_asset, choice.item_name, choice.rarity, choice.item_count)
+        for choice in real_choices
+    )
+    total = sum(counts.values())
+    if total <= 0:
+        return []
+
+    categories = {
+        (choice.item_asset, choice.item_name, choice.rarity, choice.item_count): choice.category
+        for choice in drop.choice_stats
+    }
+    return [
+        ChoiceStat(
+            item_asset=item_asset,
+            item_name=item_name,
+            rarity=rarity,
+            grade=-1,
+            item_count=item_count,
+            choice_count=choice_count,
+            grade_total=total,
+            category=categories.get((item_asset, item_name, rarity, item_count), categorize_item(item_name)),
+        )
+        for (item_asset, item_name, rarity, item_count), choice_count in counts.items()
+    ]
+
+
 def parse_rate_table(path: Path) -> RateTable:
     obj = read_json_asset(path)
     asset = obj.get("Name") or path.stem
@@ -1015,6 +1051,14 @@ def build_database(root: Path, luck: int = 500) -> ScanResult:
         key: grade_probabilities(rate.rates, luck)
         for key, rate in rates.items()
     }
+    drop_choices_by_grade: dict[str, dict[int, list[ChoiceStat]]] = {}
+    drop_single_item_fallbacks: dict[str, list[ChoiceStat]] = {}
+    for key, drop in drops.items():
+        by_grade: dict[int, list[ChoiceStat]] = defaultdict(list)
+        for choice in drop.choice_stats:
+            by_grade[choice.grade].append(choice)
+        drop_choices_by_grade[key] = by_grade
+        drop_single_item_fallbacks[key] = single_item_fallback_choice_stats(drop)
 
     for spawner in spawner_entries:
         group_key = spawner.group_asset.lower()
@@ -1051,92 +1095,99 @@ def build_database(root: Path, luck: int = 500) -> ScanResult:
                     continue
 
                 base_probs, dyn_probs = rate_prob_cache[rate.asset.lower()]
+                choices_by_grade = drop_choices_by_grade.get(drop.asset.lower(), {})
+                fallback_choices = drop_single_item_fallbacks.get(drop.asset.lower(), [])
 
-                for choice in drop.choice_stats:
-                    grade = choice.grade
-                    grade_total = choice.grade_total
-                    if grade_total <= 0:
+                for grade in range(MAX_LUCK_GRADE + 1):
+                    choices = choices_by_grade.get(grade, [])
+                    if not choices and grade > 0:
+                        choices = fallback_choices
+                    if not choices or (base_probs[grade] <= 0 and dyn_probs[grade] <= 0):
                         continue
-                    per_choice = choice.choice_count / grade_total
-                    base_per_roll = base_probs[grade] * per_choice
-                    dyn_per_roll = dyn_probs[grade] * per_choice
-                    if base_per_roll <= 0 and dyn_per_roll <= 0:
-                        continue
-                    rolls = max(1, int(group_entry.rolls))
-                    base_at_least_one = 1.0 - math.pow(max(0.0, 1.0 - base_per_roll), rolls)
-                    dyn_at_least_one = 1.0 - math.pow(max(0.0, 1.0 - dyn_per_roll), rolls)
-                    category = choice.category
-                    key = (
-                        choice.item_asset,
-                        choice.rarity,
-                        category,
-                        spawner.source_entity,
-                        spawner.source_kind,
-                        map_code,
-                        diff,
-                        map_name,
-                        group.asset,
-                        drop.asset,
-                        rate.asset,
-                        grade,
-                        choice.item_count,
-                        choice.choice_count,
-                        grade_total,
-                        rolls,
-                        round(base_per_roll, 14),
-                        round(dyn_per_roll, 14),
-                        round(base_at_least_one, 14),
-                        round(dyn_at_least_one, 14),
-                    )
-                    row = aggregate_rows.get(key)
-                    if not row:
-                        row = {
-                            "item": choice.item_name,
-                            "item_asset": choice.item_asset,
-                            "rarity": choice.rarity,
-                            "cat": category,
-                            "source": spawner.source_entity,
-                            "source_kind": spawner.source_kind,
-                            "spawners": set(),
-                            "spawner": "",
-                            "group": group.display,
-                            "group_asset": group.asset,
-                            "loot_table": drop.display,
-                            "loot_asset": drop.asset,
-                            "rate_tables": set(),
-                            "rate_table": "",
-                            "rate_asset": "",
-                            "rate_key": rate.asset.lower(),
-                            "maps": set(),
-                            "map": "",
-                            "diffs": set(),
-                            "diff": "",
-                            "map_codes": set(),
-                            "map_code": "",
-                            "grade": grade,
-                            "choice_count": choice.choice_count,
-                            "grade_choices": grade_total,
-                            "empty_choices": drop.empty_choices,
-                            "item_count": choice.item_count,
-                            "rolls": rolls,
-                            "spawn_rate": 0.0,
-                            "choice_fraction": per_choice,
-                            "base_per_roll": base_per_roll,
-                            "dyn_per_roll": dyn_per_roll,
-                            "base_at_least_one": base_at_least_one,
-                            "dyn_at_least_one": dyn_at_least_one,
-                            "base_expected": base_per_roll * rolls,
-                            "dyn_expected": dyn_per_roll * rolls,
-                            "merged_rows": 0,
-                        }
-                        aggregate_rows[key] = row
-                    row["maps"].add(map_name)
-                    row["diffs"].add(diff)
-                    row["map_codes"].add(map_code)
-                    row["rate_tables"].add(rate.display)
-                    row["spawners"].add(humanize_asset(spawner.spawner_asset))
-                    row["spawn_rate"] += spawner.spawn_rate
-                    row["merged_rows"] += 1
+                    for choice in choices:
+                        grade_total = choice.grade_total
+                        if grade_total <= 0:
+                            continue
+                        per_choice = choice.choice_count / grade_total
+                        base_per_roll = base_probs[grade] * per_choice
+                        dyn_per_roll = dyn_probs[grade] * per_choice
+                        if base_per_roll <= 0 and dyn_per_roll <= 0:
+                            continue
+                        rolls = max(1, int(group_entry.rolls))
+                        base_at_least_one = 1.0 - math.pow(max(0.0, 1.0 - base_per_roll), rolls)
+                        dyn_at_least_one = 1.0 - math.pow(max(0.0, 1.0 - dyn_per_roll), rolls)
+                        category = choice.category
+                        key = (
+                            choice.item_asset,
+                            choice.rarity,
+                            category,
+                            spawner.source_entity,
+                            spawner.source_kind,
+                            map_code,
+                            diff,
+                            map_name,
+                            group.asset,
+                            drop.asset,
+                            rate.asset,
+                            grade,
+                            choice.item_count,
+                            choice.choice_count,
+                            grade_total,
+                            rolls,
+                            round(base_per_roll, 14),
+                            round(dyn_per_roll, 14),
+                            round(base_at_least_one, 14),
+                            round(dyn_at_least_one, 14),
+                        )
+                        row = aggregate_rows.get(key)
+                        if not row:
+                            row = {
+                                "item": choice.item_name,
+                                "item_asset": choice.item_asset,
+                                "rarity": choice.rarity,
+                                "cat": category,
+                                "source": spawner.source_entity,
+                                "source_kind": spawner.source_kind,
+                                "spawners": set(),
+                                "spawner": "",
+                                "group": group.display,
+                                "group_asset": group.asset,
+                                "loot_table": drop.display,
+                                "loot_asset": drop.asset,
+                                "rate_tables": set(),
+                                "rate_table": "",
+                                "rate_asset": "",
+                                "rate_key": rate.asset.lower(),
+                                "maps": set(),
+                                "map": "",
+                                "diffs": set(),
+                                "diff": "",
+                                "map_codes": set(),
+                                "map_code": "",
+                                "grade": grade,
+                                "choice_count": choice.choice_count,
+                                "grade_choices": grade_total,
+                                "empty_choices": drop.empty_choices,
+                                "item_count": choice.item_count,
+                                "rolls": rolls,
+                                "spawn_rate": 0.0,
+                                "choice_fraction": per_choice,
+                                "base_per_roll": base_per_roll,
+                                "dyn_per_roll": dyn_per_roll,
+                                "base_at_least_one": base_at_least_one,
+                                "dyn_at_least_one": dyn_at_least_one,
+                                "base_expected": base_per_roll * rolls,
+                                "dyn_expected": dyn_per_roll * rolls,
+                                "merged_rows": 0,
+                            }
+                            aggregate_rows[key] = row
+                        row["maps"].add(map_name)
+                        row["diffs"].add(diff)
+                        row["map_codes"].add(map_code)
+                        row["rate_tables"].add(rate.display)
+                        row["spawners"].add(humanize_asset(spawner.spawner_asset))
+                        row["spawn_rate"] += spawner.spawn_rate
+                        row["merged_rows"] += 1
 
     if missing_groups:
         warnings.append(f"Missing {len(missing_groups)} referenced loot groups.")

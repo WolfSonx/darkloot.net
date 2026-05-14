@@ -290,6 +290,21 @@ h1 {
   text-transform: uppercase;
 }
 
+.header-updated em {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border: 1px solid rgba(201, 166, 89, .42);
+  border-radius: 999px;
+  background: rgba(201, 166, 89, .10);
+  color: var(--gold);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .header-updated strong {
   display: block;
   margin-top: 3px;
