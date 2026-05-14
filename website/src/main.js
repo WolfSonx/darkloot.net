@@ -52,7 +52,7 @@
 
 const FAVORITES_KEY = "darkloot:favorites:v1";
 const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
-const APP_BUILD_ID = "20260510-2";
+const APP_BUILD_ID = "20260515-2";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
 const BUILDER_PERK_LIMIT = 4;
@@ -1154,6 +1154,42 @@ function selected(id) {
   return $(id).value || "All";
 }
 
+function scopedChipValues(value, selectedValue) {
+  const values = splitValues(value);
+  return selectedValue !== "All" && values.includes(selectedValue)
+    ? [selectedValue]
+    : values;
+}
+
+function itemDetailFiltersFromMainPage() {
+  return {
+    kind: "All",
+    map: state.activeTab === "items" ? selected("itemMap") : "All",
+    diff: state.activeTab === "items" ? selected("itemDiff") : DEFAULT_DIFFICULTY,
+  };
+}
+
+function sourceDetailFiltersFromMainPage() {
+  const filters = {
+    rarity: "All",
+    category: "All",
+    map: "All",
+    diff: DEFAULT_DIFFICULTY,
+  };
+  if (state.activeDetail?.type === "item") {
+    const itemFilters = selectedItemDetailFilters();
+    filters.map = itemFilters.map;
+    filters.diff = itemFilters.diff;
+    return filters;
+  }
+  if (state.activeTab === "sources") {
+    filters.map = selected("sourceMap");
+    filters.diff = selected("sourceDiff");
+    return filters;
+  }
+  return filters;
+}
+
 function itemSearchGroups(row) {
   return [
     [row.item, row.itemAsset, row.rarity, row.category],
@@ -1546,6 +1582,22 @@ function groupedSourceDetailRows(rows) {
   });
 }
 
+function scopedSourceDetailRows(rows, filters) {
+  return (rows || [])
+    .filter((row) => sourceDetailFilterMatches(row, { ...filters, rarity: "All", category: "All" }))
+    .map((row) => {
+      const maps = scopedChipValues(row.maps || row.map, filters.map);
+      const diffs = scopedChipValues(row.diffs || row.diff, filters.diff);
+      return {
+        ...row,
+        maps,
+        map: maps.join(", "),
+        diffs,
+        diff: diffs.join(", "),
+      };
+    });
+}
+
 function sourceDetailModel(payload) {
   const cacheKey = String(state.currentLuck);
   if (payload._sourceDetailModel?.cacheKey === cacheKey) return payload._sourceDetailModel;
@@ -1557,6 +1609,19 @@ function sourceDetailModel(payload) {
     searchIndex: buildSearchIndex(groupedRows, sourceDetailSearchGroups),
   };
   payload._sourceDetailModel = model;
+  return model;
+}
+
+function sourceDetailScopedModel(payload, filters) {
+  const cacheKey = JSON.stringify([state.currentLuck, filters.map, filters.diff]);
+  if (payload._sourceDetailScopedModel?.cacheKey === cacheKey) return payload._sourceDetailScopedModel;
+  const groupedRows = groupedSourceDetailRows(scopedSourceDetailRows(payload.rows || [], filters));
+  const model = {
+    cacheKey,
+    groupedRows,
+    searchIndex: buildSearchIndex(groupedRows, sourceDetailSearchGroups),
+  };
+  payload._sourceDetailScopedModel = model;
   return model;
 }
 
@@ -1597,6 +1662,18 @@ function sourceDetailFilterMatches(row, filters) {
   if (filters.map !== "All" && !splitValues(row.maps || row.map).includes(filters.map)) return false;
   if (filters.diff !== "All" && !splitValues(row.diffs || row.diff).includes(filters.diff)) return false;
   return true;
+}
+
+function scopedItemDetailRow(row, filters) {
+  const maps = scopedChipValues(row.mapValues || row.maps, filters.map);
+  const diffs = scopedChipValues(row.diffValues || row.diffs, filters.diff);
+  return {
+    ...row,
+    mapValues: maps,
+    maps,
+    diffValues: diffs,
+    diffs,
+  };
 }
 
 function itemDetailScenarioMatches(row, filters) {
@@ -1832,6 +1909,8 @@ function favoriteButton(active, type, key, label) {
 }
 
 function renderItems() {
+  const mapFilter = selected("itemMap");
+  const diffFilter = selected("itemDiff");
   const rows = sortedRows(filteredItems(), "items");
   const selectedRows = rows.slice(0, MAX_ROWS);
   $("itemTableMeta").innerHTML = tableMeta(rows, selectedRows);
@@ -1842,8 +1921,8 @@ function renderItems() {
         <td>${itemNameCell(row)}</td>
         <td>${rarity(row.rarity)}</td>
         <td>${categoryChip(row.category)}</td>
-        <td>${chips(row.maps || row.map, "map-chip")}</td>
-        <td>${chips(row.diffs || row.diff, "diff-chip")}</td>
+        <td>${chips(scopedChipValues(row.maps || row.map, mapFilter), "map-chip")}</td>
+        <td>${chips(scopedChipValues(row.diffs || row.diff, diffFilter), "diff-chip")}</td>
         <td class="num">${escapeHtml(row.sourceCount)}</td>
         <td class="action-cell"><button data-open-item="${escapeHtml(row.itemAsset)}">Sources</button></td>
       </tr>
@@ -1852,6 +1931,8 @@ function renderItems() {
 }
 
 function renderSources() {
+  const mapFilter = selected("sourceMap");
+  const diffFilter = selected("sourceDiff");
   const rows = sortedRows(filteredSources(), "sources");
   const selectedRows = rows.slice(0, MAX_ROWS);
   $("sourceTableMeta").innerHTML = tableMeta(rows, selectedRows);
@@ -1861,8 +1942,8 @@ function renderSources() {
         <td>${favoriteButton(isFavoriteSource(row.source, row.sourceKind), "source", sourceKey(row.source, row.sourceKind), "Favorite source")}</td>
         <td>${escapeHtml(row.source)}</td>
         <td>${kindChip(row.sourceKind)}</td>
-        <td>${chips(row.mapValues || row.maps, "map-chip")}</td>
-        <td>${chips(row.diffValues || row.diffs, "diff-chip")}</td>
+        <td>${chips(scopedChipValues(row.mapValues || row.maps, mapFilter), "map-chip")}</td>
+        <td>${chips(scopedChipValues(row.diffValues || row.diffs, diffFilter), "diff-chip")}</td>
         <td class="num">${escapeHtml(row.itemCount)}</td>
         <td class="action-cell"><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
       </tr>
@@ -2437,7 +2518,10 @@ function renderSourceDetail(payload) {
   const searchParts = terms(search);
   const filters = selectedSourceDetailFilters();
   const sort = state.activeDetail?.type === "source" ? state.activeDetail.sort || { key: "chance", direction: "desc" } : { key: "chance", direction: "desc" };
-  const { groupedRows, filterOptions, searchIndex } = sourceDetailModel(payload);
+  const model = sourceDetailModel(payload);
+  const scopedModel = sourceDetailScopedModel(payload, filters);
+  const { groupedRows, searchIndex } = scopedModel;
+  const { filterOptions } = model;
   const rows = groupedRows
     .filter((row) => matchesSearchGroups(searchParts, searchIndex.get(row)))
     .filter((row) => sourceDetailFilterMatches(row, filters))
@@ -2452,11 +2536,11 @@ function renderSourceDetail(payload) {
     })
     .map((entry) => entry.row);
   const limited = rows.slice(0, 500);
-  const loadedRows = Number(payload.rowsLimited || payload.rows?.length || groupedRows.length);
+  const loadedRows = Number(payload.rowsLimited || payload.rows?.length || model.groupedRows.length);
   const totalRows = Number(payload.total || loadedRows);
   const loadedText = loadedRows < totalRows
     ? `Loaded top ${loadedRows.toLocaleString()} of ${totalRows.toLocaleString()} grouped rows`
-    : `${groupedRows.length.toLocaleString()} grouped rows`;
+    : `${model.groupedRows.length.toLocaleString()} grouped rows`;
   const showingText = `Showing ${limited.length.toLocaleString()} of ${rows.length.toLocaleString()} matching rows | ${loadedText}`;
   $("detailTitle").textContent = payload.source;
   $("detailMeta").textContent = `${payload.sourceKind} | ${totalRows.toLocaleString()} drop rows | ${payload.spawnLocationCount || 0} known spawns`;
@@ -2485,8 +2569,8 @@ function renderSourceDetail(payload) {
       { label: "Amount", sortKey: "amount", html: (row) => escapeHtml(amountText(row.itemCounts || row.itemCount)), num: true },
       { label: "Rarity", sortKey: "rarity", html: (row) => rarity(row.rarity) },
       { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
-      { label: "Maps", sortKey: "maps", html: (row) => chips(row.maps || row.map, "map-chip") },
-      { label: "Difficulties", sortKey: "difficulties", html: (row) => chips(row.diffs || row.diff, "diff-chip") },
+      { label: "Maps", sortKey: "maps", html: (row) => chips(scopedChipValues(row.maps || row.map, filters.map), "map-chip") },
+      { label: "Difficulties", sortKey: "difficulties", html: (row) => chips(scopedChipValues(row.diffs || row.diff, filters.diff), "diff-chip") },
       { label: "Base Chance", sortKey: "baseChance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
       { label: "Luck Chance", sortKey: "chance", html: (row) => escapeHtml(chanceText(row)), num: true },
     ])}
@@ -2497,10 +2581,11 @@ function renderItemDetail(payload) {
   const search = state.activeDetail?.type === "item" ? state.activeDetail.search || "" : "";
   const searchParts = terms(search);
   const filters = selectedItemDetailFilters();
-  const { baseRows, filterOptions, searchIndex } = itemDetailModel(payload);
+  const { baseRows, filterOptions } = itemDetailModel(payload);
   const rows = baseRows
-    .filter((row) => matchesSearchGroups(searchParts, searchIndex.get(row)))
     .filter((row) => itemDetailFilterMatches(row, filters))
+    .map((row) => scopedItemDetailRow(row, filters))
+    .filter((row) => matchesSearchGroups(searchParts, itemDetailSearchGroups(row)))
     .sort((a, b) => itemDetailBestLuckChanceValue(b, filters) - itemDetailBestLuckChanceValue(a, filters));
   const limited = rows.slice(0, 500);
   $("detailTitle").textContent = payload.item?.item || "Item";
@@ -2534,8 +2619,8 @@ function renderItemDetail(payload) {
     ${detailTable(limited, [
       { label: "Source", key: "source" },
       { label: "Kind", html: (row) => kindChip(row.sourceKind) },
-      { label: "Maps", html: (row) => chips(row.mapValues || row.maps, "map-chip") },
-      { label: "Difficulties", html: (row) => chips(row.diffValues || row.diffs, "diff-chip") },
+      { label: "Maps", html: (row) => chips(scopedChipValues(row.mapValues || row.maps, filters.map), "map-chip") },
+      { label: "Difficulties", html: (row) => chips(scopedChipValues(row.diffValues || row.diffs, filters.diff), "diff-chip") },
       { label: "Best Base Chance", html: (row) => escapeHtml(percent(itemDetailBestBaseChanceValue(row, filters))), num: true },
       { label: "Best Chance With Luck", html: (row) => escapeHtml(percent(itemDetailBestLuckChanceValue(row, filters))), num: true },
       { label: "Open", className: "detail-action-cell", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
@@ -2556,7 +2641,7 @@ async function openItem(asset) {
     type: "item",
     payload,
     search: "",
-    filters: { kind: "All", map: "All", diff: DEFAULT_DIFFICULTY },
+    filters: itemDetailFiltersFromMainPage(),
   };
   renderItemDetail(payload);
 }
@@ -2574,7 +2659,7 @@ async function openSource(key) {
     type: "source",
     payload,
     search: "",
-    filters: { rarity: "All", category: "All", map: "All", diff: DEFAULT_DIFFICULTY },
+    filters: sourceDetailFiltersFromMainPage(),
     sort: { key: "chance", direction: "desc" },
   };
   renderSourceDetail(payload);
