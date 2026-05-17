@@ -937,13 +937,17 @@ th.num .sort-button {
 }
 
 .item-thumb-weapon-equipment {
-  width: min(99%, max(66%, calc(var(--item-inventory-width, 1) * 52%)));
-  height: min(90%, max(64%, calc(var(--item-inventory-height, 1) * 30%)));
+  width: 100%;
+  height: 100%;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .item-thumb-weapon-equipment img {
-  transform: scaleX(1.12);
+  transform: none;
   transform-origin: center;
+  object-position: center;
 }
 
 .item-thumb-common { border-color: rgba(232, 226, 211, .72); }
@@ -953,6 +957,19 @@ th.num .sort-button {
 .item-thumb-legendary,
 .item-thumb-unique { border-color: rgba(255, 220, 115, .88); }
 .item-thumb-artifact { border-color: rgba(235, 91, 91, .86); }
+
+.builder-slot.slot-rarity-common { border-color: rgba(232, 226, 211, .72); }
+.builder-slot.slot-rarity-uncommon { border-color: rgba(87, 198, 107, .78); }
+.builder-slot.slot-rarity-rare { border-color: rgba(93, 148, 255, .82); }
+.builder-slot.slot-rarity-epic { border-color: rgba(174, 108, 255, .82); }
+.builder-slot.slot-rarity-legendary,
+.builder-slot.slot-rarity-unique { border-color: rgba(255, 220, 115, .88); }
+.builder-slot.slot-rarity-artifact { border-color: rgba(235, 91, 91, .86); }
+
+.builder-slot.weapon .item-thumb-weapon-equipment {
+  border-color: transparent;
+  box-shadow: none;
+}
 
 .item-detail-hero {
   display: grid;
@@ -1295,7 +1312,7 @@ th.num .sort-button {
     ". . hands hands . . legs legs . . feet feet . ."
     ". . hands hands . . legs legs . . feet feet . .";
   gap: 14px;
-  aspect-ratio: 14 / 10.2;
+  aspect-ratio: 14 / 9.4;
   min-height: 0;
   padding: 22px 22px 28px;
 }
@@ -1402,6 +1419,7 @@ th.num .sort-button {
 
 .builder-slot.weapon .builder-slot-art {
   top: 30px;
+  bottom: 24px;
 }
 
 .builder-slot-label {
@@ -1723,6 +1741,22 @@ th.num .sort-button {
   grid-template-columns: minmax(0, 1fr) 92px;
   gap: 8px;
   align-items: end;
+}
+
+.builder-bonus-pick,
+.builder-bonus-row > label {
+  display: grid;
+  gap: 5px;
+}
+
+.builder-bonus-search {
+  min-height: 30px;
+  font-size: 12px;
+}
+
+.builder-bonus-pick small {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .builder-bonus-empty {
@@ -2174,18 +2208,18 @@ dialog::backdrop {
 
   .builder-slot.weapon .builder-slot-art {
     top: 24px;
-    bottom: 18px;
+    bottom: 24px;
   }
 
   .builder-slot.weapon .item-thumb-weapon-equipment {
-    width: min(99%, max(76%, calc(var(--item-inventory-width, 1) * 58%)));
-    height: min(90%, max(70%, calc(var(--item-inventory-height, 1) * 34%)));
+    width: 100%;
+    height: 100%;
   }
 
   .builder-slot.weapon-tall .item-thumb-weapon-equipment,
   .builder-slot.weapon-extra-tall .item-thumb-weapon-equipment {
-    width: min(99%, max(80%, calc(var(--item-inventory-width, 1) * 62%)));
-    height: min(94%, max(76%, calc(var(--item-inventory-height, 1) * 38%)));
+    width: 100%;
+    height: 100%;
   }
 
   .builder-slot.weapon .equipment-ghost {

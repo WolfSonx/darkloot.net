@@ -102,6 +102,12 @@ const BUILDER_SLOTS = [
   { id: "ring1", label: "Ring 1", accepts: ["Ring"], area: "ring1", kind: "small" },
   { id: "ring2", label: "Ring 2", accepts: ["Ring"], area: "ring2", kind: "small" },
 ];
+const BUILDER_WEAPON_GRID = {
+  weapon1Primary: { column: 1, row: 1 },
+  weapon1Secondary: { column: 3, row: 1 },
+  weapon2Primary: { column: 11, row: 1 },
+  weapon2Secondary: { column: 13, row: 1 },
+};
 const BUILDER_STAT_ROWS = [
   { key: "Strength", label: "Strength" },
   { key: "Vigor", label: "Vigor" },
@@ -924,10 +930,20 @@ function primaryStatIdentitiesForItem(item) {
   return new Set((item?.primary || []).map(statIdentity).filter(Boolean));
 }
 
+function bonusOptionText(option) {
+  return option?.label || statLabel(statIdentity(option));
+}
+
 function secondaryOptionsForItem(item, poolId) {
   const pool = state.kit.secondaryPools[poolId];
   const primaryStats = primaryStatIdentitiesForItem(item);
-  return (pool?.options || []).filter((option) => !primaryStats.has(statIdentity(option)));
+  return (pool?.options || [])
+    .filter((option) => !primaryStats.has(statIdentity(option)))
+    .sort((a, b) => {
+      const labelCompare = bonusOptionText(a).localeCompare(bonusOptionText(b), undefined, { sensitivity: "base" });
+      if (labelCompare) return labelCompare;
+      return String(a.propertyId || "").localeCompare(String(b.propertyId || ""));
+    });
 }
 
 function addBuilderStat(totals, entry, source) {
@@ -1485,6 +1501,21 @@ function builderWeaponSizeClass(item) {
   if (inventoryHeight >= 5 || aspect <= 0.28) return "weapon-extra-tall";
   if (inventoryHeight >= 4 || aspect <= 0.56) return "weapon-tall";
   return "weapon-compact";
+}
+
+function builderWeaponGridStyle(slot, item) {
+  const anchor = BUILDER_WEAPON_GRID[slot.id];
+  if (!anchor) return `grid-area: ${slot.area}`;
+  const art = item ? itemArt(item) : null;
+  const inventoryHeight = item ? Number(item?.inventory?.height || 2) : 2;
+  const iconHeight = item ? Number(art?.iconSize?.height || inventoryHeight * 90) : inventoryHeight * 90;
+  const weaponRows = Math.max(inventoryHeight, Math.ceil(iconHeight / 90));
+  const rowSpan = Math.max(2, Math.min(6, Math.round(weaponRows) + (item ? 1 : 0)));
+  return [
+    "grid-area: auto",
+    `grid-column: ${anchor.column} / span 2`,
+    `grid-row: ${anchor.row} / span ${rowSpan}`,
+  ].join(";");
 }
 
 function itemThumbnail(row, variant = "") {
@@ -2364,14 +2395,18 @@ function renderBuilderEquipment() {
     const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
     const blockReason = weaponSlotBlockReason(slot.id);
     const sizeClass = slot.kind === "weapon" && item ? builderWeaponSizeClass(item) : "";
+    const rarityClass = slot.kind === "weapon" && item?.rarity ? `slot-rarity-${chipClass(item.rarity)}` : "";
+    const slotStyle = slot.kind === "weapon"
+      ? builderWeaponGridStyle(slot, item)
+      : `grid-area: ${slot.area}`;
     const art = item
       ? itemThumbnail(item, slot.kind === "weapon" ? "equipment weapon-equipment" : "equipment")
       : `<span class="equipment-ghost equipment-ghost-${escapeHtml(slot.id)}" aria-hidden="true"></span>`;
     return `
       <button
         type="button"
-        class="builder-slot builder-slot-${escapeHtml(slot.id)} ${slot.kind || ""} ${sizeClass} ${state.builder.selectedSlot === slot.id ? "active" : ""} ${slot.weaponSet === state.builder.activeWeaponSet ? "active-set" : ""} ${item ? "filled" : ""} ${blockReason ? "blocked" : ""}"
-        style="grid-area: ${escapeHtml(slot.area)}"
+        class="builder-slot builder-slot-${escapeHtml(slot.id)} ${slot.kind || ""} ${sizeClass} ${rarityClass} ${state.builder.selectedSlot === slot.id ? "active" : ""} ${slot.weaponSet === state.builder.activeWeaponSet ? "active-set" : ""} ${item ? "filled" : ""} ${blockReason ? "blocked" : ""}"
+        style="${escapeHtml(slotStyle)}"
         data-builder-slot="${escapeHtml(slot.id)}"
         aria-pressed="${state.builder.selectedSlot === slot.id ? "true" : "false"}"
         aria-label="${escapeHtml(builderSlotAriaLabel(slot, item, blockReason))}"
@@ -2391,18 +2426,39 @@ function bonusSelect(slotId, item, poolId, index) {
   const value = Number.isFinite(Number(selectedEntry.value))
     ? Number(selectedEntry.value)
     : Number(selectedOption?.max ?? selectedOption?.min ?? 0);
+  const selectId = `builder-bonus-select-${slotId}-${index}`;
+  const searchId = `builder-bonus-search-${slotId}-${index}`;
   return `
     <div class="builder-bonus-row">
-      <label>Bonus ${index + 1}
-        <select data-builder-bonus-select="${escapeHtml(slotId)}" data-bonus-index="${index}">
+      <div class="builder-bonus-pick">
+        <label for="${escapeHtml(selectId)}">Bonus ${index + 1}</label>
+        <input
+          id="${escapeHtml(searchId)}"
+          class="builder-bonus-search"
+          type="search"
+          autocomplete="off"
+          placeholder="Search stats"
+          aria-label="Search bonus ${index + 1} stats"
+          data-builder-bonus-search="${escapeHtml(slotId)}"
+          data-bonus-index="${index}">
+        <select id="${escapeHtml(selectId)}" data-builder-bonus-select="${escapeHtml(slotId)}" data-bonus-index="${index}">
           <option value="" ${selectedOption ? "" : "selected"}>None</option>
-          ${options.map((option) => `
-            <option value="${escapeHtml(option.propertyId)}" ${option.propertyId === selectedEntry.propertyId ? "selected" : ""}>
-              ${escapeHtml(option.label)} (${escapeHtml(statRange(option))})
-            </option>
-          `).join("")}
+          ${options.map((option) => {
+            const optionLabel = bonusOptionText(option);
+            const optionText = `${optionLabel} (${statRange(option)})`;
+            const searchText = `${optionLabel} ${statRange(option)} ${option.propertyId || ""}`;
+            return `
+              <option
+                value="${escapeHtml(option.propertyId)}"
+                data-search-text="${escapeHtml(searchText.toLowerCase())}"
+                ${option.propertyId === selectedEntry.propertyId ? "selected" : ""}>
+                ${escapeHtml(optionText)}
+              </option>
+            `;
+          }).join("")}
         </select>
-      </label>
+        <small data-builder-bonus-search-empty hidden>No matching stats.</small>
+      </div>
       <label>Value
         <input
           type="number"
@@ -2785,6 +2841,28 @@ function renderItemDetail(payload) {
   `;
 }
 
+function filterBuilderBonusSelect(input) {
+  const row = input.closest(".builder-bonus-row");
+  const select = row?.querySelector("select[data-builder-bonus-select]");
+  if (!select) return;
+  const query = input.value.trim().toLowerCase();
+  let visibleCount = 0;
+  [...select.options].forEach((option) => {
+    if (!option.value) {
+      option.hidden = false;
+      option.disabled = false;
+      return;
+    }
+    const matches = !query || (option.dataset.searchText || option.textContent || "").toLowerCase().includes(query);
+    const keepSelected = option.selected;
+    option.hidden = !matches && !keepSelected;
+    option.disabled = !matches && !keepSelected;
+    if (matches) visibleCount += 1;
+  });
+  const empty = row.querySelector("[data-builder-bonus-search-empty]");
+  if (empty) empty.hidden = !query || visibleCount > 0;
+}
+
 async function openItem(asset) {
   const item = state.itemByAsset.get(asset);
   if (!item) return;
@@ -3148,6 +3226,9 @@ function wireEvents() {
         restored.focus();
         restored.setSelectionRange(position, position);
       }
+    }
+    if (input.dataset?.builderBonusSearch) {
+      filterBuilderBonusSelect(input);
     }
   });
 
