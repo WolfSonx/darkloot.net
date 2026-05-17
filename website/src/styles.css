@@ -1422,6 +1422,16 @@ th.num .sort-button {
   bottom: 24px;
 }
 
+.builder-slot.weapon-extra-tall .builder-slot-art {
+  top: 40px;
+  bottom: 42px;
+}
+
+.builder-slot.weapon-extra-tall .item-thumb-weapon-equipment img {
+  width: 90%;
+  height: 92%;
+}
+
 .builder-slot-label {
   position: absolute;
   z-index: 4;
@@ -1754,6 +1764,50 @@ th.num .sort-button {
   font-size: 12px;
 }
 
+.builder-bonus-native-select {
+  display: none;
+}
+
+.builder-bonus-menu {
+  display: grid;
+  gap: 4px;
+  max-height: 210px;
+  overflow: auto;
+  border: 1px solid rgba(83, 105, 128, .72);
+  border-radius: 6px;
+  background: rgba(9, 14, 20, .98);
+  padding: 5px;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, .28);
+}
+
+.builder-bonus-menu[hidden] {
+  display: none;
+}
+
+.builder-bonus-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 30px;
+  border-color: rgba(83, 105, 128, .48);
+  background: rgba(16, 25, 37, .9);
+  text-align: left;
+  box-shadow: none;
+}
+
+.builder-bonus-option:hover,
+.builder-bonus-option.selected {
+  border-color: rgba(75, 214, 188, .68);
+  background: rgba(75, 214, 188, .14);
+  transform: none;
+}
+
+.builder-bonus-option small {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .builder-bonus-pick small {
   color: var(--muted);
   font-size: 11px;
@@ -1786,7 +1840,8 @@ th.num .sort-button {
   position: absolute;
   z-index: 8;
   top: 54px;
-  right: 12px;
+  left: 12px;
+  right: auto;
   width: min(430px, calc(100% - 24px));
   max-height: calc(100% - 72px);
   overflow: auto;
@@ -2209,6 +2264,16 @@ dialog::backdrop {
   .builder-slot.weapon .builder-slot-art {
     top: 24px;
     bottom: 24px;
+  }
+
+  .builder-slot.weapon-extra-tall .builder-slot-art {
+    top: 30px;
+    bottom: 32px;
+  }
+
+  .builder-slot.weapon-extra-tall .item-thumb-weapon-equipment img {
+    width: 90%;
+    height: 90%;
   }
 
   .builder-slot.weapon .item-thumb-weapon-equipment {

@@ -54,7 +54,8 @@ const FAVORITES_KEY = "darkloot:favorites:v1";
 const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
 const SHARED_KIT_PARAM = "kit";
 const SHARED_KIT_VERSION = 1;
-const APP_BUILD_ID = "20260515-2";
+const APP_BUILD_ID = "20260518-1";
+const SITE_UPDATED_AT = "2026-05-18T00:00:00+03:00";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
 const BUILDER_PERK_LIMIT = 4;
@@ -1248,7 +1249,7 @@ async function loadData() {
   state.sourceByKey = new Map(state.sources.map((row) => [sourceKey(row.source, row.sourceKind), row]));
   $("dataStatus").textContent = "";
   syncLuckInputs();
-  $("updatedAt").textContent = formatDate(state.manifest.generatedAt);
+  $("updatedAt").textContent = formatDate(SITE_UPDATED_AT);
   fillFilters();
   await applySharedBuilderKitFromLocation();
   render();
@@ -2428,20 +2429,33 @@ function bonusSelect(slotId, item, poolId, index) {
     : Number(selectedOption?.max ?? selectedOption?.min ?? 0);
   const selectId = `builder-bonus-select-${slotId}-${index}`;
   const searchId = `builder-bonus-search-${slotId}-${index}`;
+  const menuId = `builder-bonus-menu-${slotId}-${index}`;
+  const selectedText = selectedOption ? `${bonusOptionText(selectedOption)} (${statRange(selectedOption)})` : "";
   return `
     <div class="builder-bonus-row">
       <div class="builder-bonus-pick">
-        <label for="${escapeHtml(selectId)}">Bonus ${index + 1}</label>
+        <label for="${escapeHtml(searchId)}">Bonus ${index + 1}</label>
         <input
           id="${escapeHtml(searchId)}"
           class="builder-bonus-search"
           type="search"
           autocomplete="off"
           placeholder="Search stats"
+          value="${escapeHtml(selectedText)}"
+          role="combobox"
+          aria-expanded="false"
+          aria-controls="${escapeHtml(menuId)}"
           aria-label="Search bonus ${index + 1} stats"
           data-builder-bonus-search="${escapeHtml(slotId)}"
+          data-selected-text="${escapeHtml(selectedText)}"
           data-bonus-index="${index}">
-        <select id="${escapeHtml(selectId)}" data-builder-bonus-select="${escapeHtml(slotId)}" data-bonus-index="${index}">
+        <select
+          id="${escapeHtml(selectId)}"
+          class="builder-bonus-native-select"
+          data-builder-bonus-select="${escapeHtml(slotId)}"
+          data-bonus-index="${index}"
+          aria-hidden="true"
+          tabindex="-1">
           <option value="" ${selectedOption ? "" : "selected"}>None</option>
           ${options.map((option) => {
             const optionLabel = bonusOptionText(option);
@@ -2457,6 +2471,34 @@ function bonusSelect(slotId, item, poolId, index) {
             `;
           }).join("")}
         </select>
+        <div id="${escapeHtml(menuId)}" class="builder-bonus-menu" data-builder-bonus-menu hidden>
+          <button
+            type="button"
+            class="builder-bonus-option ${selectedOption ? "" : "selected"}"
+            data-builder-bonus-option="${escapeHtml(slotId)}"
+            data-bonus-index="${index}"
+            data-property-id=""
+            data-search-text="none">
+            <span>None</span>
+          </button>
+          ${options.map((option) => {
+            const optionLabel = bonusOptionText(option);
+            const optionText = `${optionLabel} (${statRange(option)})`;
+            const searchText = `${optionLabel} ${statRange(option)} ${option.propertyId || ""}`;
+            return `
+              <button
+                type="button"
+                class="builder-bonus-option ${option.propertyId === selectedEntry.propertyId ? "selected" : ""}"
+                data-builder-bonus-option="${escapeHtml(slotId)}"
+                data-bonus-index="${index}"
+                data-property-id="${escapeHtml(option.propertyId)}"
+                data-search-text="${escapeHtml(searchText.toLowerCase())}">
+                <span>${escapeHtml(optionLabel)}</span>
+                <small>${escapeHtml(statRange(option))}</small>
+              </button>
+            `;
+          }).join("")}
+        </div>
         <small data-builder-bonus-search-empty hidden>No matching stats.</small>
       </div>
       <label>Value
@@ -2544,6 +2586,43 @@ function renderBuilderPicker() {
   $("builderPickerMeta").textContent = mode === "stats"
     ? `${item.name} | ${slot.label}`
     : blockReason || slot.accepts.join(" / ");
+}
+
+function positionBuilderPicker() {
+  const picker = $("builderPicker");
+  const equipment = $("builderEquipment");
+  const panel = picker?.closest(".builder-equipment-panel");
+  if (!picker || picker.hidden || !equipment || !panel) return;
+  const slot = [...equipment.querySelectorAll("button[data-builder-slot]")]
+    .find((button) => button.dataset.builderSlot === state.builder.selectedSlot);
+  if (!slot) return;
+  const panelRect = panel.getBoundingClientRect();
+  const slotRect = slot.getBoundingClientRect();
+  const margin = 12;
+  const gap = 10;
+  const pickerWidth = Math.min(430, Math.max(280, panelRect.width - margin * 2));
+  const slotLeft = slotRect.left - panelRect.left;
+  const slotRight = slotRect.right - panelRect.left;
+  const slotTop = slotRect.top - panelRect.top;
+  const slotBottom = slotRect.bottom - panelRect.top;
+  let left = slotRight + gap;
+  let top = slotTop;
+
+  if (left + pickerWidth > panelRect.width - margin) {
+    left = slotLeft - pickerWidth - gap;
+  }
+  if (left < margin) {
+    left = Math.min(Math.max(margin, slotLeft), Math.max(margin, panelRect.width - pickerWidth - margin));
+    top = slotBottom + gap;
+  }
+
+  const maxTop = Math.max(margin, panelRect.height - 260);
+  top = Math.max(margin, Math.min(top, maxTop));
+  picker.style.left = `${Math.round(left)}px`;
+  picker.style.right = "auto";
+  picker.style.top = `${Math.round(top)}px`;
+  picker.style.width = `${Math.round(pickerWidth)}px`;
+  picker.style.maxHeight = `min(560px, calc(100% - ${Math.round(top + margin)}px))`;
 }
 
 function renderBuilderItems() {
@@ -2634,6 +2713,7 @@ function renderBuilder() {
     $("builderItemList").innerHTML = `<div class="builder-empty">${escapeHtml(message)}</div>`;
     renderBuilderStats();
     renderBuilderSavedKits();
+    positionBuilderPicker();
     return;
   }
   renderBuilderSummary();
@@ -2645,6 +2725,7 @@ function renderBuilder() {
   renderBuilderItems();
   renderBuilderStats();
   renderBuilderSavedKits();
+  positionBuilderPicker();
 }
 
 function render() {
@@ -2841,26 +2922,31 @@ function renderItemDetail(payload) {
   `;
 }
 
-function filterBuilderBonusSelect(input) {
+function filterBuilderBonusSelect(input, showAll = false) {
   const row = input.closest(".builder-bonus-row");
-  const select = row?.querySelector("select[data-builder-bonus-select]");
-  if (!select) return;
-  const query = input.value.trim().toLowerCase();
+  const menu = row?.querySelector("[data-builder-bonus-menu]");
+  if (!menu) return;
+  const query = showAll ? "" : input.value.trim().toLowerCase();
   let visibleCount = 0;
-  [...select.options].forEach((option) => {
-    if (!option.value) {
-      option.hidden = false;
-      option.disabled = false;
-      return;
-    }
+  menu.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+  [...menu.querySelectorAll("[data-builder-bonus-option]")].forEach((option) => {
     const matches = !query || (option.dataset.searchText || option.textContent || "").toLowerCase().includes(query);
-    const keepSelected = option.selected;
-    option.hidden = !matches && !keepSelected;
-    option.disabled = !matches && !keepSelected;
+    option.hidden = !matches;
     if (matches) visibleCount += 1;
   });
   const empty = row.querySelector("[data-builder-bonus-search-empty]");
   if (empty) empty.hidden = !query || visibleCount > 0;
+}
+
+function closeBuilderBonusMenus() {
+  document.querySelectorAll("[data-builder-bonus-menu]").forEach((menu) => {
+    menu.hidden = true;
+  });
+  document.querySelectorAll("[data-builder-bonus-search]").forEach((input) => {
+    input.value = input.dataset.selectedText || "";
+    input.setAttribute("aria-expanded", "false");
+  });
 }
 
 async function openItem(asset) {
@@ -3082,7 +3168,22 @@ function wireEvents() {
       return;
     }
     if (!event.target.closest("#chipPopover")) hideChipPopover(true);
+    if (!event.target.closest(".builder-bonus-pick")) closeBuilderBonusMenus();
+    const bonusSearch = event.target.closest("[data-builder-bonus-search]");
+    if (bonusSearch) {
+      bonusSearch.select();
+      filterBuilderBonusSelect(bonusSearch, true);
+      return;
+    }
     if (button) {
+      if (button.dataset.builderBonusOption) {
+        setBuilderBonusProperty(
+          button.dataset.builderBonusOption,
+          Number(button.dataset.bonusIndex || 0),
+          button.getAttribute("data-property-id") || "",
+        );
+        return;
+      }
       if (button.dataset.sortList && button.dataset.sortKey) {
         setSort(button.dataset.sortList, button.dataset.sortKey);
         return;
@@ -3195,6 +3296,10 @@ function wireEvents() {
   document.body.addEventListener("focusin", (event) => {
     const slot = event.target.closest("button[data-builder-slot]");
     if (slot) showBuilderSlotTooltip(slot);
+    if (event.target.dataset?.builderBonusSearch) {
+      event.target.select();
+      filterBuilderBonusSelect(event.target, true);
+    }
     const button = event.target.closest("button[data-more-values]");
     if (button) showChipPopover(button);
   });
@@ -3229,6 +3334,7 @@ function wireEvents() {
     }
     if (input.dataset?.builderBonusSearch) {
       filterBuilderBonusSelect(input);
+      return;
     }
   });
 
@@ -3290,6 +3396,7 @@ function wireEvents() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      closeBuilderBonusMenus();
       hideChipPopover(true);
       hideBuilderSlotTooltip(true);
       if (state.builder.pickerOpen) closeBuilderPicker();
