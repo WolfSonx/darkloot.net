@@ -26,12 +26,12 @@
     rarity: "All",
     pickerOpen: false,
     pickerMode: "items",
-    characterCollapsed: false,
     equipped: {},
     primaryValues: {},
     bonuses: {},
     perks: [],
     confirmAction: null,
+    shareStatus: "",
   },
   itemByAsset: new Map(),
   sourceByKey: new Map(),
@@ -52,6 +52,8 @@
 
 const FAVORITES_KEY = "darkloot:favorites:v1";
 const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
+const SHARED_KIT_PARAM = "kit";
+const SHARED_KIT_VERSION = 1;
 const APP_BUILD_ID = "20260515-2";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
@@ -180,6 +182,7 @@ const GRADE4_ANCHORS = [
 ];
 
 const $ = (id) => document.getElementById(id);
+let builderShareStatusTimer = 0;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -326,6 +329,32 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value ?? {}));
 }
 
+function base64UrlEncode(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
+  }
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+function base64UrlDecode(value) {
+  const normalized = String(value || "").replaceAll("-", "+").replaceAll("_", "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function safeFileName(value) {
+  return String(value || "darkloot-kit")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64) || "darkloot-kit";
+}
+
 function savedKitId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `kit-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -365,6 +394,68 @@ function loadSavedKits() {
 
 function saveSavedKits() {
   localStorage.setItem(SAVED_KITS_KEY, JSON.stringify(state.savedKits));
+}
+
+function currentBuilderKitName() {
+  const input = $("builderKitName");
+  return (input?.value || "").trim() || defaultSavedKitName();
+}
+
+function setBuilderShareStatus(message) {
+  window.clearTimeout(builderShareStatusTimer);
+  state.builder.shareStatus = message;
+  renderBuilderShareStatus();
+  if (message) {
+    builderShareStatusTimer = window.setTimeout(() => {
+      state.builder.shareStatus = "";
+      renderBuilderShareStatus();
+    }, 3200);
+  }
+}
+
+function renderBuilderShareStatus() {
+  const status = $("builderShareStatus");
+  if (status) status.textContent = state.builder.shareStatus || "";
+}
+
+function sharedKitPayload(kit) {
+  return base64UrlEncode(JSON.stringify({
+    v: SHARED_KIT_VERSION,
+    kit,
+  }));
+}
+
+function kitShareUrl(kit) {
+  const url = new URL(window.location.href);
+  url.searchParams.set(SHARED_KIT_PARAM, sharedKitPayload(kit));
+  url.hash = "";
+  return url.toString();
+}
+
+function decodeSharedKitPayload(value) {
+  try {
+    const parsed = JSON.parse(base64UrlDecode(value));
+    return normalizeSavedKit(parsed?.kit || parsed);
+  } catch {
+    return null;
+  }
+}
+
+async function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Copy failed");
 }
 
 function builderConfirmKey(action, id = "") {
@@ -429,7 +520,7 @@ function savedBonusesForItem(item, bonuses) {
 
 function saveCurrentBuilderKit() {
   const input = $("builderKitName");
-  const name = (input?.value || "").trim() || defaultSavedKitName();
+  const name = currentBuilderKitName();
   const existingIndex = state.savedKits.findIndex((kit) => kit.name.toLowerCase() === name.toLowerCase());
   const existing = existingIndex >= 0 ? state.savedKits[existingIndex] : null;
   const kit = currentBuilderKit(name, existing);
@@ -442,8 +533,7 @@ function saveCurrentBuilderKit() {
   renderBuilder();
 }
 
-function loadBuilderKit(kitId) {
-  const kit = state.savedKits.find((row) => row.id === kitId);
+function applyBuilderKit(kit) {
   if (!kit) return;
   clearBuilderConfirmation();
   state.builder.characterId = state.kit.characterById.has(kit.characterId)
@@ -482,6 +572,48 @@ function loadBuilderKit(kitId) {
   const input = $("builderKitName");
   if (input) input.value = kit.name;
   renderBuilder();
+}
+
+function loadBuilderKit(kitId) {
+  applyBuilderKit(state.savedKits.find((row) => row.id === kitId));
+}
+
+async function shareBuilderKit(kit = currentBuilderKit(currentBuilderKitName())) {
+  try {
+    await copyText(kitShareUrl(kit));
+    setBuilderShareStatus("Link copied");
+  } catch (error) {
+    console.error(error);
+    setBuilderShareStatus("Could not copy link");
+  }
+}
+
+function exportBuilderKit(kit = currentBuilderKit(currentBuilderKitName())) {
+  const blob = new Blob([`${JSON.stringify({ v: SHARED_KIT_VERSION, kit }, null, 2)}\n`], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${safeFileName(kit.name)}.darkloot-kit.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  setBuilderShareStatus("Kit exported");
+}
+
+async function applySharedBuilderKitFromLocation() {
+  const sharedValue = new URL(window.location.href).searchParams.get(SHARED_KIT_PARAM);
+  if (!sharedValue) return false;
+  const kit = decodeSharedKitPayload(sharedValue);
+  if (!kit) {
+    setActiveTab("builder", { render: false });
+    state.builder.shareStatus = "Invalid kit link";
+    return true;
+  }
+  await loadKitData();
+  setActiveTab("builder", { render: false });
+  applyBuilderKit(kit);
+  state.builder.shareStatus = "Shared kit loaded";
+  return true;
 }
 
 function deleteSavedKit(kitId) {
@@ -608,7 +740,7 @@ function weaponSlotBlockReason(slotId) {
 
 function slotStatsAreActive(slotId) {
   const slot = builderSlotById(slotId);
-  return !slot.weaponSet || slot.weaponSet === state.builder.activeWeaponSet;
+  return !slot.weaponSet;
 }
 
 function itemFitsBuilderSlot(item, slotId) {
@@ -857,7 +989,7 @@ function builderStatMap() {
 function itemStatTotal(slotId, statKey) {
   const resolvedSlotId = resolveBuilderSlotId(slotId);
   const item = state.kit.itemByAsset.get(state.builder.equipped[resolvedSlotId]);
-  if (!item || !statKey) return { value: defaultSlotStatValue(resolvedSlotId, statKey), unit: "" };
+  if (!item || !statKey || !slotStatsAreActive(resolvedSlotId)) return { value: defaultSlotStatValue(resolvedSlotId, statKey), unit: "" };
   const totals = new Map();
   addItemStats(totals, resolvedSlotId, item);
   const keys = STAT_CONTRIBUTION_KEYS[statKey] || [statKey];
@@ -1102,6 +1234,7 @@ async function loadData() {
   syncLuckInputs();
   $("updatedAt").textContent = formatDate(state.manifest.generatedAt);
   fillFilters();
+  await applySharedBuilderKitFromLocation();
   render();
 }
 
@@ -1340,6 +1473,18 @@ function itemThumbStyle(row) {
     `--item-list-thumb-width:${listWidth.toFixed(1)}px`,
     `--item-list-thumb-height:${listHeight.toFixed(1)}px`,
   ].join(";");
+}
+
+function builderWeaponSizeClass(item) {
+  if (!builderItemIsWeapon(item)) return "";
+  const art = itemArt(item);
+  const inventoryHeight = Number(item?.inventory?.height || 1);
+  const iconWidth = Math.max(1, Number(art?.iconSize?.width || item?.inventory?.width || 1));
+  const iconHeight = Math.max(1, Number(art?.iconSize?.height || inventoryHeight));
+  const aspect = iconWidth / iconHeight;
+  if (inventoryHeight >= 5 || aspect <= 0.28) return "weapon-extra-tall";
+  if (inventoryHeight >= 4 || aspect <= 0.56) return "weapon-tall";
+  return "weapon-compact";
 }
 
 function itemThumbnail(row, variant = "") {
@@ -2047,6 +2192,7 @@ function savedKitCharacterName(kit) {
 
 function renderBuilderSavedKits() {
   if (!$("builderSavedKits")) return;
+  renderBuilderShareStatus();
   $("builderSavedKitCount").textContent = state.savedKits.length.toLocaleString();
   $("builderSavedKits").innerHTML = state.savedKits.length
     ? state.savedKits.map((kit) => {
@@ -2062,6 +2208,7 @@ function renderBuilderSavedKits() {
           </div>
           <div class="builder-saved-kit-actions">
             <button type="button" data-load-builder-kit="${escapeHtml(kit.id)}">Load</button>
+            <button type="button" data-share-builder-kit="${escapeHtml(kit.id)}">Share</button>
             <button
               type="button"
               class="danger ${confirmingDelete ? "confirming" : ""}"
@@ -2216,13 +2363,14 @@ function renderBuilderEquipment() {
   $("builderEquipment").innerHTML = BUILDER_SLOTS.map((slot) => {
     const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
     const blockReason = weaponSlotBlockReason(slot.id);
+    const sizeClass = slot.kind === "weapon" && item ? builderWeaponSizeClass(item) : "";
     const art = item
       ? itemThumbnail(item, slot.kind === "weapon" ? "equipment weapon-equipment" : "equipment")
       : `<span class="equipment-ghost equipment-ghost-${escapeHtml(slot.id)}" aria-hidden="true"></span>`;
     return `
       <button
         type="button"
-        class="builder-slot builder-slot-${escapeHtml(slot.id)} ${slot.kind || ""} ${state.builder.selectedSlot === slot.id ? "active" : ""} ${slot.weaponSet === state.builder.activeWeaponSet ? "active-set" : ""} ${item ? "filled" : ""} ${blockReason ? "blocked" : ""}"
+        class="builder-slot builder-slot-${escapeHtml(slot.id)} ${slot.kind || ""} ${sizeClass} ${state.builder.selectedSlot === slot.id ? "active" : ""} ${slot.weaponSet === state.builder.activeWeaponSet ? "active-set" : ""} ${item ? "filled" : ""} ${blockReason ? "blocked" : ""}"
         style="grid-area: ${escapeHtml(slot.area)}"
         data-builder-slot="${escapeHtml(slot.id)}"
         aria-pressed="${state.builder.selectedSlot === slot.id ? "true" : "false"}"
@@ -2370,8 +2518,9 @@ function renderBuilderItems() {
 
 function renderBuilderStats() {
   const stats = builderStatRows();
-  const gearScore = Object.values(state.builder.equipped)
-    .map((asset) => Number(state.kit.itemByAsset.get(asset)?.gearScore || 0))
+  const gearScore = Object.entries(state.builder.equipped)
+    .filter(([slotId]) => slotStatsAreActive(slotId))
+    .map(([, asset]) => Number(state.kit.itemByAsset.get(asset)?.gearScore || 0))
     .reduce((sum, value) => sum + value, 0);
   $("builderGearScore").textContent = `${gearScore.toLocaleString()} GS`;
   $("builderStats").innerHTML = stats.map((row) => {
@@ -2417,8 +2566,6 @@ function renderBuilder() {
   $("builderSearch").value = state.builder.search;
   $("builderRarity").value = state.builder.rarity;
   if (state.builder.characterId) $("builderCharacter").value = state.builder.characterId;
-  $("builderCharacterPanel").classList.toggle("collapsed", state.builder.characterCollapsed);
-  $("builderCharacterToggle").setAttribute("aria-expanded", state.builder.characterCollapsed ? "false" : "true");
   if (!state.kitReady) {
     const message = state.kitPromise ? "Loading kit data..." : "Kit data is not loaded yet.";
     $("builderSummary").innerHTML = metaPill("Status", state.kitPromise ? "Loading" : "Idle");
@@ -2461,6 +2608,16 @@ function renderActiveTab() {
     if (!state.kitReady) loadKitDataForBuilder();
     renderBuilder();
   }
+}
+
+function setActiveTab(tabId, options = {}) {
+  if (!$(`${tabId}View`)) return;
+  state.activeTab = tabId;
+  if (!options.keepConfirmation) clearBuilderConfirmation();
+  document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === tabId));
+  document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
+  $(`${tabId}View`).classList.add("active");
+  if (options.render !== false) renderActiveTab();
 }
 
 function renderFavoriteState() {
@@ -2805,12 +2962,7 @@ function openClickableRow(row) {
 function wireEvents() {
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => {
-      state.activeTab = button.dataset.tab;
-      clearBuilderConfirmation();
-      document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
-      document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
-      $(`${state.activeTab}View`).classList.add("active");
-      renderActiveTab();
+      setActiveTab(button.dataset.tab);
     });
   });
 
@@ -2897,6 +3049,11 @@ function wireEvents() {
       }
       if (button.dataset.loadBuilderKit) {
         loadBuilderKit(button.dataset.loadBuilderKit);
+        return;
+      }
+      if (button.dataset.shareBuilderKit) {
+        const kit = state.savedKits.find((row) => row.id === button.dataset.shareBuilderKit);
+        if (kit) shareBuilderKit(kit);
         return;
       }
       if (button.dataset.deleteBuilderKit) {
@@ -3043,16 +3200,13 @@ function wireEvents() {
   $("clearBuilder").addEventListener("click", confirmOrClearBuilder);
   $("closeBuilderPicker").addEventListener("click", closeBuilderPicker);
   $("saveBuilderKit").addEventListener("click", saveCurrentBuilderKit);
+  $("shareBuilderKit").addEventListener("click", () => shareBuilderKit());
+  $("exportBuilderKit").addEventListener("click", () => exportBuilderKit());
   $("builderKitName").addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
     saveCurrentBuilderKit();
   });
-  $("builderCharacterToggle").addEventListener("click", () => {
-    state.builder.characterCollapsed = !state.builder.characterCollapsed;
-    renderBuilder();
-  });
-
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       hideChipPopover(true);

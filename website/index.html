@@ -172,9 +172,32 @@
               <div id="builderBonusPanel" class="builder-bonus-panel"></div>
             </div>
           </section>
+        </section>
 
-          <aside id="builderCharacterPanel" class="builder-panel builder-character-panel">
-            <button id="builderCharacterToggle" class="builder-character-toggle" type="button" aria-expanded="true">Character</button>
+        <aside class="builder-side-stack">
+          <section class="builder-panel builder-saved-panel">
+            <div class="builder-panel-head">
+              <h3>Saved Kits</h3>
+              <span id="builderSavedKitCount" class="builder-count">0</span>
+            </div>
+            <div class="builder-save-controls">
+              <label>Name
+                <input id="builderKitName" autocomplete="off" placeholder="Kit name">
+              </label>
+              <button id="saveBuilderKit" type="button">Save</button>
+            </div>
+            <div class="builder-share-controls">
+              <button id="shareBuilderKit" type="button">Copy Link</button>
+              <button id="exportBuilderKit" type="button">Export JSON</button>
+              <span id="builderShareStatus" class="builder-share-status" aria-live="polite"></span>
+            </div>
+            <div id="builderSavedKits" class="builder-saved-kits"></div>
+          </section>
+
+          <section id="builderCharacterPanel" class="builder-panel builder-character-panel">
+            <div class="builder-panel-head builder-character-head">
+              <h3>Character</h3>
+            </div>
             <div class="builder-character-body">
               <label>Character
                 <select id="builderCharacter"></select>
@@ -186,21 +209,7 @@
               </div>
               <div id="builderPerks" class="builder-perks"></div>
             </div>
-          </aside>
-        </section>
-
-        <aside class="builder-panel builder-saved-panel">
-          <div class="builder-panel-head">
-            <h3>Saved Kits</h3>
-            <span id="builderSavedKitCount" class="builder-count">0</span>
-          </div>
-          <div class="builder-save-controls">
-            <label>Name
-              <input id="builderKitName" autocomplete="off" placeholder="Kit name">
-            </label>
-            <button id="saveBuilderKit" type="button">Save</button>
-          </div>
-          <div id="builderSavedKits" class="builder-saved-kits"></div>
+          </section>
         </aside>
       </div>
     </section>
