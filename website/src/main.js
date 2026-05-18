@@ -52,8 +52,9 @@
 
 const FAVORITES_KEY = "darkloot:favorites:v1";
 const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
-const SHARED_KIT_PARAM = "kit";
-const SHARED_KIT_VERSION = 1;
+const SHARED_KIT_PARAM = "k";
+const SHARED_KIT_LEGACY_PARAM = "kit";
+const SHARED_KIT_VERSION = 2;
 const APP_BUILD_ID = "20260518-1";
 const SITE_UPDATED_AT = "2026-05-18T00:00:00+03:00";
 const MAX_ROWS = 500;
@@ -354,14 +355,6 @@ function base64UrlDecode(value) {
   return new TextDecoder().decode(bytes);
 }
 
-function safeFileName(value) {
-  return String(value || "darkloot-kit")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64) || "darkloot-kit";
-}
-
 function savedKitId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `kit-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -425,15 +418,110 @@ function renderBuilderShareStatus() {
   if (status) status.textContent = state.builder.shareStatus || "";
 }
 
+function compactSlotIndex(slotId) {
+  const index = BUILDER_SLOTS.findIndex((slot) => slot.id === slotId);
+  return index >= 0 ? index : 0;
+}
+
+function sharedSlotId(value) {
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return BUILDER_SLOTS[value]?.id || "";
+  }
+  return String(value || "");
+}
+
+function primaryValuesMatchDefaults(asset, values) {
+  const item = state.kit.itemByAsset.get(asset);
+  const defaults = defaultPrimaryValuesForItem(item);
+  return Array.isArray(values)
+    && values.length === defaults.length
+    && values.every((value, index) => String(value) === String(defaults[index]));
+}
+
+function compactSharedKit(kit) {
+  const equipped = BUILDER_SLOTS
+    .map((slot, index) => {
+      const asset = kit.equipped?.[slot.id];
+      return typeof asset === "string" && asset ? [index, asset] : null;
+    })
+    .filter(Boolean);
+  const equippedBySlot = new Map(equipped.map(([index, asset]) => [BUILDER_SLOTS[index]?.id, asset]));
+  const primaryValues = Object.entries(plainObject(kit.primaryValues))
+    .map(([slotId, values]) => {
+      const asset = equippedBySlot.get(slotId);
+      if (!asset || !Array.isArray(values) || !values.length || primaryValuesMatchDefaults(asset, values)) return null;
+      return [compactSlotIndex(slotId), values];
+    })
+    .filter(Boolean);
+  const bonuses = [];
+  Object.entries(plainObject(kit.bonuses)).forEach(([slotId, entries]) => {
+    if (!equippedBySlot.has(slotId) || !Array.isArray(entries)) return;
+    entries.forEach((entry, index) => {
+      if (!entry?.propertyId) return;
+      const row = [compactSlotIndex(slotId), index, entry.propertyId];
+      if (entry.value !== "" && entry.value !== undefined && entry.value !== null) row.push(entry.value);
+      bonuses.push(row);
+    });
+  });
+  return [
+    SHARED_KIT_VERSION,
+    kit.name || "",
+    kit.characterId || "",
+    kit.activeWeaponSet === "2" ? 2 : 1,
+    compactSlotIndex(kit.selectedSlot),
+    equipped,
+    primaryValues,
+    bonuses,
+    Array.isArray(kit.perks) ? kit.perks.filter(Boolean) : [],
+  ];
+}
+
+function expandCompactSharedKit(payload) {
+  if (!Array.isArray(payload) || payload[0] !== SHARED_KIT_VERSION) return null;
+  const [, name, characterId, activeWeaponSet, selectedSlot, equippedRows = [], primaryRows = [], bonusRows = [], perks = []] = payload;
+  const equipped = {};
+  (Array.isArray(equippedRows) ? equippedRows : []).forEach((row) => {
+    const slotId = sharedSlotId(row?.[0]);
+    const asset = row?.[1];
+    if (slotId && typeof asset === "string") equipped[slotId] = asset;
+  });
+  const primaryValues = {};
+  (Array.isArray(primaryRows) ? primaryRows : []).forEach((row) => {
+    const slotId = sharedSlotId(row?.[0]);
+    const values = row?.[1];
+    if (slotId && Array.isArray(values) && values.length) primaryValues[slotId] = values;
+  });
+  const bonuses = {};
+  (Array.isArray(bonusRows) ? bonusRows : []).forEach((row) => {
+    const slotId = sharedSlotId(row?.[0]);
+    const index = Number(row?.[1]);
+    const propertyId = row?.[2];
+    if (!slotId || !Number.isInteger(index) || !propertyId) return;
+    if (!Array.isArray(bonuses[slotId])) bonuses[slotId] = [];
+    bonuses[slotId][index] = {
+      propertyId: String(propertyId),
+      value: row.length > 3 ? row[3] : "",
+    };
+  });
+  return normalizeSavedKit({
+    name,
+    characterId,
+    activeWeaponSet: String(activeWeaponSet || "1"),
+    selectedSlot: sharedSlotId(selectedSlot) || "weapon1Primary",
+    equipped,
+    primaryValues,
+    bonuses,
+    perks: Array.isArray(perks) ? perks : [],
+  });
+}
+
 function sharedKitPayload(kit) {
-  return base64UrlEncode(JSON.stringify({
-    v: SHARED_KIT_VERSION,
-    kit,
-  }));
+  return base64UrlEncode(JSON.stringify(compactSharedKit(kit)));
 }
 
 function kitShareUrl(kit) {
   const url = new URL(window.location.href);
+  url.searchParams.delete(SHARED_KIT_LEGACY_PARAM);
   url.searchParams.set(SHARED_KIT_PARAM, sharedKitPayload(kit));
   url.hash = "";
   return url.toString();
@@ -442,7 +530,7 @@ function kitShareUrl(kit) {
 function decodeSharedKitPayload(value) {
   try {
     const parsed = JSON.parse(base64UrlDecode(value));
-    return normalizeSavedKit(parsed?.kit || parsed);
+    return expandCompactSharedKit(parsed) || normalizeSavedKit(parsed?.kit || parsed);
   } catch {
     return null;
   }
@@ -595,20 +683,9 @@ async function shareBuilderKit(kit = currentBuilderKit(currentBuilderKitName()))
   }
 }
 
-function exportBuilderKit(kit = currentBuilderKit(currentBuilderKitName())) {
-  const blob = new Blob([`${JSON.stringify({ v: SHARED_KIT_VERSION, kit }, null, 2)}\n`], { type: "application/json" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `${safeFileName(kit.name)}.darkloot-kit.json`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-  setBuilderShareStatus("Kit exported");
-}
-
 async function applySharedBuilderKitFromLocation() {
-  const sharedValue = new URL(window.location.href).searchParams.get(SHARED_KIT_PARAM);
+  const params = new URL(window.location.href).searchParams;
+  const sharedValue = params.get(SHARED_KIT_PARAM) || params.get(SHARED_KIT_LEGACY_PARAM);
   if (!sharedValue) return false;
   const kit = decodeSharedKitPayload(sharedValue);
   if (!kit) {
@@ -933,6 +1010,17 @@ function primaryStatIdentitiesForItem(item) {
 
 function bonusOptionText(option) {
   return option?.label || statLabel(statIdentity(option));
+}
+
+function bonusOptionSearchText(option) {
+  return [
+    bonusOptionText(option),
+    statRange(option),
+    option?.statKey,
+    option?.rawKey,
+    option?.propertyLabel,
+    option?.propertyId,
+  ].filter(Boolean).join(" ");
 }
 
 function secondaryOptionsForItem(item, poolId) {
@@ -1508,10 +1596,10 @@ function builderWeaponGridStyle(slot, item) {
   const anchor = BUILDER_WEAPON_GRID[slot.id];
   if (!anchor) return `grid-area: ${slot.area}`;
   const art = item ? itemArt(item) : null;
-  const inventoryHeight = item ? Number(item?.inventory?.height || 2) : 2;
-  const iconHeight = item ? Number(art?.iconSize?.height || inventoryHeight * 90) : inventoryHeight * 90;
-  const weaponRows = Math.max(inventoryHeight, Math.ceil(iconHeight / 90));
-  const rowSpan = Math.max(2, Math.min(6, Math.round(weaponRows) + (item ? 1 : 0)));
+  const inventoryHeight = item ? Number(item?.inventory?.height || 4) : 4;
+  const iconHeight = item ? Number(art?.iconSize?.height || inventoryHeight * 110) : 440;
+  const weaponRows = item ? Math.max(inventoryHeight, Math.ceil(iconHeight / 110)) : 4;
+  const rowSpan = Math.max(4, Math.min(6, Math.round(weaponRows)));
   return [
     "grid-area: auto",
     `grid-column: ${anchor.column} / span 2`,
@@ -2460,7 +2548,7 @@ function bonusSelect(slotId, item, poolId, index) {
           ${options.map((option) => {
             const optionLabel = bonusOptionText(option);
             const optionText = `${optionLabel} (${statRange(option)})`;
-            const searchText = `${optionLabel} ${statRange(option)} ${option.propertyId || ""}`;
+            const searchText = bonusOptionSearchText(option);
             return `
               <option
                 value="${escapeHtml(option.propertyId)}"
@@ -2483,8 +2571,7 @@ function bonusSelect(slotId, item, poolId, index) {
           </button>
           ${options.map((option) => {
             const optionLabel = bonusOptionText(option);
-            const optionText = `${optionLabel} (${statRange(option)})`;
-            const searchText = `${optionLabel} ${statRange(option)} ${option.propertyId || ""}`;
+            const searchText = bonusOptionSearchText(option);
             return `
               <button
                 type="button"
@@ -3388,7 +3475,6 @@ function wireEvents() {
   $("closeBuilderPicker").addEventListener("click", closeBuilderPicker);
   $("saveBuilderKit").addEventListener("click", saveCurrentBuilderKit);
   $("shareBuilderKit").addEventListener("click", () => shareBuilderKit());
-  $("exportBuilderKit").addEventListener("click", () => exportBuilderKit());
   $("builderKitName").addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
