@@ -867,12 +867,13 @@ th.num .sort-button {
   background: var(--muted);
 }
 
+.rarity.Legendary { color: #ff7a1a; }
 .rarity.Junk::before { background: #787878; }
 .rarity.Common::before { background: #e8e2d3; }
 .rarity.Uncommon::before { background: #57c66b; }
 .rarity.Rare::before { background: #5d94ff; }
 .rarity.Epic::before { background: #ae6cff; }
-.rarity.Legendary::before { background: #f08a2f; }
+.rarity.Legendary::before { background: #ff5f00; }
 .rarity.Unique::before { background: #ffdc73; }
 .rarity.Artifact::before { background: #eb5b5b; }
 
@@ -954,7 +955,7 @@ th.num .sort-button {
 .item-thumb-uncommon { border-color: rgba(87, 198, 107, .78); }
 .item-thumb-rare { border-color: rgba(93, 148, 255, .82); }
 .item-thumb-epic { border-color: rgba(174, 108, 255, .82); }
-.item-thumb-legendary { border-color: rgba(255, 146, 66, .88); }
+.item-thumb-legendary { border-color: rgba(255, 96, 0, .96); }
 .item-thumb-unique { border-color: rgba(255, 220, 115, .88); }
 .item-thumb-artifact { border-color: rgba(235, 91, 91, .86); }
 
@@ -962,7 +963,7 @@ th.num .sort-button {
 .builder-slot.slot-rarity-uncommon { border-color: rgba(87, 198, 107, .78); }
 .builder-slot.slot-rarity-rare { border-color: rgba(93, 148, 255, .82); }
 .builder-slot.slot-rarity-epic { border-color: rgba(174, 108, 255, .82); }
-.builder-slot.slot-rarity-legendary { border-color: rgba(255, 146, 66, .88); }
+.builder-slot.slot-rarity-legendary { border-color: rgba(255, 96, 0, .96); }
 .builder-slot.slot-rarity-unique { border-color: rgba(255, 220, 115, .88); }
 .builder-slot.slot-rarity-artifact { border-color: rgba(235, 91, 91, .86); }
 
