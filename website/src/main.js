@@ -60,30 +60,100 @@ const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
-const APP_BUILD_ID = "20260520-1";
-const SITE_UPDATED_AT = "2026-05-18T00:00:00+03:00";
+const APP_BUILD_ID = "20260520-2";
+const SITE_UPDATED_AT = "2026-05-20T00:00:00+03:00";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
 const BUILDER_PERK_LIMIT = 4;
-const BUILDER_CONDITIONAL_STAT_PERKS = new Set([
-  "Id_Perk_Trickster",
-]);
 const BUILDER_WEAPON_MASTERY_PERK_ID = "Id_Perk_WeaponMastery";
 const BUILDER_DEMON_ARMOR_PERK_ID = "Id_Perk_DemonArmor";
+const BUILDER_SPEAR_PROFICIENCY_PERK_ID = "Id_Perk_SpearProficiency";
+const BUILDER_IRON_WILL_PERK_ID = "Id_Perk_IronWill";
+const BUILDER_SAVAGE_PERK_ID = "Id_Perk_Savage";
+const BUILDER_NO_STAT_PERK_SUMMARY = "This perk doesnt affect stats";
 const BUILDER_PERK_STAT_OVERRIDES = {
   Id_Perk_DefenseMastery: [
     { statKey: "ItemArmorRatingMod", label: "Armor Rating Bonus", value: 15, unit: "%" },
-  ],
-  Id_Perk_Malice: [
-    { statKey: "WillMod", label: "Will Bonus", value: 15, unit: "%" },
   ],
   Id_Perk_ProjectileResistance: [
     { statKey: "ProjectileReduction", label: "Projectile Damage Reduction", value: 10, unit: "%" },
   ],
   Id_Perk_Swift: [
-    { statKey: "MoveSpeedArmorPenaltyReduction", label: "Armor Move Speed Penalty Reduction", value: 30, unit: "%" },
+    { statKey: "MoveSpeedArmorPenaltyReduction", label: "Armor Move Speed Penalty Reduction", value: 20, unit: "%" },
   ],
-  Id_Perk_Jokester: [],
+  Id_Perk_Jokester: [
+    { statKey: "Strength", label: "Strength", value: 2, unit: "" },
+    { statKey: "Vigor", label: "Vigor", value: 2, unit: "" },
+    { statKey: "Agility", label: "Agility", value: 2, unit: "" },
+    { statKey: "Dexterity", label: "Dexterity", value: 2, unit: "" },
+    { statKey: "Will", label: "Will", value: 2, unit: "" },
+    { statKey: "Knowledge", label: "Knowledge", value: 2, unit: "" },
+    { statKey: "Resourcefulness", label: "Resourcefulness", value: 2, unit: "" },
+  ],
+  Id_Perk_ManaFold: [
+    { statKey: "SpellCastingSpeed", label: "Spell Casting Speed", value: -15, unit: "%" },
+  ],
+  Id_Perk_DemonArmor: [
+    { statKey: "SpellCastingSpeed", label: "Spell Casting Speed", value: -10, unit: "%" },
+  ],
+  Id_Perk_InfernalPledge: [
+    { statKey: "DemonDamageBonus", label: "Demon Damage Bonus", value: 15, unit: "%" },
+    { statKey: "DemonDamageReduction", label: "Demon Damage Reduction", value: 10, unit: "%" },
+    { statKey: "UndeadDamageBonus", label: "Undead Damage Bonus", value: 15, unit: "%" },
+    { statKey: "UndeadDamageReduction", label: "Undead Damage Reduction", value: 10, unit: "%" },
+  ],
+  Id_Perk_Malice: [
+    { statKey: "WillMod", label: "Will Bonus", value: 15, unit: "%" },
+  ],
+  Id_Perk_Vampirism: [
+    { statKey: "MagicalHealingBonus", label: "Magical Healing Bonus", value: 20, unit: "%" },
+  ],
+  Id_Perk_QuickChant: [
+    { statKey: "SpellCastingSpeed", label: "Spell Casting Speed", value: 15, unit: "%" },
+  ],
+  Id_Perk_ManaSurge: [
+    { statKey: "MagicalDamageBonus", label: "Magical Damage Bonus", value: 10, unit: "%" },
+  ],
+  Id_Perk_Sage: [
+    { statKey: "KnowledgeMod", label: "Knowledge Bonus", value: 15, unit: "%" },
+  ],
+  Id_Perk_SpellOverload: [
+    { statKey: "KnowledgeMod", label: "Knowledge Reduction", value: -20, unit: "%" },
+  ],
+  Id_Perk_AdvancedHealer: [
+    { statKey: "MagicalHealing", label: "Magical Healing", value: 5, unit: "" },
+  ],
+  Id_Perk_UndeadSlaying: [
+    { statKey: "UndeadDamageBonus", label: "Undead Damage Bonus", value: 20, unit: "%" },
+  ],
+  Id_Perk_Fermata: [
+    { statKey: "Resourcefulness", label: "Resourcefulness", value: 5, unit: "" },
+  ],
+  Id_Perk_LoreMastery: [
+    { statKey: "RegularInteractionSpeed", label: "Regular Interaction Speed", value: 30, unit: "%" },
+    { statKey: "MemoryCapacity", label: "Memory Capacity", value: 5, unit: "" },
+  ],
+  Id_Perk_WanderersLuck: [
+    { statKey: "Luck", label: "Luck", value: 100, unit: "" },
+  ],
+  Id_Perk_Robust: [
+    { statKey: "MaxHealthBonus", label: "Max Health Bonus", value: 8, unit: "%" },
+  ],
+  Id_Perk_IronWill: [
+    { statKey: "MagicResistance", label: "Magic Resistance", value: 75, unit: "" },
+  ],
+  Id_Perk_Savage: [
+    { statKey: "PhysicalDamageBonus", label: "Physical Damage Bonus", value: 10, unit: "%" },
+    { statKey: "ImpactPower", label: "Impact Power", value: 1, unit: "" },
+  ],
+};
+const BUILDER_PERK_SUMMARIES = {
+  Id_Perk_Jokester: "All Attributes +2",
+  Id_Perk_WeaponMastery: "Allows all weapons",
+  Id_Perk_DemonArmor: "Spell Casting Speed -10%, allows plate armor",
+  Id_Perk_IronWill: "Magic Resistance +75, Magical Damage Reduction cap 75%",
+  Id_Perk_Savage: "Physical Damage Bonus 10%, Impact Power 1 when not wearing chest armor",
+  Id_Perk_SpearProficiency: "Allows Spear",
 };
 const PERK_ICON_ALIASES = {
   Id_Perk_ComboAttack: "CombinationAttack",
@@ -131,6 +201,9 @@ const BUILDER_STAT_ROWS = [
   { key: "MemoryMusicPayload", label: "Memory Music Payload" },
   { key: "UtilityEffectiveness", label: "Utility Effectiveness" },
   { key: "Luck", label: "Luck" },
+  { key: "ArmorRating", label: "Armor Rating" },
+  { key: "MagicResistance", label: "Magic Resistance" },
+  { key: "ImpactPower", label: "Impact Power" },
   { key: "HealthRecoveryBonus", label: "Health Recovery Bonus", unit: "%" },
   { key: "SpellRecoveryBonus", label: "Spell Recovery Bonus", unit: "%" },
   { key: "MoveSpeed", label: "Move Speed" },
@@ -967,17 +1040,22 @@ function builderItemIsWeapon(item) {
   return item?.itemType === "Weapon" || ["Primary", "Secondary"].includes(itemSlotId(item));
 }
 
-function builderItemIsFighterOrClericPlate(item, allowedClasses) {
-  return item?.itemType === "Armor"
-    && item.armorType === "Plate"
-    && allowedClasses.some((entry) => entry.id === "Fighter" || entry.id === "Cleric");
+function builderItemIsPlateArmor(item) {
+  return item?.itemType === "Armor" && item.armorType === "Plate";
+}
+
+function builderItemIsSpear(item) {
+  return builderItemIsWeapon(item) && /^Id_Item_.*Spear/i.test(item?.asset || "");
 }
 
 function builderPerkAllowsItem(item, character, allowedClasses) {
   if (character?.id === "Fighter" && builderHasPerk(BUILDER_WEAPON_MASTERY_PERK_ID) && builderItemIsWeapon(item)) {
     return true;
   }
-  if (character?.id === "Warlock" && builderHasPerk(BUILDER_DEMON_ARMOR_PERK_ID) && builderItemIsFighterOrClericPlate(item, allowedClasses)) {
+  if (character?.id === "Warlock" && builderHasPerk(BUILDER_DEMON_ARMOR_PERK_ID) && builderItemIsPlateArmor(item)) {
+    return true;
+  }
+  if (character?.id === "Ranger" && builderHasPerk(BUILDER_SPEAR_PROFICIENCY_PERK_ID) && builderItemIsSpear(item)) {
     return true;
   }
   return false;
@@ -1041,22 +1119,29 @@ function iconImage(url, className, title) {
   `;
 }
 
+function builderChestArmorEquipped() {
+  return Boolean(state.kit.itemByAsset.get(state.builder.equipped.chest));
+}
+
 function builderPerkStatsArePassive(perk) {
-  return perk && !perk.conditionalStats && !BUILDER_CONDITIONAL_STAT_PERKS.has(perk.id);
+  return perk && perk.id !== BUILDER_SAVAGE_PERK_ID;
 }
 
 function builderPerkStatEntries(perk) {
   if (!perk) return [];
   if (Object.prototype.hasOwnProperty.call(BUILDER_PERK_STAT_OVERRIDES, perk.id)) {
+    if (perk.id === BUILDER_SAVAGE_PERK_ID && builderChestArmorEquipped()) return [];
     return BUILDER_PERK_STAT_OVERRIDES[perk.id];
   }
-  return builderPerkStatsArePassive(perk) ? perk.stats || [] : [];
+  return [];
 }
 
 function builderPerkSummary(perk) {
+  if (!perk) return BUILDER_NO_STAT_PERK_SUMMARY;
+  if (BUILDER_PERK_SUMMARIES[perk.id]) return BUILDER_PERK_SUMMARIES[perk.id];
   const entries = builderPerkStatEntries(perk);
   if (entries.length) return entries.map((stat) => `${stat.label} ${statValue(stat.value, stat.unit)}`).join(", ");
-  return builderPerkStatsArePassive(perk) ? "No direct stat modifier" : "Conditional bonus";
+  return BUILDER_NO_STAT_PERK_SUMMARY;
 }
 
 function statLabel(key) {
@@ -1184,6 +1269,13 @@ function selectedBonusEntry(slotId, index) {
   };
 }
 
+function addActivePerkStats(totals) {
+  state.builder.perks.forEach((perkId) => {
+    const perk = state.kit.perkById.get(perkId);
+    builderPerkStatEntries(perk).forEach((entry) => addBuilderStat(totals, entry, perk?.name || "Perk"));
+  });
+}
+
 function builderStatMap() {
   const totals = new Map();
   const character = selectedBuilderCharacter();
@@ -1193,6 +1285,7 @@ function builderStatMap() {
     const item = state.kit.itemByAsset.get(asset);
     addItemStats(totals, slotId, item);
   });
+  addActivePerkStats(totals);
   const armorMoveSpeedPenalty = activeArmorMoveSpeedPenalty();
   const armorMoveSpeedPenaltyReduction = directStatValue(totals, "MoveSpeedArmorPenaltyReduction");
   if (armorMoveSpeedPenalty < 0 && armorMoveSpeedPenaltyReduction > 0) {
@@ -1298,9 +1391,10 @@ function builderDerivedStatValues(totals, character) {
   const agility = directStatValue(totals, "Agility");
   const dexterity = directStatValue(totals, "Dexterity");
   const will = statValueWithPercentMod(totals, "Will", "WillMod");
-  const knowledge = directStatValue(totals, "Knowledge");
+  const knowledge = statValueWithPercentMod(totals, "Knowledge", "KnowledgeMod");
   const resourcefulness = directStatValue(totals, "Resourcefulness");
   values.set("Will", will);
+  values.set("Knowledge", knowledge);
 
   const maxHealthRating = (strength * 0.25) + (vigor * 0.75);
   const baseHealth = curveValue(
@@ -1311,6 +1405,8 @@ function builderDerivedStatValues(totals, character) {
   );
   const health = (baseHealth * (1 + (directStatValue(totals, "MaxHealthBonus") / 100))) + directStatValue(totals, "Health");
   values.set("Health", Math.ceil(health));
+  const magicalHealing = directStatValue(totals, "MagicalHealing") * (1 + (directStatValue(totals, "MagicalHealingBonus", "MagicalHealMod") / 100));
+  values.set("MagicalHealing", magicalHealing);
 
   const moveSpeed = (directStatValue(totals, "MoveSpeed") + curveValue("CT_Agility", "MoveSpeedBase", agility))
     * (1 + (directStatValue(totals, "MoveSpeedBonus") / 100));
@@ -1354,10 +1450,12 @@ function builderDerivedStatValues(totals, character) {
   values.set("PhysicalArmorReductionBonus", physicalReductionFromBonuses);
 
   const magicResistance = curveValue("CT_Will", "MagicResistance", will) + directStatValue(totals, "MagicResistance", "MagicalResistance");
+  values.set("MagicResistance", magicResistance);
   const magicalReductionFromResistance = curvePercent("CT_MagicResistance", "MagicalReduction", magicResistance);
   const magicalReductionFromBonuses = directStatValue(totals, "MagicalDamageReduction", "MagicalDamageReductionBonus");
-  values.set("MagicalDamageReduction", magicalReductionFromResistance + magicalReductionFromBonuses);
-  values.set("MagicalDamageReductionFromResistance", magicalReductionFromResistance);
+  const magicalReductionCap = builderHasPerk(BUILDER_IRON_WILL_PERK_ID) ? 75 : 65;
+  values.set("MagicalDamageReduction", Math.min(magicalReductionCap, magicalReductionFromResistance + magicalReductionFromBonuses));
+  values.set("MagicalDamageReductionFromResistance", Math.min(magicalReductionCap, magicalReductionFromResistance));
   values.set("MagicalDamageReductionBonus", magicalReductionFromBonuses);
   values.set("HeadshotDamageBonus", BUILDER_DEFAULTS.headshotDamageBonus + directStatValue(totals, "HeadshotDamageBonus"));
 
