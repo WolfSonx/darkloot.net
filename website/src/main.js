@@ -60,7 +60,7 @@ const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
-const APP_BUILD_ID = "20260519-1";
+const APP_BUILD_ID = "20260520-1";
 const SITE_UPDATED_AT = "2026-05-18T00:00:00+03:00";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
@@ -1545,8 +1545,6 @@ function sourceDetailFiltersFromMainPage() {
 function itemSearchGroups(row) {
   return [
     [row.item, row.itemAsset, row.rarity, row.category],
-    [row.source, row.sources?.join(" ")],
-    [row.map, row.maps?.join(" "), row.diff, row.diffs?.join(" ")],
   ];
 }
 
