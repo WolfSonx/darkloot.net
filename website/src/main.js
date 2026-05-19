@@ -54,8 +54,13 @@ const FAVORITES_KEY = "darkloot:favorites:v1";
 const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
 const SHARED_KIT_PARAM = "k";
 const SHARED_KIT_LEGACY_PARAM = "kit";
-const SHARED_KIT_VERSION = 2;
-const APP_BUILD_ID = "20260518-1";
+const SHARED_KIT_COMPRESSED_PREFIX = "z.";
+const SHARED_KIT_VERSION = 3;
+const SHARED_KIT_LEGACY_VERSION = 2;
+const SHARED_ITEM_PREFIX = "Id_Item_";
+const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
+const SHARED_PERK_PREFIX = "Id_Perk_";
+const APP_BUILD_ID = "20260519-1";
 const SITE_UPDATED_AT = "2026-05-18T00:00:00+03:00";
 const MAX_ROWS = 500;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
@@ -337,8 +342,7 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value ?? {}));
 }
 
-function base64UrlEncode(text) {
-  const bytes = new TextEncoder().encode(text);
+function base64UrlEncodeBytes(bytes) {
   let binary = "";
   const chunkSize = 0x8000;
   for (let index = 0; index < bytes.length; index += chunkSize) {
@@ -347,12 +351,38 @@ function base64UrlEncode(text) {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-function base64UrlDecode(value) {
+function base64UrlDecodeBytes(value) {
   const normalized = String(value || "").replaceAll("-", "+").replaceAll("_", "/");
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
   const binary = atob(padded);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function base64UrlEncode(text) {
+  return base64UrlEncodeBytes(new TextEncoder().encode(text));
+}
+
+function base64UrlDecode(value) {
+  const bytes = base64UrlDecodeBytes(value);
   return new TextDecoder().decode(bytes);
+}
+
+async function compressedSharedKitPayload(text) {
+  if (!globalThis.CompressionStream || !globalThis.DecompressionStream) return "";
+  try {
+    const stream = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
+    const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+    return `${SHARED_KIT_COMPRESSED_PREFIX}${base64UrlEncodeBytes(bytes)}`;
+  } catch {
+    return "";
+  }
+}
+
+async function decompressedSharedKitPayload(value) {
+  if (!globalThis.DecompressionStream) throw new Error("Compressed kit links are not supported in this browser.");
+  const bytes = base64UrlDecodeBytes(String(value).slice(SHARED_KIT_COMPRESSED_PREFIX.length));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return new Response(stream).text();
 }
 
 function savedKitId() {
@@ -430,6 +460,17 @@ function sharedSlotId(value) {
   return String(value || "");
 }
 
+function stripKnownPrefix(value, prefix) {
+  const text = String(value || "");
+  return text.startsWith(prefix) ? text.slice(prefix.length) : text;
+}
+
+function restoreKnownPrefix(value, prefix) {
+  const text = String(value || "");
+  if (!text || text.startsWith(prefix)) return text;
+  return `${prefix}${text}`;
+}
+
 function primaryValuesMatchDefaults(asset, values) {
   const item = state.kit.itemByAsset.get(asset);
   const defaults = defaultPrimaryValuesForItem(item);
@@ -442,10 +483,12 @@ function compactSharedKit(kit) {
   const equipped = BUILDER_SLOTS
     .map((slot, index) => {
       const asset = kit.equipped?.[slot.id];
-      return typeof asset === "string" && asset ? [index, asset] : null;
+      return typeof asset === "string" && asset ? [index, stripKnownPrefix(asset, SHARED_ITEM_PREFIX)] : null;
     })
     .filter(Boolean);
-  const equippedBySlot = new Map(equipped.map(([index, asset]) => [BUILDER_SLOTS[index]?.id, asset]));
+  const equippedBySlot = new Map(
+    equipped.map(([index, asset]) => [BUILDER_SLOTS[index]?.id, restoreKnownPrefix(asset, SHARED_ITEM_PREFIX)]),
+  );
   const primaryValues = Object.entries(plainObject(kit.primaryValues))
     .map(([slotId, values]) => {
       const asset = equippedBySlot.get(slotId);
@@ -458,8 +501,15 @@ function compactSharedKit(kit) {
     if (!equippedBySlot.has(slotId) || !Array.isArray(entries)) return;
     entries.forEach((entry, index) => {
       if (!entry?.propertyId) return;
-      const row = [compactSlotIndex(slotId), index, entry.propertyId];
-      if (entry.value !== "" && entry.value !== undefined && entry.value !== null) row.push(entry.value);
+      const item = state.kit.itemByAsset.get(equippedBySlot.get(slotId));
+      const poolId = entry.poolId || item?.secondaryPoolIds?.[index];
+      const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === entry.propertyId);
+      const row = [compactSlotIndex(slotId), index, stripKnownPrefix(entry.propertyId, SHARED_PROPERTY_PREFIX)];
+      const defaultValue = Number(option?.max ?? option?.min ?? 0);
+      const selectedValue = entry.value === "" || entry.value === undefined || entry.value === null
+        ? defaultValue
+        : clampStatEntryValue(option, entry.value);
+      if (Number.isFinite(selectedValue) && Math.abs(selectedValue - defaultValue) > 0.0001) row.push(selectedValue);
       bonuses.push(row);
     });
   });
@@ -472,12 +522,12 @@ function compactSharedKit(kit) {
     equipped,
     primaryValues,
     bonuses,
-    Array.isArray(kit.perks) ? kit.perks.filter(Boolean) : [],
+    Array.isArray(kit.perks) ? kit.perks.filter(Boolean).map((perkId) => stripKnownPrefix(perkId, SHARED_PERK_PREFIX)) : [],
   ];
 }
 
-function expandCompactSharedKit(payload) {
-  if (!Array.isArray(payload) || payload[0] !== SHARED_KIT_VERSION) return null;
+function expandLegacyCompactSharedKit(payload) {
+  if (!Array.isArray(payload) || payload[0] !== SHARED_KIT_LEGACY_VERSION) return null;
   const [, name, characterId, activeWeaponSet, selectedSlot, equippedRows = [], primaryRows = [], bonusRows = [], perks = []] = payload;
   const equipped = {};
   (Array.isArray(equippedRows) ? equippedRows : []).forEach((row) => {
@@ -515,31 +565,93 @@ function expandCompactSharedKit(payload) {
   });
 }
 
-function sharedKitPayload(kit) {
-  return base64UrlEncode(JSON.stringify(compactSharedKit(kit)));
+function expandCompactSharedKit(payload) {
+  if (!Array.isArray(payload)) return null;
+  if (payload[0] === SHARED_KIT_LEGACY_VERSION) return expandLegacyCompactSharedKit(payload);
+  if (payload[0] !== SHARED_KIT_VERSION) return null;
+  const [, name, characterId, activeWeaponSet, selectedSlot, equippedRows = [], primaryRows = [], bonusRows = [], perks = []] = payload;
+  const equipped = {};
+  (Array.isArray(equippedRows) ? equippedRows : []).forEach((row) => {
+    const slotId = sharedSlotId(row?.[0]);
+    const asset = restoreKnownPrefix(row?.[1], SHARED_ITEM_PREFIX);
+    if (slotId && asset) equipped[slotId] = asset;
+  });
+  const primaryValues = {};
+  (Array.isArray(primaryRows) ? primaryRows : []).forEach((row) => {
+    const slotId = sharedSlotId(row?.[0]);
+    const values = row?.[1];
+    if (slotId && Array.isArray(values) && values.length) primaryValues[slotId] = values;
+  });
+  const bonuses = {};
+  (Array.isArray(bonusRows) ? bonusRows : []).forEach((row) => {
+    const slotId = sharedSlotId(row?.[0]);
+    const index = Number(row?.[1]);
+    const propertyId = restoreKnownPrefix(row?.[2], SHARED_PROPERTY_PREFIX);
+    if (!slotId || !Number.isInteger(index) || !propertyId) return;
+    if (!Array.isArray(bonuses[slotId])) bonuses[slotId] = [];
+    bonuses[slotId][index] = {
+      propertyId,
+      value: row.length > 3 ? row[3] : "",
+    };
+  });
+  return normalizeSavedKit({
+    name,
+    characterId,
+    activeWeaponSet: String(activeWeaponSet || "1"),
+    selectedSlot: sharedSlotId(selectedSlot) || "weapon1Primary",
+    equipped,
+    primaryValues,
+    bonuses,
+    perks: Array.isArray(perks) ? perks.map((perkId) => restoreKnownPrefix(perkId, SHARED_PERK_PREFIX)) : [],
+  });
 }
 
-function kitShareUrl(kit) {
+async function sharedKitPayload(kit) {
+  const text = JSON.stringify(compactSharedKit(kit));
+  const plain = base64UrlEncode(text);
+  const compressed = await compressedSharedKitPayload(text);
+  return compressed && compressed.length < plain.length ? compressed : plain;
+}
+
+async function kitShareUrl(kit) {
   const url = new URL(window.location.href);
+  url.search = "";
+  const payload = await sharedKitPayload(kit);
   url.searchParams.delete(SHARED_KIT_LEGACY_PARAM);
-  url.searchParams.set(SHARED_KIT_PARAM, sharedKitPayload(kit));
-  url.hash = "";
+  url.searchParams.delete(SHARED_KIT_PARAM);
+  url.hash = payload.startsWith(SHARED_KIT_COMPRESSED_PREFIX) ? payload : `${SHARED_KIT_PARAM}=${payload}`;
   return url.toString();
 }
 
-function decodeSharedKitPayload(value) {
+async function decodeSharedKitPayload(value) {
   try {
-    const parsed = JSON.parse(base64UrlDecode(value));
+    const text = String(value || "").startsWith(SHARED_KIT_COMPRESSED_PREFIX)
+      ? await decompressedSharedKitPayload(value)
+      : base64UrlDecode(value);
+    const parsed = JSON.parse(text);
     return expandCompactSharedKit(parsed) || normalizeSavedKit(parsed?.kit || parsed);
   } catch {
     return null;
   }
 }
 
+function sharedKitValueFromLocation() {
+  const url = new URL(window.location.href);
+  const hash = url.hash.slice(1);
+  if (hash.startsWith(SHARED_KIT_COMPRESSED_PREFIX)) return hash;
+  if (hash.startsWith(`${SHARED_KIT_PARAM}=`)) return hash.slice(SHARED_KIT_PARAM.length + 1);
+  if (hash.startsWith(`${SHARED_KIT_LEGACY_PARAM}=`)) return hash.slice(SHARED_KIT_LEGACY_PARAM.length + 1);
+  return url.searchParams.get(SHARED_KIT_PARAM) || url.searchParams.get(SHARED_KIT_LEGACY_PARAM);
+}
+
 async function copyText(value) {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+      // Fall back to the hidden textarea path when clipboard permission is blocked.
+    }
   }
   const textarea = document.createElement("textarea");
   textarea.value = value;
@@ -605,10 +717,13 @@ function savedBonusesForItem(item, bonuses) {
   return (item?.secondaryPoolIds || []).map((poolId, index) => {
     const entry = Array.isArray(bonuses) ? bonuses[index] : null;
     const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === entry?.propertyId);
+    const value = entry?.value === "" || entry?.value === undefined || entry?.value === null
+      ? Number(option?.max ?? option?.min ?? 0)
+      : clampStatEntryValue(option, entry.value);
     return {
       poolId,
       propertyId: option ? entry.propertyId : "",
-      value: option ? clampStatEntryValue(option, entry.value) : "",
+      value: option ? value : "",
     };
   });
 }
@@ -675,7 +790,7 @@ function loadBuilderKit(kitId) {
 
 async function shareBuilderKit(kit = currentBuilderKit(currentBuilderKitName())) {
   try {
-    await copyText(kitShareUrl(kit));
+    await copyText(await kitShareUrl(kit));
     setBuilderShareStatus("Link copied");
   } catch (error) {
     console.error(error);
@@ -684,10 +799,9 @@ async function shareBuilderKit(kit = currentBuilderKit(currentBuilderKitName()))
 }
 
 async function applySharedBuilderKitFromLocation() {
-  const params = new URL(window.location.href).searchParams;
-  const sharedValue = params.get(SHARED_KIT_PARAM) || params.get(SHARED_KIT_LEGACY_PARAM);
+  const sharedValue = sharedKitValueFromLocation();
   if (!sharedValue) return false;
-  const kit = decodeSharedKitPayload(sharedValue);
+  const kit = await decodeSharedKitPayload(sharedValue);
   if (!kit) {
     setActiveTab("builder", { render: false });
     state.builder.shareStatus = "Invalid kit link";
