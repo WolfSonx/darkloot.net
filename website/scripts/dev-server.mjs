@@ -24,7 +24,8 @@ function safePath(urlPath) {
   const decoded = decodeURIComponent(urlPath.split("?")[0]);
   const clean = decoded === "/" ? "/index.html" : decoded;
   const resolved = path.resolve(root, `.${clean}`);
-  if (!resolved.startsWith(root)) return null;
+  const relative = path.relative(root, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return null;
   return resolved;
 }
 

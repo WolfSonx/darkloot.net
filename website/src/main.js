@@ -37,6 +37,8 @@
   sourceByKey: new Map(),
   rateWeights: {},
   favorites: { items: [], sources: [] },
+  favoriteItemSet: new Set(),
+  favoriteSourceSet: new Set(),
   savedKits: [],
   chipPopover: { target: null, pinned: false },
   slotTooltip: { target: null },
@@ -60,9 +62,12 @@ const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
-const APP_BUILD_ID = "20260520-2";
+const APP_BUILD_ID = "20260528-1";
 const SITE_UPDATED_AT = "2026-05-20T00:00:00+03:00";
 const MAX_ROWS = 500;
+const MAX_BUILDER_ITEMS = 180;
+const MAX_DETAIL_ROWS = 500;
+const TERMS_CACHE_LIMIT = 6000;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
 const BUILDER_PERK_LIMIT = 4;
 const BUILDER_WEAPON_MASTERY_PERK_ID = "Id_Perk_WeaponMastery";
@@ -269,6 +274,10 @@ const GRADE4_ANCHORS = [
 
 const $ = (id) => document.getElementById(id);
 let builderShareStatusTimer = 0;
+const termsCache = new Map();
+const secondaryOptionsCache = new WeakMap();
+const emptySecondaryOptions = { options: [], byId: new Map() };
+const scheduledRenders = new Map();
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -280,12 +289,18 @@ function escapeHtml(value) {
 }
 
 function terms(value) {
-  return String(value || "")
+  const text = String(value || "");
+  const cached = termsCache.get(text);
+  if (cached) return cached;
+  const tokens = text
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .map((term) => term.trim())
     .filter(Boolean);
+  if (termsCache.size >= TERMS_CACHE_LIMIT) termsCache.clear();
+  termsCache.set(text, tokens);
+  return tokens;
 }
 
 function searchGroupTokens(groups) {
@@ -303,6 +318,14 @@ function matchesSearchParts(parts, haystack) {
 function matchesSearchGroups(parts, groups) {
   if (!parts.length) return true;
   return (groups || []).some((group) => matchesSearchParts(parts, group));
+}
+
+function scheduleRender(key, renderFn) {
+  if (scheduledRenders.has(key)) return;
+  scheduledRenders.set(key, requestAnimationFrame(() => {
+    scheduledRenders.delete(key);
+    renderFn();
+  }));
 }
 
 function sourceKey(source, kind) {
@@ -391,19 +414,26 @@ function setCurrentLuck(value) {
   renderActiveDetail();
 }
 
+function syncFavoriteSets() {
+  state.favoriteItemSet = new Set(state.favorites.items);
+  state.favoriteSourceSet = new Set(state.favorites.sources);
+}
+
 function loadFavorites() {
   try {
     const parsed = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "{}");
     state.favorites = {
-      items: Array.isArray(parsed.items) ? parsed.items : [],
-      sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+      items: Array.isArray(parsed.items) ? [...new Set(parsed.items.map(String).filter(Boolean))] : [],
+      sources: Array.isArray(parsed.sources) ? [...new Set(parsed.sources.map(String).filter(Boolean))] : [],
     };
   } catch {
     state.favorites = { items: [], sources: [] };
   }
+  syncFavoriteSets();
 }
 
 function saveFavorites() {
+  syncFavoriteSets();
   localStorage.setItem(FAVORITES_KEY, JSON.stringify(state.favorites));
 }
 
@@ -576,7 +606,7 @@ function compactSharedKit(kit) {
       if (!entry?.propertyId) return;
       const item = state.kit.itemByAsset.get(equippedBySlot.get(slotId));
       const poolId = entry.poolId || item?.secondaryPoolIds?.[index];
-      const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === entry.propertyId);
+      const option = secondaryOptionForItem(item, poolId, entry.propertyId);
       const row = [compactSlotIndex(slotId), index, stripKnownPrefix(entry.propertyId, SHARED_PROPERTY_PREFIX)];
       const defaultValue = Number(option?.max ?? option?.min ?? 0);
       const selectedValue = entry.value === "" || entry.value === undefined || entry.value === null
@@ -789,7 +819,7 @@ function savedPrimaryValuesForItem(item, values) {
 function savedBonusesForItem(item, bonuses) {
   return (item?.secondaryPoolIds || []).map((poolId, index) => {
     const entry = Array.isArray(bonuses) ? bonuses[index] : null;
-    const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === entry?.propertyId);
+    const option = secondaryOptionForItem(item, poolId, entry?.propertyId);
     const value = entry?.value === "" || entry?.value === undefined || entry?.value === null
       ? Number(option?.max ?? option?.min ?? 0)
       : clampStatEntryValue(option, entry.value);
@@ -903,11 +933,11 @@ function confirmOrDeleteSavedKit(kitId) {
 }
 
 function isFavoriteItem(asset) {
-  return state.favorites.items.includes(asset);
+  return state.favoriteItemSet.has(asset);
 }
 
 function isFavoriteSource(source, kind) {
-  return state.favorites.sources.includes(sourceKey(source, kind));
+  return state.favoriteSourceSet.has(sourceKey(source, kind));
 }
 
 function toggleFavoriteItem(asset) {
@@ -922,7 +952,7 @@ function toggleFavoriteItem(asset) {
 
 function toggleFavoriteSource(source, kind) {
   const key = sourceKey(source, kind);
-  const exists = state.favorites.sources.includes(key);
+  const exists = state.favoriteSourceSet.has(key);
   state.favorites.sources = exists
     ? state.favorites.sources.filter((value) => value !== key)
     : [...state.favorites.sources, key];
@@ -957,6 +987,7 @@ function optionHtml(values, label = "All") {
 
 function setSelectIfAvailable(id, value) {
   const select = $(id);
+  if (!select) return;
   if ([...select.options].some((option) => option.value === value)) select.value = value;
 }
 
@@ -1222,16 +1253,39 @@ function bonusOptionSearchText(option) {
   ].filter(Boolean).join(" ");
 }
 
-function secondaryOptionsForItem(item, poolId) {
+function cachedSecondaryOptions(item, poolId) {
+  if (!item || typeof item !== "object") return emptySecondaryOptions;
+  let itemCache = secondaryOptionsCache.get(item);
+  if (!itemCache) {
+    itemCache = new Map();
+    secondaryOptionsCache.set(item, itemCache);
+  }
+  const cacheKey = String(poolId || "");
+  const cached = itemCache.get(cacheKey);
+  if (cached) return cached;
   const pool = state.kit.secondaryPools[poolId];
   const primaryStats = primaryStatIdentitiesForItem(item);
-  return (pool?.options || [])
+  const options = (pool?.options || [])
     .filter((option) => !primaryStats.has(statIdentity(option)))
     .sort((a, b) => {
       const labelCompare = bonusOptionText(a).localeCompare(bonusOptionText(b), undefined, { sensitivity: "base" });
       if (labelCompare) return labelCompare;
       return String(a.propertyId || "").localeCompare(String(b.propertyId || ""));
     });
+  const result = {
+    options,
+    byId: new Map(options.map((option) => [option.propertyId, option])),
+  };
+  itemCache.set(cacheKey, result);
+  return result;
+}
+
+function secondaryOptionsForItem(item, poolId) {
+  return cachedSecondaryOptions(item, poolId).options;
+}
+
+function secondaryOptionForItem(item, poolId, propertyId) {
+  return cachedSecondaryOptions(item, poolId).byId.get(propertyId) || null;
 }
 
 function addBuilderStat(totals, entry, source) {
@@ -1260,7 +1314,7 @@ function selectedBonusEntry(slotId, index) {
   if (!entry?.propertyId) return null;
   const item = equippedBuilderItem(slotId);
   const poolId = entry.poolId || item?.secondaryPoolIds?.[index];
-  const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === entry.propertyId);
+  const option = secondaryOptionForItem(item, poolId, entry.propertyId);
   if (!option) return null;
   const value = Number(entry.value);
   return {
@@ -1487,8 +1541,8 @@ function builderStatRows() {
   });
 }
 
-function builderStatTotals() {
-  return builderStatRows()
+function builderStatTotals(rows = builderStatRows()) {
+  return rows
     .filter((row) => row.type !== "text" && Number(row.value) !== 0)
     .sort((left, right) => {
       const rank = statRank(left.key) - statRank(right.key);
@@ -2106,9 +2160,24 @@ function itemDetailModel(payload) {
   const model = {
     baseRows,
     filterOptions: itemDetailFilterOptions(baseRows),
-    searchIndex: buildSearchIndex(baseRows, itemDetailSearchGroups),
   };
   payload._itemDetailModel = model;
+  return model;
+}
+
+function itemDetailScopedModel(payload, filters) {
+  const cacheKey = JSON.stringify([filters.kind, filters.map, filters.diff]);
+  if (payload._itemDetailScopedModel?.cacheKey === cacheKey) return payload._itemDetailScopedModel;
+  const { baseRows } = itemDetailModel(payload);
+  const scopedRows = baseRows
+    .filter((row) => itemDetailFilterMatches(row, filters))
+    .map((row) => scopedItemDetailRow(row, filters));
+  const model = {
+    cacheKey,
+    scopedRows,
+    searchIndex: buildSearchIndex(scopedRows, itemDetailSearchGroups),
+  };
+  payload._itemDetailScopedModel = model;
   return model;
 }
 
@@ -2924,7 +2993,7 @@ function positionBuilderPicker() {
 
 function renderBuilderItems() {
   const rows = filteredBuilderItems();
-  const limited = rows.slice(0, 180);
+  const limited = rows.slice(0, MAX_BUILDER_ITEMS);
   $("builderItemList").innerHTML = limited.length
     ? limited.map((item) => {
       const targetSlot = firstBuilderSlotForItem(item);
@@ -2948,8 +3017,7 @@ function renderBuilderItems() {
     : `<div class="builder-empty">${escapeHtml(weaponSlotBlockReason(state.builder.selectedSlot) || "No kit items match these filters for this character.")}</div>`;
 }
 
-function renderBuilderStats() {
-  const stats = builderStatRows();
+function renderBuilderStats(stats = builderStatRows()) {
   const gearScore = Object.entries(state.builder.equipped)
     .filter(([slotId]) => slotStatsAreActive(slotId))
     .map(([, asset]) => Number(state.kit.itemByAsset.get(asset)?.gearScore || 0))
@@ -2967,14 +3035,14 @@ function renderBuilderStats() {
   }).join("");
 }
 
-function renderBuilderSummary() {
+function renderBuilderSummary(stats = builderStatRows()) {
   const equippedCount = Object.values(state.builder.equipped).filter(Boolean).length;
   const character = selectedBuilderCharacter();
-  const stats = builderStatTotals();
+  const statTotals = builderStatTotals(stats);
   $("builderSummary").innerHTML = [
     metaPill("Character", character?.name || "None"),
     metaPill("Equipped", `${equippedCount} / ${BUILDER_SLOTS.length}`),
-    metaPill("Stats", stats.length.toLocaleString()),
+    metaPill("Stats", statTotals.length.toLocaleString()),
   ].join("");
 }
 
@@ -3013,14 +3081,15 @@ function renderBuilder() {
     positionBuilderPicker();
     return;
   }
-  renderBuilderSummary();
+  const stats = builderStatRows();
+  renderBuilderSummary(stats);
   renderBuilderCharacter();
   renderBuilderPerks();
   renderBuilderEquipment();
   renderBuilderPicker();
   renderBuilderBonusPanel();
   renderBuilderItems();
-  renderBuilderStats();
+  renderBuilderStats(stats);
   renderBuilderSavedKits();
   positionBuilderPicker();
 }
@@ -3126,7 +3195,7 @@ function renderSourceDetail(payload) {
       return left.index - right.index;
     })
     .map((entry) => entry.row);
-  const limited = rows.slice(0, 500);
+  const limited = rows.slice(0, MAX_DETAIL_ROWS);
   const loadedRows = Number(payload.rowsLimited || payload.rows?.length || model.groupedRows.length);
   const totalRows = Number(payload.total || loadedRows);
   const loadedText = loadedRows < totalRows
@@ -3173,12 +3242,11 @@ function renderItemDetail(payload) {
   const searchParts = terms(search);
   const filters = selectedItemDetailFilters();
   const { baseRows, filterOptions } = itemDetailModel(payload);
-  const rows = baseRows
-    .filter((row) => itemDetailFilterMatches(row, filters))
-    .map((row) => scopedItemDetailRow(row, filters))
-    .filter((row) => matchesSearchGroups(searchParts, itemDetailSearchGroups(row)))
+  const { scopedRows, searchIndex } = itemDetailScopedModel(payload, filters);
+  const rows = scopedRows
+    .filter((row) => matchesSearchGroups(searchParts, searchIndex.get(row)))
     .sort((a, b) => itemDetailBestLuckChanceValue(b, filters) - itemDetailBestLuckChanceValue(a, filters));
-  const limited = rows.slice(0, 500);
+  const limited = rows.slice(0, MAX_DETAIL_ROWS);
   $("detailTitle").textContent = payload.item?.item || "Item";
   $("detailMeta").textContent = `${payload.item?.rarity || ""} ${payload.item?.category || ""} | ${baseRows.length.toLocaleString()} sources`;
   $("detailContent").innerHTML = `
@@ -3375,7 +3443,7 @@ function setBuilderBonusProperty(slotId, index, propertyId) {
   const bonuses = state.builder.bonuses[slotId] || defaultBonusesForItem(item);
   const entry = bonuses[index];
   const poolId = entry?.poolId || item.secondaryPoolIds[index];
-  const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === propertyId);
+  const option = secondaryOptionForItem(item, poolId, propertyId);
   bonuses[index] = {
     poolId,
     propertyId: option ? option.propertyId : "",
@@ -3391,7 +3459,7 @@ function setBuilderBonusValue(slotId, index, value) {
   clearBuilderConfirmation();
   const item = equippedBuilderItem(slotId);
   const poolId = bonuses[index].poolId || item?.secondaryPoolIds?.[index];
-  const option = secondaryOptionsForItem(item, poolId).find((row) => row.propertyId === bonuses[index].propertyId);
+  const option = secondaryOptionForItem(item, poolId, bonuses[index].propertyId);
   const parsed = Number(value);
   const nextValue = option && Number.isFinite(parsed)
     ? Math.max(Number(option.min), Math.min(Number(option.max), parsed))
@@ -3428,20 +3496,22 @@ function wireEvents() {
   });
 
   ["itemSearch", "itemRarity", "itemCategory", "itemMap", "itemDiff"]
-    .forEach((id) => $(id).addEventListener("input", renderItems));
+    .forEach((id) => $(id).addEventListener("input", () => scheduleRender("items", renderItems)));
 
   ["sourceSearch", "sourceMap", "sourceDiff", "sourceKind"]
-    .forEach((id) => $(id).addEventListener("input", renderSources));
+    .forEach((id) => $(id).addEventListener("input", () => scheduleRender("sources", renderSources)));
 
   $("builderSearch").addEventListener("input", () => {
     clearBuilderConfirmation();
     state.builder.search = $("builderSearch").value;
-    renderBuilder();
+    renderBuilderActionStates();
+    scheduleRender("builder-items", renderBuilderItems);
   });
   $("builderRarity").addEventListener("input", () => {
     clearBuilderConfirmation();
     state.builder.rarity = $("builderRarity").value || "All";
-    renderBuilder();
+    renderBuilderActionStates();
+    scheduleRender("builder-items", renderBuilderItems);
   });
   $("builderCharacter").addEventListener("change", () => {
     clearBuilderConfirmation();

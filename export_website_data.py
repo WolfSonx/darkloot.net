@@ -219,7 +219,7 @@ def reset_generated_details(output_dir: Path) -> None:
 
 def read_asset(path: Path) -> dict | None:
     try:
-        with path.open("r", encoding="utf-8") as handle:
+        with path.open("r", encoding="utf-8-sig") as handle:
             data = json.load(handle)
     except (OSError, json.JSONDecodeError):
         return None
