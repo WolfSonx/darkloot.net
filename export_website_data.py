@@ -110,6 +110,10 @@ ITEM_PROPERTY_EXCLUDED_STAT_KEYS = {"Primitive"}
 ITEM_PROPERTY_STAT_KEY_OVERRIDES = {
     "Id_ItemPropertyType_Effect_PhysicalWeaponDamageAdd": "AdditionalWeaponDamage",
 }
+ITEM_PROPERTY_VALUE_SCALE_OVERRIDES = {
+    "ArmorPenetration": lambda value: max(0, value - 10) * 0.1,
+    "MagicPenetration": lambda value: max(0, value + 5) * 0.1,
+}
 STAT_EXPORT_SUFFIXES = (
     "Base",
     "Add",
@@ -293,6 +297,28 @@ def icon_raster_url(icon_json_path: Path | None, icon_asset: str, output_dir: Pa
     return f"/assets/item-icons/{target.name}"
 
 
+def item_icon_from_art_path(art_json_path: Path | None, art_asset: str, output_dir: Path) -> str:
+    if not art_json_path or not art_asset:
+        return ""
+    icon_dir = art_json_path.with_suffix("").parent / "Icon"
+    if not icon_dir.exists():
+        return ""
+    tokens = [art_asset]
+    if re.search(r"_1001$", art_asset):
+        tokens.append(re.sub(r"_1001$", "_0001", art_asset))
+    tokens.append(re.sub(r"_[0-9]{4}$", "", art_asset))
+    candidates = []
+    for token in dict.fromkeys(token for token in tokens if token):
+        for extension in (".png", ".webp", ".jpg", ".jpeg"):
+            candidates.extend(sorted(icon_dir.glob(f"*{token}*{extension}")))
+    source = next((path for path in candidates if path.exists()), None)
+    if not source:
+        source = next((path for path in sorted(icon_dir.glob("*.png")) if path.exists()), None)
+    if not source:
+        return ""
+    return public_asset_url_from_source(source, output_dir, "item-icons")
+
+
 def public_asset_url_from_source(source: Path, output_dir: Path, asset_folder: str) -> str:
     if not source.exists():
         return ""
@@ -356,6 +382,10 @@ def item_art_from_reference(generated_root: Path, output_dir: Path, art_referenc
             "iconSize": icon_size,
         })
         icon_url = icon_raster_url(icon_json_path, icon_asset, output_dir)
+        if icon_url:
+            result["iconUrl"] = icon_url
+    if not result.get("iconUrl"):
+        icon_url = item_icon_from_art_path(art_json_path, art_asset, output_dir)
         if icon_url:
             result["iconUrl"] = icon_url
     return {key: value for key, value in result.items() if value not in ("", {}, None)}
@@ -626,13 +656,20 @@ def property_item_entry(row: dict, property_types: dict) -> dict | None:
     is_percent = type_info["statKey"] in PERCENT_STAT_KEYS
     value_scale = value_ratio * 100 if is_percent and isinstance(value_ratio, (int, float)) else 1
     unit = "%" if is_percent else ""
+    scale_override = ITEM_PROPERTY_VALUE_SCALE_OVERRIDES.get(type_info["statKey"])
+    if scale_override:
+        min_display = scale_override(min_value)
+        max_display = scale_override(max_value)
+    else:
+        min_display = min_value * value_scale
+        max_display = max_value * value_scale
     return {
         "propertyId": type_id,
         "statKey": type_info["statKey"],
         "label": type_info["label"],
         "propertyLabel": type_info.get("propertyLabel") or type_info["label"],
-        "min": round(min_value * value_scale, 4),
-        "max": round(max_value * value_scale, 4),
+        "min": round(min_display, 4),
+        "max": round(max_display, 4),
         "rawMin": min_value,
         "rawMax": max_value,
         "rate": row.get("PropertyRate", 0),
@@ -715,7 +752,7 @@ def load_curve_tables(generated_root: Path) -> dict:
 def load_perks(generated_root: Path, output_dir: Path, status_effects: dict) -> dict:
     perks = {}
     perk_dir = generated_root / "Perk" / "Perk"
-    for path in perk_dir.glob("*.json"):
+    for path in perk_dir.glob("*.json") if perk_dir.exists() else []:
         asset = read_asset(path)
         if not asset:
             continue
@@ -754,12 +791,39 @@ def load_perks(generated_root: Path, output_dir: Path, status_effects: dict) -> 
         if name in CONDITIONAL_STAT_PERK_IDS:
             perk["conditionalStats"] = True
         perks[name] = perk
+    if not perks:
+        content_root = generated_root.parents[2]
+        icon_dir = content_root / "UI" / "Resources" / "IconPerk"
+        for path in sorted(icon_dir.glob("Icon_Perk_*.png")):
+            token = path.stem.removeprefix("Icon_Perk_")
+            name = f"Id_Perk_{token}"
+            icon_url = public_asset_url_from_source(path, output_dir, "perk-icons")
+            perks[name] = {
+                "id": name,
+                "name": humanize_identifier(name),
+                "classes": [],
+                "classNames": [],
+                "effects": [],
+                "stats": [],
+                "canUse": True,
+                "iconUrl": icon_url,
+            }
     return perks
 
 
 def load_characters(generated_root: Path, output_dir: Path, perks: dict, character_effects: dict) -> list[dict]:
     characters = []
     character_dir = generated_root.parent / "DT_PlayerCharacter" / "PlayerCharacter"
+    grandmaster_perks: dict[str, set[str]] = {}
+    for path in character_dir.glob("Id_PlayerCharacter_GrandMaster_*.json"):
+        asset = read_asset(path)
+        if not asset:
+            continue
+        key = class_key(asset.get("Name") or path.stem)
+        if key.startswith("GrandMaster_"):
+            key = key.removeprefix("GrandMaster_")
+        props = ((asset.get("Properties") or {}).get("Item") or {})
+        grandmaster_perks[key] = {perk_id for perk_id in asset_names(props.get("Perks")) if perk_id in perks}
     for path in character_dir.glob("Id_PlayerCharacter_*.json"):
         asset = read_asset(path)
         if not asset:
@@ -772,6 +836,7 @@ def load_characters(generated_root: Path, output_dir: Path, perks: dict, charact
         if props.get("CanUse") is False:
             continue
         perk_ids = {perk_id for perk_id in asset_names(props.get("Perks")) if perk_id in perks}
+        perk_ids.update(grandmaster_perks.get(key, set()))
         perk_ids.update(
             perk_id
             for perk_id, perk in perks.items()
