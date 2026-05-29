@@ -69,7 +69,7 @@ const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
-const APP_BUILD_ID = "20260529-14";
+const APP_BUILD_ID = "20260529-17";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -406,9 +406,20 @@ function percent(value) {
   return `${(Number(value || 0) * 100).toFixed(4)}%`;
 }
 
+function percentTextValue(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return 0;
+  const parsed = Number.parseFloat(text.replace("%", ""));
+  if (!Number.isFinite(parsed)) return 0;
+  return parsed / 100;
+}
+
 function chanceValue(row, valueKey = "dynAtLeastOneValue") {
   const model = row.luckModel;
-  if (!model) return Number(row[valueKey] || row.chanceValue || row.bestDynValue || 0);
+  if (!model) {
+    if (state.currentLuck === 0) return Number(row.baseAtLeastOneValue || 0) || percentTextValue(row.baseAtLeastOne);
+    return Number(row[valueKey] || row.chanceValue || row.bestDynValue || 0) || percentTextValue(row.dynAtLeastOne);
+  }
   const weights = state.rateWeights[model.rateKey];
   if (!weights) return Number(row[valueKey] || row.chanceValue || row.bestDynValue || 0);
   const grade = Number(model.grade || 0);
@@ -421,10 +432,14 @@ function chanceValue(row, valueKey = "dynAtLeastOneValue") {
 
 function perRollChanceValue(row) {
   const model = row.luckModel;
-  if (!model) return Number(row.dynPerRollValue || row.basePerRollValue || 0);
+  if (!model) {
+    if (state.currentLuck === 0) return Number(row.basePerRollValue || 0) || percentTextValue(row.basePerRoll);
+    return Number(row.dynPerRollValue || row.basePerRollValue || 0) || percentTextValue(row.dynPerRoll || row.basePerRoll);
+  }
   const weights = state.rateWeights[model.rateKey];
-  if (!weights) return Number(row.dynPerRollValue || model.basePerRollValue || 0);
+  if (!weights) return Number(row.dynPerRollValue || model.basePerRollValue || 0) || percentTextValue(row.dynPerRoll || row.basePerRoll);
   const grade = Number(model.grade || 0);
+  if (!Number.isFinite(grade)) return Number(row.dynPerRollValue || model.basePerRollValue || 0) || percentTextValue(row.dynPerRoll || row.basePerRoll);
   const choiceFraction = Number(model.choiceFraction || 0);
   const probs = gradeProbabilities(weights, state.currentLuck);
   return Number(probs[grade] || 0) * choiceFraction;
@@ -2421,11 +2436,72 @@ function amountText(value) {
   return summarizedValues(values, 3);
 }
 
+function amountRollBreakdownSort(left, right) {
+  const leftAmount = Number(left.amount);
+  const rightAmount = Number(right.amount);
+  if (Number.isFinite(leftAmount) && Number.isFinite(rightAmount) && leftAmount !== rightAmount) {
+    return leftAmount - rightAmount;
+  }
+  const amountSort = compareSortValues(String(left.amount || ""), String(right.amount || ""));
+  if (amountSort) return amountSort;
+  const leftGrade = Number(left.grade);
+  const rightGrade = Number(right.grade);
+  if (Number.isFinite(leftGrade) && Number.isFinite(rightGrade) && leftGrade !== rightGrade) {
+    return leftGrade - rightGrade;
+  }
+  return compareSortValues(String(left.grade || ""), String(right.grade || ""));
+}
+
+function amountRollBreakdownChanceValue(entry) {
+  if (state.currentLuck === 0) {
+    return Number(entry.basePerRollValue || 0) || percentTextValue(entry.basePerRoll);
+  }
+  return Number(entry.dynPerRollValue ?? entry.basePerRollValue ?? 0)
+    || percentTextValue(entry.dynPerRoll || entry.basePerRoll);
+}
+
+function amountRollBreakdownText(row) {
+  const entries = Array.isArray(row.amountRollBreakdown) ? [...row.amountRollBreakdown] : [];
+  if (entries.length <= 1) return "";
+  return entries
+    .sort(amountRollBreakdownSort)
+    .map((entry) => `${entry.amount}: ${percent(amountRollBreakdownChanceValue(entry))}`)
+    .join(", ");
+}
+
+function amountCell(row) {
+  const amount = escapeHtml(amountText(row.itemCounts || row.amountRolls || row.itemCount));
+  const breakdown = amountRollBreakdownText(row);
+  if (!breakdown) return amount;
+  return `
+    <div class="amount-cell-main">${amount}</div>
+    <div class="amount-breakdown">${escapeHtml(breakdown)}</div>
+  `;
+}
+
 function amountSortValue(value) {
   const numbers = splitValues(value)
     .map((entry) => Number(entry))
     .filter((entry) => Number.isFinite(entry));
   return numbers.length ? Math.min(...numbers) : 0;
+}
+
+function addAmountRollBreakdown(target, row) {
+  if (!Array.isArray(row.amountRollBreakdown)) return;
+  row.amountRollBreakdown.forEach((entry) => {
+    const key = `${entry.amount}|${entry.grade}`;
+    const existing = target.get(key) || {
+      amount: entry.amount,
+      grade: entry.grade,
+      basePerRollValue: 0,
+      dynPerRollValue: 0,
+    };
+    existing.basePerRollValue += Number(entry.basePerRollValue || 0) || percentTextValue(entry.basePerRoll);
+    existing.dynPerRollValue += Number(entry.dynPerRollValue || 0) || percentTextValue(entry.dynPerRoll);
+    existing.basePerRoll = percent(existing.basePerRollValue);
+    existing.dynPerRoll = percent(existing.dynPerRollValue);
+    target.set(key, existing);
+  });
 }
 
 function sourceDetailGroupKey(row) {
@@ -2459,6 +2535,7 @@ function groupedSourceDetailRows(rows) {
         _diffs: new Set(),
         _itemCounts: new Set(),
         _rateTables: new Set(),
+        _amountRollBreakdown: new Map(),
       };
       grouped.set(key, entry);
     }
@@ -2466,6 +2543,7 @@ function groupedSourceDetailRows(rows) {
     splitValues(row.diffs || row.diff).forEach((value) => entry._diffs.add(value));
     splitValues(row.itemCounts || row.amountRolls || row.itemCount).forEach((value) => entry._itemCounts.add(value));
     splitValues(row.rateTables || row.rateTable).forEach((value) => entry._rateTables.add(value));
+    addAmountRollBreakdown(entry._amountRollBreakdown, row);
   });
 
   return [...grouped.values()].map((row) => {
@@ -2483,6 +2561,7 @@ function groupedSourceDetailRows(rows) {
       itemCount: summarizedValues(itemCounts, 3),
       rateTables,
       rateTable: summarizedValues(rateTables, 3),
+      amountRollBreakdown: [...row._amountRollBreakdown.values()].sort(amountRollBreakdownSort),
     };
   });
 }
@@ -2878,7 +2957,7 @@ function renderSources() {
         <td>${kindChip(row.sourceKind)}</td>
         <td>${chips(mapChipValues(row.mapValues || row.maps, mapFilter, diffFilter), "map-chip")}</td>
         <td>${chips(scopedChipValues(row.diffValues || row.diffs, diffFilter), "diff-chip")}</td>
-        <td class="num">${escapeHtml(amountText(row.amountRolls || row.itemCount))}</td>
+        <td class="num">${amountCell(row)}</td>
         <td class="action-cell"><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
       </tr>
     `).join("")
@@ -3686,7 +3765,7 @@ function renderSourceDetail(payload) {
     ${sourceRollSummaryTable(rows)}
     ${detailTable(limited, [
       { label: "Item", sortKey: "item", html: (row) => itemNameCell(row) },
-      { label: "Amount", sortKey: "amount", html: (row) => escapeHtml(amountText(row.itemCounts || row.amountRolls || row.itemCount)), num: true },
+      { label: "Amount", sortKey: "amount", html: (row) => amountCell(row), num: true },
       { label: "Rarity", sortKey: "rarity", html: (row) => rarity(row.rarity) },
       { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
       { label: "Maps", sortKey: "maps", html: (row) => chips(mapChipValues(row.maps || row.map, filters.map, filters.diff), "map-chip") },
@@ -3743,6 +3822,7 @@ function renderItemDetail(payload) {
       { label: "Maps", html: (row) => chips(mapChipValues(row.mapValues || row.maps, filters.map, filters.diff), "map-chip") },
       { label: "Difficulties", html: (row) => chips(scopedChipValues(row.diffValues || row.diffs, filters.diff), "diff-chip") },
       { label: "Rolls", html: (row) => escapeHtml(row.luckModel?.rolls || row.bestRolls || ""), num: true },
+      { label: "Amount", html: (row) => amountCell(row), num: true },
       { label: "Best Per Item", html: (row) => escapeHtml(percent(itemDetailBestPerRollChanceValue(row, filters))), num: true },
       { label: "Best Per Kill/Interaction", html: (row) => escapeHtml(percent(itemDetailBestLuckChanceValue(row, filters))), num: true },
       { label: "Open", className: "detail-action-cell", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },

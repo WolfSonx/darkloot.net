@@ -473,6 +473,41 @@ def amount_roll_group_key(row: dict) -> tuple:
     )
 
 
+def add_amount_roll_breakdown(summary: dict, row: dict) -> None:
+    breakdown = summary.setdefault("amount_roll_breakdown", {})
+    amount = row.get("item_count", 1)
+    grade = row.get("grade", 0)
+    key = (str(amount), str(grade))
+    entry = breakdown.get(key)
+    if not entry:
+        entry = {
+            "amount": amount,
+            "grade": grade,
+            "base_per_roll": 0.0,
+            "dyn_per_roll": 0.0,
+            "base_expected": 0.0,
+            "dyn_expected": 0.0,
+        }
+        breakdown[key] = entry
+    entry["base_per_roll"] += float(row.get("base_per_roll", 0.0) or 0.0)
+    entry["dyn_per_roll"] += float(row.get("dyn_per_roll", 0.0) or 0.0)
+    entry["base_expected"] += float(row.get("base_expected", 0.0) or 0.0)
+    entry["dyn_expected"] += float(row.get("dyn_expected", 0.0) or 0.0)
+
+
+def amount_roll_breakdown_sort_key(entry: dict) -> tuple:
+    amount_text = str(entry["amount"])
+    grade_text = str(entry["grade"])
+    amount_value = int(amount_text) if amount_text.isdigit() else 0
+    grade_value = int(grade_text) if grade_text.isdigit() else 0
+    return (
+        amount_value,
+        amount_text,
+        grade_value,
+        grade_text,
+    )
+
+
 def merge_amount_roll_rows(rows: list[dict]) -> list[dict]:
     grouped: dict[tuple, dict] = {}
     for row in rows:
@@ -488,8 +523,10 @@ def merge_amount_roll_rows(rows: list[dict]) -> list[dict]:
             summary["dyn_per_roll"] = float(row.get("dyn_per_roll", 0.0) or 0.0)
             summary["base_expected"] = float(row.get("base_expected", 0.0) or 0.0)
             summary["dyn_expected"] = float(row.get("dyn_expected", 0.0) or 0.0)
+            add_amount_roll_breakdown(summary, row)
             grouped[key] = summary
             continue
+        add_amount_roll_breakdown(summary, row)
         summary["amount_rolls"].update(amount_rolls)
         summary["grades"].update(grades)
         summary["choice_count"] += row.get("choice_count", 0)
@@ -511,6 +548,12 @@ def merge_amount_roll_rows(rows: list[dict]) -> list[dict]:
         row["amount_rolls"] = sorted(row["amount_rolls"])
         row["grades"] = sorted(row["grades"])
         row["grade"] = row["grades"][0] if len(row["grades"]) == 1 else f"{row['grades'][0]}-{row['grades'][-1]}"
+        breakdown = row.get("amount_roll_breakdown")
+        if isinstance(breakdown, dict):
+            row["amount_roll_breakdown"] = sorted(
+                breakdown.values(),
+                key=amount_roll_breakdown_sort_key,
+            )
         merged.append(row)
     return merged
 
@@ -543,6 +586,9 @@ def compact_row(row: dict) -> dict:
         "dynPerRoll": percent(row["dyn_per_roll"]),
         "baseAtLeastOne": percent(row["base_at_least_one"]),
         "dynAtLeastOne": percent(row["dyn_at_least_one"]),
+        "basePerRollValue": row["base_per_roll"],
+        "dynPerRollValue": row["dyn_per_roll"],
+        "baseAtLeastOneValue": row["base_at_least_one"],
         "baseExpected": f"{row['base_expected']:.6f}",
         "dynExpected": f"{row['dyn_expected']:.6f}",
         "dynAtLeastOneValue": row["dyn_at_least_one"],
@@ -555,6 +601,20 @@ def compact_row(row: dict) -> dict:
     }
     if row.get("amount_rolls"):
         compact["amountRolls"] = [str(value) for value in row["amount_rolls"]]
+    if row.get("amount_roll_breakdown"):
+        compact["amountRollBreakdown"] = [
+            {
+                "amount": str(entry["amount"]),
+                "grade": str(entry["grade"]),
+                "basePerRoll": percent(entry["base_per_roll"]),
+                "dynPerRoll": percent(entry["dyn_per_roll"]),
+                "basePerRollValue": entry["base_per_roll"],
+                "dynPerRollValue": entry["dyn_per_roll"],
+                "baseExpected": f"{entry['base_expected']:.6f}",
+                "dynExpected": f"{entry['dyn_expected']:.6f}",
+            }
+            for entry in row["amount_roll_breakdown"]
+        ]
     if row.get("grades"):
         compact["grades"] = [str(value) for value in row["grades"]]
     if "compare_dyn_at_least_one" in row:
@@ -1266,6 +1326,7 @@ def item_summary(rows: list[dict], index: WebIndex | None = None) -> list[dict]:
                 "grades",
                 "item_count",
                 "amount_rolls",
+                "amount_roll_breakdown",
                 "choice_count",
                 "grade_choices",
                 "empty_choices",
@@ -1572,6 +1633,7 @@ def item_source_summary(rows: list[dict], index: WebIndex | None = None) -> list
         if not best:
             continue
         locations = index.locations_for_sources(source_values, kind) if index else []
+        compact_best = compact_row(best)
         summaries.append(
             {
                 "source": summary["source"],
@@ -1597,6 +1659,9 @@ def item_source_summary(rows: list[dict], index: WebIndex | None = None) -> list
                 "bestRateTable": best["rate_table"],
                 "bestGrade": best["grade"],
                 "bestRolls": best["rolls"],
+                "itemCount": compact_best["itemCount"],
+                "amountRolls": compact_best.get("amountRolls"),
+                "amountRollBreakdown": compact_best.get("amountRollBreakdown"),
             }
         )
     return sorted(summaries, key=lambda value: (-value["chanceValue"], value["source"].lower(), value["sourceKind"]))
