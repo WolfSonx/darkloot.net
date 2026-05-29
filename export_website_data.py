@@ -111,8 +111,8 @@ ITEM_PROPERTY_STAT_KEY_OVERRIDES = {
     "Id_ItemPropertyType_Effect_PhysicalWeaponDamageAdd": "AdditionalWeaponDamage",
 }
 ITEM_PROPERTY_VALUE_SCALE_OVERRIDES = {
-    "ArmorPenetration": lambda value: max(0, value - 10) * 0.1,
-    "MagicPenetration": lambda value: max(0, value + 5) * 0.1,
+    "ArmorPenetration": lambda value: value * 0.1,
+    "MagicPenetration": lambda value: value * 0.1,
 }
 STAT_EXPORT_SUFFIXES = (
     "Base",

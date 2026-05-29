@@ -515,6 +515,32 @@ label select {
   max-height: 520px;
 }
 
+.roll-summary {
+  margin: 0 0 12px;
+}
+
+.roll-summary .table-wrap {
+  min-height: 0;
+  max-height: 260px;
+}
+
+.roll-summary table {
+  min-width: 760px;
+}
+
+.roll-summary-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 6px;
+}
+
+.roll-summary-head strong {
+  color: #f4f8fb;
+  font-size: 13px;
+}
+
 table {
   width: 100%;
   min-width: 980px;

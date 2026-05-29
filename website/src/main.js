@@ -62,7 +62,7 @@ const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
-const APP_BUILD_ID = "20260529-1";
+const APP_BUILD_ID = "20260529-2";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -378,6 +378,37 @@ function chanceValue(row, valueKey = "dynAtLeastOneValue") {
   const choiceFraction = Number(model.choiceFraction || 0);
   const probs = gradeProbabilities(weights, state.currentLuck);
   const perRoll = Number(probs[grade] || 0) * choiceFraction;
+  return 1 - Math.pow(Math.max(0, 1 - perRoll), rolls);
+}
+
+function perRollChanceValue(row) {
+  const model = row.luckModel;
+  if (!model) return Number(row.dynPerRollValue || row.basePerRollValue || 0);
+  const weights = state.rateWeights[model.rateKey];
+  if (!weights) return Number(row.dynPerRollValue || model.basePerRollValue || 0);
+  const grade = Number(model.grade || 0);
+  const choiceFraction = Number(model.choiceFraction || 0);
+  const probs = gradeProbabilities(weights, state.currentLuck);
+  return Number(probs[grade] || 0) * choiceFraction;
+}
+
+function perRollChanceText(row) {
+  return percent(perRollChanceValue(row));
+}
+
+function gradeChanceValue(row) {
+  const model = row.luckModel;
+  if (!model) return 0;
+  const weights = state.rateWeights[model.rateKey];
+  if (!weights) return 0;
+  const grade = Number(model.grade || 0);
+  const probs = gradeProbabilities(weights, state.currentLuck);
+  return Number(probs[grade] || 0);
+}
+
+function gradeAtLeastOneValue(row) {
+  const rolls = Math.max(1, Number(row.luckModel?.rolls || row.rolls || 1));
+  const perRoll = gradeChanceValue(row);
   return 1 - Math.pow(Math.max(0, 1 - perRoll), rolls);
 }
 
@@ -2234,7 +2265,9 @@ function itemDetailBestScenario(row, filters, metric = "chance") {
     if (!itemDetailScenarioMatches(scenario, filters)) return;
     const value = metric === "base"
       ? baseChanceValue(scenario)
-      : chanceValue(scenario, "chanceValue");
+      : metric === "perRoll"
+        ? perRollChanceValue(scenario)
+        : chanceValue(scenario, "chanceValue");
     if (!best || value > bestValue) {
       best = scenario;
       bestValue = value;
@@ -2249,6 +2282,10 @@ function itemDetailBestBaseChanceValue(row, filters) {
 
 function itemDetailBestLuckChanceValue(row, filters) {
   return chanceValue(itemDetailBestScenario(row, filters, "chance"), "chanceValue");
+}
+
+function itemDetailBestPerRollChanceValue(row, filters) {
+  return perRollChanceValue(itemDetailBestScenario(row, filters, "perRoll"));
 }
 
 function itemDetailFilterMatches(row, filters) {
@@ -2371,6 +2408,8 @@ function sourceDetailSortValue(row, key) {
       return listText(row.diffs || row.diff);
     case "baseChance":
       return baseChanceValue(row);
+    case "perRoll":
+      return perRollChanceValue(row);
     case "amount":
       return amountSortValue(row.itemCounts || row.itemCount);
     case "rolls":
@@ -2411,7 +2450,7 @@ function setSort(list, key) {
 function setSourceDetailSort(key) {
   if (state.activeDetail?.type !== "source") return;
   const current = state.activeDetail.sort || { key: "chance", direction: "desc" };
-  const defaultDirection = key === "chance" || key === "baseChance" ? "desc" : "asc";
+  const defaultDirection = key === "chance" || key === "baseChance" || key === "perRoll" ? "desc" : "asc";
   const direction = current.key === key
     ? (current.direction === "asc" ? "desc" : "asc")
     : defaultDirection;
@@ -3173,6 +3212,72 @@ function detailTable(rows, columns, rowAttrs = () => "") {
   `;
 }
 
+function sourceRollSummaryRows(rows) {
+  const grouped = new Map();
+  (rows || []).forEach((row) => {
+    if (!row.luckModel) return;
+    const gradePerRoll = gradeChanceValue(row);
+    const gradeAtLeastOne = gradeAtLeastOneValue(row);
+    const key = JSON.stringify([
+      row.grade,
+      row.rolls,
+      row.lootTable,
+      row.rateTable,
+      gradePerRoll.toFixed(14),
+      gradeAtLeastOne.toFixed(14),
+    ]);
+    let entry = grouped.get(key);
+    if (!entry) {
+      entry = {
+        grade: row.grade,
+        rolls: row.rolls,
+        lootTable: row.lootTable,
+        rateTable: row.rateTable,
+        gradePerRoll,
+        gradeAtLeastOne,
+        maps: new Set(),
+        diffs: new Set(),
+      };
+      grouped.set(key, entry);
+    }
+    splitValues(row.maps || row.map).forEach((value) => entry.maps.add(value));
+    splitValues(row.diffs || row.diff).forEach((value) => entry.diffs.add(value));
+  });
+  return [...grouped.values()]
+    .sort((left, right) => {
+      const chanceSort = right.gradeAtLeastOne - left.gradeAtLeastOne;
+      if (chanceSort) return chanceSort;
+      return compareSortValues(String(left.lootTable || ""), String(right.lootTable || ""));
+    })
+    .slice(0, 40)
+    .map((row) => ({
+      ...row,
+      maps: sourceDetailOrderedValues([...row.maps], "map"),
+      diffs: sourceDetailOrderedValues([...row.diffs], "diff"),
+    }));
+}
+
+function sourceRollSummaryTable(rows) {
+  const summaryRows = sourceRollSummaryRows(rows);
+  if (!summaryRows.length) return "";
+  return `
+    <div class="roll-summary">
+      <div class="roll-summary-head">
+        <strong>Loot Roll Chances</strong>
+        <span class="muted">Grade chance before the individual item is selected.</span>
+      </div>
+      ${detailTable(summaryRows, [
+        { label: "Grade", html: (row) => escapeHtml(`G${row.grade}`), num: true },
+        { label: "Rolls", html: (row) => escapeHtml(row.rolls), num: true },
+        { label: "Loot Table", html: (row) => escapeHtml(row.lootTable || "") },
+        { label: "Rate Table", html: (row) => escapeHtml(row.rateTable || "") },
+        { label: "Grade Per Roll", html: (row) => escapeHtml(percent(row.gradePerRoll)), num: true },
+        { label: "Grade Per Kill/Interaction", html: (row) => escapeHtml(percent(row.gradeAtLeastOne)), num: true },
+      ])}
+    </div>
+  `;
+}
+
 function renderSourceDetail(payload) {
   const search = state.activeDetail?.type === "source" ? state.activeDetail.search || "" : "";
   const searchParts = terms(search);
@@ -3224,6 +3329,7 @@ function renderSourceDetail(payload) {
         ${isFavoriteSource(payload.source, payload.sourceKind) ? "Remove Favorite" : "Favorite Source"}
       </button>
     </div>
+    ${sourceRollSummaryTable(rows)}
     ${detailTable(limited, [
       { label: "Item", sortKey: "item", html: (row) => itemNameCell(row) },
       { label: "Amount", sortKey: "amount", html: (row) => escapeHtml(amountText(row.itemCounts || row.itemCount)), num: true },
@@ -3231,8 +3337,9 @@ function renderSourceDetail(payload) {
       { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
       { label: "Maps", sortKey: "maps", html: (row) => chips(scopedChipValues(row.maps || row.map, filters.map), "map-chip") },
       { label: "Difficulties", sortKey: "difficulties", html: (row) => chips(scopedChipValues(row.diffs || row.diff, filters.diff), "diff-chip") },
-      { label: "Base Chance", sortKey: "baseChance", html: (row) => escapeHtml(baseChanceText(row)), num: true },
-      { label: "Luck Chance", sortKey: "chance", html: (row) => escapeHtml(chanceText(row)), num: true },
+      { label: "Rolls", sortKey: "rolls", html: (row) => escapeHtml(row.rolls), num: true },
+      { label: "Per Item", sortKey: "perRoll", html: (row) => escapeHtml(perRollChanceText(row)), num: true },
+      { label: "Per Kill/Interaction", sortKey: "chance", html: (row) => escapeHtml(chanceText(row)), num: true },
     ])}
   `;
 }
@@ -3280,8 +3387,9 @@ function renderItemDetail(payload) {
       { label: "Kind", html: (row) => kindChip(row.sourceKind) },
       { label: "Maps", html: (row) => chips(scopedChipValues(row.mapValues || row.maps, filters.map), "map-chip") },
       { label: "Difficulties", html: (row) => chips(scopedChipValues(row.diffValues || row.diffs, filters.diff), "diff-chip") },
-      { label: "Best Base Chance", html: (row) => escapeHtml(percent(itemDetailBestBaseChanceValue(row, filters))), num: true },
-      { label: "Best Chance With Luck", html: (row) => escapeHtml(percent(itemDetailBestLuckChanceValue(row, filters))), num: true },
+      { label: "Rolls", html: (row) => escapeHtml(row.luckModel?.rolls || row.bestRolls || ""), num: true },
+      { label: "Best Per Item", html: (row) => escapeHtml(percent(itemDetailBestPerRollChanceValue(row, filters))), num: true },
+      { label: "Best Per Kill/Interaction", html: (row) => escapeHtml(percent(itemDetailBestLuckChanceValue(row, filters))), num: true },
       { label: "Open", className: "detail-action-cell", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
     ], (row) => `class="clickable-row" data-open-source="${escapeHtml(sourceLookupKey(row))}" tabindex="0" role="button"`)}
   `;
