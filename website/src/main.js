@@ -36,7 +36,7 @@
   damageTarget: {
     hand: "primary",
     hitLocation: "torso",
-    attackMultiplier: 115.4,
+    hitZoneMultiplier: 110,
     pdr: -10,
     mdr: -10,
   },
@@ -69,7 +69,7 @@ const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
-const APP_BUILD_ID = "20260529-9";
+const APP_BUILD_ID = "20260529-12";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -182,15 +182,17 @@ const DAMAGE_TARGET_DEFAULTS = {
   name: "Training Dummy",
   hand: "primary",
   hitLocation: "torso",
-  attackMultiplier: 115.4,
+  hitZoneMultiplier: 110,
   pdr: -10,
   mdr: -10,
 };
 const DAMAGE_HIT_LOCATIONS = [
   { value: "head", label: "Head", multiplier: null },
   { value: "torso", label: "Torso", multiplier: 1 },
-  { value: "arms", label: "Arms / Hands", multiplier: 0.7 },
-  { value: "legs", label: "Legs / Feet", multiplier: 0.7 },
+  { value: "arms", label: "Arms", multiplier: 0.7 },
+  { value: "hands", label: "Hands", multiplier: 0.7 },
+  { value: "legs", label: "Legs", multiplier: 0.7 },
+  { value: "feet", label: "Feet", multiplier: 0.7 },
 ];
 const BUILDER_SLOTS = [
   { id: "weapon1Primary", label: "Primary", marker: "1", accepts: ["Primary"], area: "weapon1Primary", kind: "weapon", weaponSet: "1", weaponRole: "primary" },
@@ -1682,6 +1684,12 @@ function damageNumber(value) {
     : number.toFixed(2).replace(/\.?0+$/, "");
 }
 
+function damageOutputNumber(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return "0";
+  return Math.round(number).toLocaleString();
+}
+
 function targetMitigationMultiplier(percent) {
   return 1 - (clampPercentInput(percent, 0) / 100);
 }
@@ -1736,9 +1744,9 @@ function builderDamageOutput() {
   const magicalBonus = Number(derived.get("MagicalDamageBonus") || 0);
   const hitLocation = damageHitLocation();
   const locationMultiplier = damageHitLocationMultiplier(derived);
-  const attackMultiplier = clampNumberInput(
-    state.damageTarget.attackMultiplier,
-    DAMAGE_TARGET_DEFAULTS.attackMultiplier,
+  const hitZoneMultiplier = clampNumberInput(
+    state.damageTarget.hitZoneMultiplier,
+    DAMAGE_TARGET_DEFAULTS.hitZoneMultiplier,
     0,
     500,
   ) / 100;
@@ -1746,8 +1754,8 @@ function builderDamageOutput() {
   const mdr = clampPercentInput(state.damageTarget.mdr, DAMAGE_TARGET_DEFAULTS.mdr);
   const physicalHitBase = physicalWeapon + physicalAdd;
   const magicalHitBase = magicalWeapon + magicalBase + magicalAdd;
-  const physicalBeforeReduction = physicalHitBase * attackMultiplier * locationMultiplier * (1 + (physicalBonus / 100));
-  const magicalBeforeReduction = magicalHitBase * attackMultiplier * locationMultiplier * (1 + (magicalBonus / 100));
+  const physicalBeforeReduction = physicalHitBase * hitZoneMultiplier * locationMultiplier * (1 + (physicalBonus / 100));
+  const magicalBeforeReduction = magicalHitBase * hitZoneMultiplier * locationMultiplier * (1 + (magicalBonus / 100));
   const physicalAfterReduction = Math.max(0, physicalBeforeReduction * targetMitigationMultiplier(pdr)) + truePhysical;
   const magicalAfterReduction = Math.max(0, magicalBeforeReduction * targetMitigationMultiplier(mdr)) + trueMagical;
   return {
@@ -1759,7 +1767,7 @@ function builderDamageOutput() {
       weapon: physicalWeapon,
       add: physicalAdd,
       hitBase: physicalHitBase,
-      attackMultiplier,
+      hitZoneMultiplier,
       locationLabel: hitLocation.label,
       locationMultiplier,
       bonus: physicalBonus,
@@ -1773,7 +1781,7 @@ function builderDamageOutput() {
       base: magicalBase,
       add: magicalAdd,
       hitBase: magicalHitBase,
-      attackMultiplier,
+      hitZoneMultiplier,
       locationLabel: hitLocation.label,
       locationMultiplier,
       bonus: magicalBonus,
@@ -1802,13 +1810,13 @@ function damageBreakdownRows(section) {
     ...baseRows,
     ["Additional", section.add],
     ["Weapon Hit", section.hitBase],
-    ["Attack Multiplier", `${damageNumber((section.attackMultiplier || 1) * 100)}%`],
+    ["Hit Zone", `${damageNumber((section.hitZoneMultiplier || 1) * 100)}%`],
     [section.locationLabel || "Hit Location", `${damageNumber((section.locationMultiplier || 1) * 100)}%`],
     ["Power Bonus", `${damageNumber(section.bonus)}%`],
     ["Before Mitigation", section.beforeReduction],
     ["Target Reduction", `${damageNumber(section.targetReduction)}%`],
     ["True Damage", section.trueDamage],
-    ["Output", section.afterReduction],
+    ["Output", damageOutputNumber(section.afterReduction)],
   ];
 }
 
@@ -1816,7 +1824,7 @@ function damageBreakdownHtml(title, section) {
   return `
     <section class="damage-card">
       <h3>${escapeHtml(title)}</h3>
-      <strong>${escapeHtml(damageNumber(section.afterReduction))}</strong>
+      <strong>${escapeHtml(damageOutputNumber(section.afterReduction))}</strong>
       <div class="damage-breakdown">
         ${damageBreakdownRows(section).map(([label, value]) => `
           <span>${escapeHtml(label)}</span>
@@ -1874,8 +1882,8 @@ function renderDamageChecker(focusKey = "") {
           `).join("")}
         </select>
       </label>
-      <label>Attack
-        <input type="number" min="0" max="500" step="0.1" value="${escapeHtml(state.damageTarget.attackMultiplier)}" data-damage-target="attackMultiplier">
+      <label>Hit Zone
+        <input type="number" min="0" max="500" step="0.1" value="${escapeHtml(state.damageTarget.hitZoneMultiplier)}" data-damage-target="hitZoneMultiplier">
       </label>
       <label>PDR
         <input type="number" min="-100" max="100" step="0.1" value="${escapeHtml(state.damageTarget.pdr)}" data-damage-target="pdr">
@@ -1887,7 +1895,7 @@ function renderDamageChecker(focusKey = "") {
     </div>
     <div class="damage-total">
       <span>Total Output</span>
-      <strong>${escapeHtml(damageNumber(output.total))}</strong>
+      <strong>${escapeHtml(damageOutputNumber(output.total))}</strong>
     </div>
     <div class="damage-grid">
       ${damageBreakdownHtml("Physical", output.physical)}
@@ -4150,8 +4158,8 @@ function wireEvents() {
     const input = event.target;
     if (input.dataset?.damageTarget) {
       const key = input.dataset.damageTarget;
-      const value = key === "attackMultiplier"
-        ? clampNumberInput(input.value, DAMAGE_TARGET_DEFAULTS.attackMultiplier, 0, 500)
+      const value = key === "hitZoneMultiplier"
+        ? clampNumberInput(input.value, DAMAGE_TARGET_DEFAULTS.hitZoneMultiplier, 0, 500)
         : clampPercentInput(input.value, DAMAGE_TARGET_DEFAULTS[key] ?? 0);
       state.damageTarget = {
         ...state.damageTarget,
@@ -4247,8 +4255,8 @@ function wireEvents() {
     }
     if (input.dataset?.damageTarget) {
       const key = input.dataset.damageTarget;
-      const value = key === "attackMultiplier"
-        ? clampNumberInput(input.value, DAMAGE_TARGET_DEFAULTS.attackMultiplier, 0, 500)
+      const value = key === "hitZoneMultiplier"
+        ? clampNumberInput(input.value, DAMAGE_TARGET_DEFAULTS.hitZoneMultiplier, 0, 500)
         : clampPercentInput(input.value, DAMAGE_TARGET_DEFAULTS[key] ?? 0);
       state.damageTarget = {
         ...state.damageTarget,
