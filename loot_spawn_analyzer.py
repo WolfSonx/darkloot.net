@@ -613,6 +613,17 @@ def resolve_dungeon_info(code: int | str, lookup: dict[int, DungeonMeta] | None 
     return dungeon_info(code_int)
 
 
+def rate_asset_for_dungeon(rate_asset: str, dungeon_grade: int, rates: dict[str, RateTable]) -> str:
+    if dungeon_grade == 0 or not rate_asset:
+        return rate_asset
+    if re.search(r"_\d{4}$", rate_asset):
+        return rate_asset
+    candidate = f"{rate_asset}_{int(dungeon_grade):04d}"
+    if candidate.lower() in rates:
+        return candidate
+    return rate_asset
+
+
 def map_sort_key(map_name: str) -> tuple[int, str]:
     return (MAP_ORDER.get(map_name, 999), map_name)
 
@@ -1082,16 +1093,27 @@ def build_database(root: Path, luck: int = 500) -> ScanResult:
                 entries = grade_map.get(0)
             if not entries:
                 continue
+            if dungeon_grade != 0:
+                global_entries = grade_map.get(0, [])
+                existing_drop_assets = {entry.loot_asset.lower() for entry in entries}
+                missing_global_entries = [
+                    entry
+                    for entry in global_entries
+                    if entry.loot_asset and entry.loot_asset.lower() not in existing_drop_assets
+                ]
+                if missing_global_entries:
+                    entries = [*entries, *missing_global_entries]
 
             diff, map_name, map_code = resolve_dungeon_info(dungeon_grade, dungeon_lookup)
             for group_entry in entries:
                 drop = drops.get(group_entry.loot_asset.lower())
-                rate = rates.get(group_entry.rate_asset.lower())
+                rate_asset = rate_asset_for_dungeon(group_entry.rate_asset, dungeon_grade, rates)
+                rate = rates.get(rate_asset.lower())
                 if not drop:
                     missing_drops[group_entry.loot_asset] += 1
                     continue
                 if not rate:
-                    missing_rates[group_entry.rate_asset] += 1
+                    missing_rates[rate_asset] += 1
                     continue
 
                 base_probs, dyn_probs = rate_prob_cache[rate.asset.lower()]
