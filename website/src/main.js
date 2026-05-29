@@ -62,13 +62,15 @@ const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
-const APP_BUILD_ID = "20260529-3";
+const APP_BUILD_ID = "20260529-5";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
 const MAX_DETAIL_ROWS = 500;
 const TERMS_CACHE_LIMIT = 6000;
 const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
+const SQUIRE_MAPS = ["Ruins", "Crypts", "Inferno"];
+const SQUIRE_MAP_SET = new Set(SQUIRE_MAPS);
 const BUILDER_PERK_LIMIT = 4;
 const BUILDER_WEAPON_MASTERY_PERK_ID = "Id_Perk_WeaponMastery";
 const BUILDER_DEMON_ARMOR_PERK_ID = "Id_Perk_DemonArmor";
@@ -1016,10 +1018,36 @@ function optionHtml(values, label = "All") {
   return [`<option>${escapeHtml(label)}</option>`, ...values.map((value) => `<option>${escapeHtml(value)}</option>`)].join("");
 }
 
+function mapOptionsForDifficulty(values, diff) {
+  const maps = Array.isArray(values) ? values : [];
+  if (diff !== "Squire") return maps;
+  return SQUIRE_MAPS.filter((map) => maps.includes(map));
+}
+
+function allowedMapsForDifficulty(diff) {
+  return diff === "Squire" ? SQUIRE_MAP_SET : null;
+}
+
+function mapAllowedForDifficulty(map, diff) {
+  const allowed = allowedMapsForDifficulty(diff);
+  return !allowed || allowed.has(map);
+}
+
 function setSelectIfAvailable(id, value) {
   const select = $(id);
   if (!select) return;
   if ([...select.options].some((option) => option.value === value)) select.value = value;
+}
+
+function syncMapSelectForDifficulty(mapId, diffId) {
+  const filters = state.manifest?.filters || {};
+  const mapSelect = $(mapId);
+  const diff = selected(diffId);
+  if (!mapSelect) return;
+  const current = mapSelect.value || "All";
+  const maps = mapOptionsForDifficulty(filters.maps || [], diff);
+  mapSelect.innerHTML = optionHtml(maps);
+  mapSelect.value = current === "All" || maps.includes(current) ? current : "All";
 }
 
 function builderSlotById(id) {
@@ -1594,6 +1622,8 @@ function fillFilters() {
   $("sourceKind").innerHTML = optionHtml(kinds);
   setSelectIfAvailable("itemDiff", DEFAULT_DIFFICULTY);
   setSelectIfAvailable("sourceDiff", DEFAULT_DIFFICULTY);
+  syncMapSelectForDifficulty("itemMap", "itemDiff");
+  syncMapSelectForDifficulty("sourceMap", "sourceDiff");
 }
 
 function fillBuilderFilters() {
@@ -1696,6 +1726,10 @@ function scopedChipValues(value, selectedValue) {
     : values;
 }
 
+function mapChipValues(value, selectedValue, diff) {
+  return scopedChipValues(value, selectedValue).filter((map) => mapAllowedForDifficulty(map, diff));
+}
+
 function itemDetailFiltersFromMainPage() {
   return {
     kind: "All",
@@ -1728,6 +1762,7 @@ function sourceDetailFiltersFromMainPage() {
 function itemSearchGroups(row) {
   return [
     [row.item, row.itemAsset, row.rarity, row.category],
+    [row.source, row.sources?.join(" "), row.sourceKind, row.sourceKinds?.join(" "), row.spawner],
   ];
 }
 
@@ -1774,7 +1809,9 @@ function filteredItems() {
     if (!matchesSearchGroups(search, state.itemSearchIndex.get(row))) return false;
     if (rarity !== "All" && row.rarity !== rarity) return false;
     if (category !== "All" && row.category !== category) return false;
+    if (map !== "All" && !mapAllowedForDifficulty(map, diff)) return false;
     if (map !== "All" && !(row.maps || []).includes(map)) return false;
+    if (map === "All" && allowedMapsForDifficulty(diff) && !(row.maps || []).some((rowMap) => mapAllowedForDifficulty(rowMap, diff))) return false;
     if (diff !== "All" && !(row.diffs || []).includes(diff)) return false;
     return true;
   });
@@ -1787,7 +1824,9 @@ function filteredSources() {
   const kind = selected("sourceKind");
   return state.sources.filter((row) => {
     if (!matchesSearchGroups(search, state.sourceSearchIndex.get(row))) return false;
+    if (map !== "All" && !mapAllowedForDifficulty(map, diff)) return false;
     if (map !== "All" && !(row.mapValues || []).includes(map)) return false;
+    if (map === "All" && allowedMapsForDifficulty(diff) && !(row.mapValues || []).some((rowMap) => mapAllowedForDifficulty(rowMap, diff))) return false;
     if (diff !== "All" && !(row.diffValues || []).includes(diff)) return false;
     if (kind !== "All" && row.sourceKind !== kind) return false;
     return true;
@@ -2146,7 +2185,7 @@ function scopedSourceDetailRows(rows, filters) {
   return (rows || [])
     .filter((row) => sourceDetailFilterMatches(row, { ...filters, rarity: "All", category: "All" }))
     .map((row) => {
-      const maps = scopedChipValues(row.maps || row.map, filters.map);
+      const maps = mapChipValues(row.maps || row.map, filters.map, filters.diff);
       const diffs = scopedChipValues(row.diffs || row.diff, filters.diff);
       return {
         ...row,
@@ -2234,13 +2273,15 @@ function selectedItemDetailFilters() {
 function sourceDetailFilterMatches(row, filters) {
   if (filters.rarity !== "All" && row.rarity !== filters.rarity) return false;
   if (filters.category !== "All" && row.category !== filters.category) return false;
+  if (filters.map !== "All" && !mapAllowedForDifficulty(filters.map, filters.diff)) return false;
+  if (filters.map === "All" && allowedMapsForDifficulty(filters.diff) && !splitValues(row.maps || row.map).some((map) => mapAllowedForDifficulty(map, filters.diff))) return false;
   if (filters.map !== "All" && !splitValues(row.maps || row.map).includes(filters.map)) return false;
   if (filters.diff !== "All" && !splitValues(row.diffs || row.diff).includes(filters.diff)) return false;
   return true;
 }
 
 function scopedItemDetailRow(row, filters) {
-  const maps = scopedChipValues(row.mapValues || row.maps, filters.map);
+  const maps = mapChipValues(row.mapValues || row.maps, filters.map, filters.diff);
   const diffs = scopedChipValues(row.diffValues || row.diffs, filters.diff);
   return {
     ...row,
@@ -2252,6 +2293,8 @@ function scopedItemDetailRow(row, filters) {
 }
 
 function itemDetailScenarioMatches(row, filters) {
+  if (filters.map !== "All" && !mapAllowedForDifficulty(filters.map, filters.diff)) return false;
+  if (filters.map === "All" && !mapAllowedForDifficulty(row.map, filters.diff)) return false;
   if (filters.map !== "All" && row.map !== filters.map) return false;
   if (filters.diff !== "All" && row.diff !== filters.diff) return false;
   return true;
@@ -2294,6 +2337,8 @@ function itemDetailFilterMatches(row, filters) {
   if (scenarios.length && (filters.map !== "All" || filters.diff !== "All")) {
     return scenarios.some((scenario) => itemDetailScenarioMatches(scenario, filters));
   }
+  if (filters.map !== "All" && !mapAllowedForDifficulty(filters.map, filters.diff)) return false;
+  if (filters.map === "All" && allowedMapsForDifficulty(filters.diff) && !splitValues(row.mapValues || row.maps).some((map) => mapAllowedForDifficulty(map, filters.diff))) return false;
   if (filters.map !== "All" && !splitValues(row.mapValues || row.maps).includes(filters.map)) return false;
   if (filters.diff !== "All" && !splitValues(row.diffValues || row.diffs).includes(filters.diff)) return false;
   return true;
@@ -2504,7 +2549,7 @@ function renderItems() {
         <td>${itemNameCell(row)}</td>
         <td>${rarity(row.rarity)}</td>
         <td>${categoryChip(row.category)}</td>
-        <td>${chips(scopedChipValues(row.maps || row.map, mapFilter), "map-chip")}</td>
+        <td>${chips(mapChipValues(row.maps || row.map, mapFilter, diffFilter), "map-chip")}</td>
         <td>${chips(scopedChipValues(row.diffs || row.diff, diffFilter), "diff-chip")}</td>
         <td class="num">${escapeHtml(row.sourceCount)}</td>
         <td class="action-cell"><button data-open-item="${escapeHtml(row.itemAsset)}">Sources</button></td>
@@ -2525,7 +2570,7 @@ function renderSources() {
         <td>${favoriteButton(isFavoriteSource(row.source, row.sourceKind), "source", sourceKey(row.source, row.sourceKind), "Favorite source")}</td>
         <td>${escapeHtml(row.source)}</td>
         <td>${kindChip(row.sourceKind)}</td>
-        <td>${chips(scopedChipValues(row.mapValues || row.maps, mapFilter), "map-chip")}</td>
+        <td>${chips(mapChipValues(row.mapValues || row.maps, mapFilter, diffFilter), "map-chip")}</td>
         <td>${chips(scopedChipValues(row.diffValues || row.diffs, diffFilter), "diff-chip")}</td>
         <td class="num">${escapeHtml(row.itemCount)}</td>
         <td class="action-cell"><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
@@ -3282,6 +3327,7 @@ function renderSourceDetail(payload) {
   const search = state.activeDetail?.type === "source" ? state.activeDetail.search || "" : "";
   const searchParts = terms(search);
   const filters = selectedSourceDetailFilters();
+  if (filters.map !== "All" && !mapAllowedForDifficulty(filters.map, filters.diff)) filters.map = "All";
   const sort = state.activeDetail?.type === "source" ? state.activeDetail.sort || { key: "chance", direction: "desc" } : { key: "chance", direction: "desc" };
   const model = sourceDetailModel(payload);
   const scopedModel = sourceDetailScopedModel(payload, filters);
@@ -3317,7 +3363,7 @@ function renderSourceDetail(payload) {
       <div class="detail-filters">
         ${sourceDetailFilterSelect("sourceDetailRarity", "rarity", "Rarity", filters.rarity, filterOptions.rarity)}
         ${sourceDetailFilterSelect("sourceDetailCategory", "category", "Category", filters.category, filterOptions.category)}
-        ${sourceDetailFilterSelect("sourceDetailMap", "map", "Map", filters.map, filterOptions.map)}
+        ${sourceDetailFilterSelect("sourceDetailMap", "map", "Map", filters.map, mapOptionsForDifficulty(filterOptions.map, filters.diff))}
         ${sourceDetailFilterSelect("sourceDetailDiff", "diff", "Difficulty", filters.diff, filterOptions.diff)}
       </div>
       <span class="muted detail-result-count">${escapeHtml(showingText)}</span>
@@ -3335,7 +3381,7 @@ function renderSourceDetail(payload) {
       { label: "Amount", sortKey: "amount", html: (row) => escapeHtml(amountText(row.itemCounts || row.itemCount)), num: true },
       { label: "Rarity", sortKey: "rarity", html: (row) => rarity(row.rarity) },
       { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
-      { label: "Maps", sortKey: "maps", html: (row) => chips(scopedChipValues(row.maps || row.map, filters.map), "map-chip") },
+      { label: "Maps", sortKey: "maps", html: (row) => chips(mapChipValues(row.maps || row.map, filters.map, filters.diff), "map-chip") },
       { label: "Difficulties", sortKey: "difficulties", html: (row) => chips(scopedChipValues(row.diffs || row.diff, filters.diff), "diff-chip") },
       { label: "Rolls", sortKey: "rolls", html: (row) => escapeHtml(row.rolls), num: true },
       { label: "Per Item", sortKey: "perRoll", html: (row) => escapeHtml(perRollChanceText(row)), num: true },
@@ -3348,6 +3394,7 @@ function renderItemDetail(payload) {
   const search = state.activeDetail?.type === "item" ? state.activeDetail.search || "" : "";
   const searchParts = terms(search);
   const filters = selectedItemDetailFilters();
+  if (filters.map !== "All" && !mapAllowedForDifficulty(filters.map, filters.diff)) filters.map = "All";
   const { baseRows, filterOptions } = itemDetailModel(payload);
   const { scopedRows, searchIndex } = itemDetailScopedModel(payload, filters);
   const rows = scopedRows
@@ -3370,7 +3417,7 @@ function renderItemDetail(payload) {
       </label>
       <div class="detail-filters item-detail-filters">
         ${itemDetailFilterSelect("itemDetailKind", "kind", "Kind", filters.kind, filterOptions.kind)}
-        ${itemDetailFilterSelect("itemDetailMap", "map", "Map", filters.map, filterOptions.map)}
+        ${itemDetailFilterSelect("itemDetailMap", "map", "Map", filters.map, mapOptionsForDifficulty(filterOptions.map, filters.diff))}
         ${itemDetailFilterSelect("itemDetailDiff", "diff", "Difficulty", filters.diff, filterOptions.diff)}
       </div>
       <span class="muted detail-result-count">Showing ${limited.length.toLocaleString()} of ${rows.length.toLocaleString()} matching sources | ${baseRows.length.toLocaleString()} total</span>
@@ -3385,7 +3432,7 @@ function renderItemDetail(payload) {
     ${detailTable(limited, [
       { label: "Source", key: "source" },
       { label: "Kind", html: (row) => kindChip(row.sourceKind) },
-      { label: "Maps", html: (row) => chips(scopedChipValues(row.mapValues || row.maps, filters.map), "map-chip") },
+      { label: "Maps", html: (row) => chips(mapChipValues(row.mapValues || row.maps, filters.map, filters.diff), "map-chip") },
       { label: "Difficulties", html: (row) => chips(scopedChipValues(row.diffValues || row.diffs, filters.diff), "diff-chip") },
       { label: "Rolls", html: (row) => escapeHtml(row.luckModel?.rolls || row.bestRolls || ""), num: true },
       { label: "Best Per Item", html: (row) => escapeHtml(percent(itemDetailBestPerRollChanceValue(row, filters))), num: true },
@@ -3604,10 +3651,16 @@ function wireEvents() {
   });
 
   ["itemSearch", "itemRarity", "itemCategory", "itemMap", "itemDiff"]
-    .forEach((id) => $(id).addEventListener("input", () => scheduleRender("items", renderItems)));
+    .forEach((id) => $(id).addEventListener("input", () => {
+      if (id === "itemDiff") syncMapSelectForDifficulty("itemMap", "itemDiff");
+      scheduleRender("items", renderItems);
+    }));
 
   ["sourceSearch", "sourceMap", "sourceDiff", "sourceKind"]
-    .forEach((id) => $(id).addEventListener("input", () => scheduleRender("sources", renderSources)));
+    .forEach((id) => $(id).addEventListener("input", () => {
+      if (id === "sourceDiff") syncMapSelectForDifficulty("sourceMap", "sourceDiff");
+      scheduleRender("sources", renderSources);
+    }));
 
   $("builderSearch").addEventListener("input", () => {
     clearBuilderConfirmation();
@@ -3816,19 +3869,27 @@ function wireEvents() {
   document.body.addEventListener("change", (event) => {
     const input = event.target;
     if (input.dataset?.sourceDetailFilter && state.activeDetail?.type === "source") {
-      state.activeDetail.filters = {
+      const filters = {
         ...selectedSourceDetailFilters(),
         [input.dataset.sourceDetailFilter]: input.value,
       };
+      if (input.dataset.sourceDetailFilter === "diff" && filters.map !== "All" && !mapAllowedForDifficulty(filters.map, filters.diff)) {
+        filters.map = "All";
+      }
+      state.activeDetail.filters = filters;
       renderSourceDetail(state.activeDetail.payload);
       $(input.id)?.focus();
       return;
     }
     if (input.dataset?.itemDetailFilter && state.activeDetail?.type === "item") {
-      state.activeDetail.filters = {
+      const filters = {
         ...selectedItemDetailFilters(),
         [input.dataset.itemDetailFilter]: input.value,
       };
+      if (input.dataset.itemDetailFilter === "diff" && filters.map !== "All" && !mapAllowedForDifficulty(filters.map, filters.diff)) {
+        filters.map = "All";
+      }
+      state.activeDetail.filters = filters;
       renderItemDetail(state.activeDetail.payload);
       $(input.id)?.focus();
       return;
