@@ -1436,7 +1436,7 @@ function builderStatMap() {
 function itemStatTotal(slotId, statKey) {
   const resolvedSlotId = resolveBuilderSlotId(slotId);
   const item = state.kit.itemByAsset.get(state.builder.equipped[resolvedSlotId]);
-  if (!item || !statKey || !slotStatsAreActive(resolvedSlotId)) return { value: defaultSlotStatValue(resolvedSlotId, statKey), unit: "" };
+  if (!item || !statKey) return { value: defaultSlotStatValue(resolvedSlotId, statKey), unit: "" };
   const totals = new Map();
   addItemStats(totals, resolvedSlotId, item);
   const keys = STAT_CONTRIBUTION_KEYS[statKey] || [statKey];
@@ -1452,7 +1452,16 @@ function itemStatTotal(slotId, statKey) {
 function itemExactStatValue(slotId, statKey) {
   const resolvedSlotId = resolveBuilderSlotId(slotId);
   const item = state.kit.itemByAsset.get(state.builder.equipped[resolvedSlotId]);
-  if (!item || !statKey || !slotStatsAreActive(resolvedSlotId)) return defaultSlotStatValue(resolvedSlotId, statKey);
+  if (!item || !statKey) return defaultSlotStatValue(resolvedSlotId, statKey);
+  const totals = new Map();
+  addItemStats(totals, resolvedSlotId, item);
+  return directStatValue(totals, statKey);
+}
+
+function activeWeaponStatValue(slotId, statKey) {
+  const resolvedSlotId = resolveBuilderSlotId(slotId);
+  const item = state.kit.itemByAsset.get(state.builder.equipped[resolvedSlotId]);
+  if (!item || !statKey) return defaultSlotStatValue(resolvedSlotId, statKey);
   const totals = new Map();
   addItemStats(totals, resolvedSlotId, item);
   return directStatValue(totals, statKey);
@@ -1664,11 +1673,11 @@ function builderDamageOutput() {
   const derived = builderDerivedStatValues(totals, selectedBuilderCharacter());
   const primarySlotId = activeWeaponSlotId("primary");
   const primary = state.kit.itemByAsset.get(state.builder.equipped[primarySlotId]);
-  const physicalWeaponBase = itemExactStatValue(primarySlotId, "PhysicalWeaponDamage");
-  const additionalWeapon = itemExactStatValue(primarySlotId, "AdditionalWeaponDamage");
+  const physicalWeaponBase = activeWeaponStatValue(primarySlotId, "PhysicalWeaponDamage");
+  const additionalWeapon = activeWeaponStatValue(primarySlotId, "AdditionalWeaponDamage");
   const physicalWeapon = physicalWeaponBase + additionalWeapon;
-  const magicalWeapon = itemStatTotal(primarySlotId, "MagicalWeaponDamage").value;
-  const magicalBase = itemStatTotal(primarySlotId, "MagicalDamage").value;
+  const magicalWeapon = activeWeaponStatValue(primarySlotId, "MagicalWeaponDamage");
+  const magicalBase = activeWeaponStatValue(primarySlotId, "MagicalDamage");
   const physicalAdd = directStatValue(totals, "PhysicalDamageAdd");
   const magicalAdd = directStatValue(totals, "MagicalDamageAdd");
   const truePhysical = directStatValue(totals, "PhysicalDamageTrue");
