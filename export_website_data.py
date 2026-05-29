@@ -16,6 +16,7 @@ from loot_spawn_web import (
     filter_exact_source_rows,
     filter_item_source_rows,
     item_source_summary,
+    merge_amount_roll_rows,
     difficulty_sort_key,
     map_sort_key,
     rows_with_luck,
@@ -1122,7 +1123,7 @@ def export_source_details(output_dir: Path, state: AppState, sources: list[dict]
         }
         base_rows = filter_exact_source_rows(index, params)
         source_scope = index.source_values_for_query(source, kind)
-        detail_rows = detail_summary(rows_with_luck(base_rows, result, luck), index, source_scope)
+        detail_rows = detail_summary(merge_amount_roll_rows(rows_with_luck(base_rows, result, luck)), index, source_scope)
         detail_rows = sort_detail_rows(detail_rows, "dyn", True)
         public_rows = detail_rows[:MAX_SOURCE_DETAIL_ROWS]
         locations = index.locations_for_source(source, kind)
@@ -1159,7 +1160,7 @@ def export_item_details(output_dir: Path, state: AppState, items: list[dict]) ->
             "category": ["All"],
         }
         base_rows = filter_item_source_rows(index, params)
-        source_rows = item_source_summary(rows_with_luck(base_rows, result, luck), index)
+        source_rows = item_source_summary(merge_amount_roll_rows(rows_with_luck(base_rows, result, luck)), index)
         source_rows = sort_item_source_rows(source_rows, "chance", True)
         payload = {
             "dataVersion": DATA_VERSION,

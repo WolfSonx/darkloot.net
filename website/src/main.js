@@ -69,7 +69,7 @@ const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
-const APP_BUILD_ID = "20260529-13";
+const APP_BUILD_ID = "20260529-14";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -2085,7 +2085,7 @@ function sourceDetailSearchGroups(row) {
     [row.item, row.itemAsset, row.rarity, row.category],
     [row.map, row.maps?.join(" "), row.diff, row.diffs?.join(" ")],
     [row.lootTable, row.rateTable, row.rateTables?.join(" ")],
-    [row.grade, row.rolls, row.itemCount],
+    [row.grade, row.grades?.join(" "), row.rolls, row.itemCount, row.amountRolls?.join(" ")],
   ];
 }
 
@@ -2464,7 +2464,7 @@ function groupedSourceDetailRows(rows) {
     }
     splitValues(row.maps || row.map).forEach((value) => entry._maps.add(value));
     splitValues(row.diffs || row.diff).forEach((value) => entry._diffs.add(value));
-    splitValues(row.itemCounts || row.itemCount).forEach((value) => entry._itemCounts.add(value));
+    splitValues(row.itemCounts || row.amountRolls || row.itemCount).forEach((value) => entry._itemCounts.add(value));
     splitValues(row.rateTables || row.rateTable).forEach((value) => entry._rateTables.add(value));
   });
 
@@ -2739,7 +2739,7 @@ function sourceSortValue(row, key) {
     case "difficulties":
       return listText(row.diffValues || row.diffs);
     case "items":
-      return Number(row.itemCount || 0);
+      return amountSortValue(row.amountRolls || row.itemCount);
     default:
       return row.source;
   }
@@ -2762,7 +2762,7 @@ function sourceDetailSortValue(row, key) {
     case "perRoll":
       return perRollChanceValue(row);
     case "amount":
-      return amountSortValue(row.itemCounts || row.itemCount);
+      return amountSortValue(row.itemCounts || row.amountRolls || row.itemCount);
     case "rolls":
       return Number(row.rolls || 0);
     case "lootTable":
@@ -2878,7 +2878,7 @@ function renderSources() {
         <td>${kindChip(row.sourceKind)}</td>
         <td>${chips(mapChipValues(row.mapValues || row.maps, mapFilter, diffFilter), "map-chip")}</td>
         <td>${chips(scopedChipValues(row.diffValues || row.diffs, diffFilter), "diff-chip")}</td>
-        <td class="num">${escapeHtml(row.itemCount)}</td>
+        <td class="num">${escapeHtml(amountText(row.amountRolls || row.itemCount))}</td>
         <td class="action-cell"><button data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}">Open</button></td>
       </tr>
     `).join("")
@@ -3686,7 +3686,7 @@ function renderSourceDetail(payload) {
     ${sourceRollSummaryTable(rows)}
     ${detailTable(limited, [
       { label: "Item", sortKey: "item", html: (row) => itemNameCell(row) },
-      { label: "Amount", sortKey: "amount", html: (row) => escapeHtml(amountText(row.itemCounts || row.itemCount)), num: true },
+      { label: "Amount", sortKey: "amount", html: (row) => escapeHtml(amountText(row.itemCounts || row.amountRolls || row.itemCount)), num: true },
       { label: "Rarity", sortKey: "rarity", html: (row) => rarity(row.rarity) },
       { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
       { label: "Maps", sortKey: "maps", html: (row) => chips(mapChipValues(row.maps || row.map, filters.map, filters.diff), "map-chip") },

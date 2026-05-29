@@ -444,7 +444,7 @@ def row_with_luck(row: dict, result: ScanResult, luck: int, dyn_prob_cache: dict
     updated = dict(row)
     updated["dyn_per_roll"] = dyn_per_roll
     updated["dyn_at_least_one"] = dyn_at_least_one
-    updated["dyn_expected"] = dyn_per_roll * rolls
+    updated["dyn_expected"] = dyn_per_roll * rolls * int(row.get("item_count", 1) or 1)
     return updated
 
 
@@ -453,6 +453,66 @@ def rows_with_luck(rows: list[dict], result: ScanResult | None, luck: int) -> li
         return rows
     dyn_prob_cache: dict[str, list[float]] = {}
     return [row_with_luck(row, result, luck, dyn_prob_cache) for row in rows]
+
+
+def amount_roll_group_key(row: dict) -> tuple:
+    return (
+        row["item_asset"],
+        row["item"],
+        row["rarity"],
+        row["cat"],
+        row["source"],
+        row["source_kind"],
+        row.get("group_asset", row["group"]),
+        row.get("loot_asset", row["loot_table"]),
+        row.get("rate_key", row["rate_table"]),
+        row["rolls"],
+        tuple(sorted(row["maps"])),
+        tuple(sorted(row["diffs"])),
+        tuple(sorted(row["map_codes"])),
+    )
+
+
+def merge_amount_roll_rows(rows: list[dict]) -> list[dict]:
+    grouped: dict[tuple, dict] = {}
+    for row in rows:
+        key = amount_roll_group_key(row)
+        summary = grouped.get(key)
+        amount_rolls = set(row.get("amount_rolls") or [row.get("item_count", 1)])
+        grades = set(row.get("grades") or [row.get("grade", 0)])
+        if not summary:
+            summary = dict(row)
+            summary["amount_rolls"] = amount_rolls
+            summary["grades"] = grades
+            summary["base_per_roll"] = float(row.get("base_per_roll", 0.0) or 0.0)
+            summary["dyn_per_roll"] = float(row.get("dyn_per_roll", 0.0) or 0.0)
+            summary["base_expected"] = float(row.get("base_expected", 0.0) or 0.0)
+            summary["dyn_expected"] = float(row.get("dyn_expected", 0.0) or 0.0)
+            grouped[key] = summary
+            continue
+        summary["amount_rolls"].update(amount_rolls)
+        summary["grades"].update(grades)
+        summary["choice_count"] += row.get("choice_count", 0)
+        summary["grade_choices"] += row.get("grade_choices", 0)
+        summary["empty_choices"] = max(summary.get("empty_choices", 0), row.get("empty_choices", 0))
+        summary["item_count"] = max(summary.get("item_count", 1), row.get("item_count", 1))
+        summary["base_per_roll"] += float(row.get("base_per_roll", 0.0) or 0.0)
+        summary["dyn_per_roll"] += float(row.get("dyn_per_roll", 0.0) or 0.0)
+        summary["base_expected"] += float(row.get("base_expected", 0.0) or 0.0)
+        summary["dyn_expected"] += float(row.get("dyn_expected", 0.0) or 0.0)
+        summary["spawn_rate"] += row.get("spawn_rate", 0.0)
+        summary["merged_rows"] += int(row.get("merged_rows", 1) or 1)
+
+    merged = []
+    for row in grouped.values():
+        rolls = max(1, int(row.get("rolls", 1) or 1))
+        row["base_at_least_one"] = 1.0 - math.pow(max(0.0, 1.0 - row["base_per_roll"]), rolls)
+        row["dyn_at_least_one"] = 1.0 - math.pow(max(0.0, 1.0 - row["dyn_per_roll"]), rolls)
+        row["amount_rolls"] = sorted(row["amount_rolls"])
+        row["grades"] = sorted(row["grades"])
+        row["grade"] = row["grades"][0] if len(row["grades"]) == 1 else f"{row['grades'][0]}-{row['grades'][-1]}"
+        merged.append(row)
+    return merged
 
 
 def compact_row(row: dict) -> dict:
@@ -493,6 +553,10 @@ def compact_row(row: dict) -> dict:
         "rateTable": row["rate_table"],
         "spawner": row["spawner"],
     }
+    if row.get("amount_rolls"):
+        compact["amountRolls"] = [str(value) for value in row["amount_rolls"]]
+    if row.get("grades"):
+        compact["grades"] = [str(value) for value in row["grades"]]
     if "compare_dyn_at_least_one" in row:
         compare_value = float(row.get("compare_dyn_at_least_one", 0.0) or 0.0)
         current_value = float(row.get("dyn_at_least_one", 0.0) or 0.0)
@@ -682,8 +746,9 @@ class WebIndex:
         diffs = {diff for row in self.rows for diff in row["diffs"]}
         self.maps = visible_map_values(maps)
         self.diffs = visible_diff_values(diffs)
-        self.source_summaries = source_summary(self.rows, self, merge_variants=True)
-        self.item_summaries = item_summary(self.rows, self)
+        amount_rows = merge_amount_roll_rows(self.rows)
+        self.source_summaries = source_summary(amount_rows, self, merge_variants=True)
+        self.item_summaries = item_summary(amount_rows, self)
         self.item_summaries_by_dyn = sorted(self.item_summaries, key=lambda row: row["dyn_at_least_one"], reverse=True)
 
     def attach_module_spawn_locations(self, root: Path) -> None:
@@ -1197,6 +1262,10 @@ def item_summary(rows: list[dict], index: WebIndex | None = None) -> list[dict]:
         summary["merged_rows"] += int(row.get("merged_rows", 1) or 1)
         if row["dyn_at_least_one"] > summary["dyn_at_least_one"]:
             for field in (
+                "grade",
+                "grades",
+                "item_count",
+                "amount_rolls",
                 "choice_count",
                 "grade_choices",
                 "empty_choices",
@@ -1570,7 +1639,7 @@ def detail_compare_key(row: dict) -> tuple:
 def attach_compare_luck(rows: list[dict], base_rows: list[dict], result: ScanResult | None, compare_luck: int | None, index: WebIndex | None = None, source_scope: list[str] | None = None) -> list[dict]:
     if not result or compare_luck is None:
         return rows
-    compare_rows = detail_summary(rows_with_luck(base_rows, result, compare_luck), index, source_scope)
+    compare_rows = detail_summary(merge_amount_roll_rows(rows_with_luck(base_rows, result, compare_luck)), index, source_scope)
     compare_by_key = {detail_compare_key(row): row for row in compare_rows}
     updated_rows = []
     for row in rows:
@@ -1649,7 +1718,7 @@ def item_results_for(index: WebIndex, result: ScanResult | None, luck: int, para
     elif luck == scan_luck(result) and is_default_item_query(params):
         rows = index.item_summaries
     else:
-        rows = item_summary(rows_with_luck(filter_item_rows(index, params), result, luck), index)
+        rows = item_summary(merge_amount_roll_rows(rows_with_luck(filter_item_rows(index, params), result, luck)), index)
     sort_key = param(params, "sort", "dyn")
     descending = param(params, "dir", "desc") != "asc"
     if rows is index.item_summaries and sort_key == "dyn" and descending:
@@ -4538,7 +4607,7 @@ class LootWebHandler(BaseHTTPRequestHandler):
                 index, result, luck = self.state.current_data()
                 if index:
                     source_scope = index.source_values_for_query(unquote(param(params, "source")), unquote(param(params, "kind")))
-                    rows = sort_detail_rows(detail_summary(rows_with_luck(filter_exact_source_rows(index, params), result, luck), index, source_scope), param(params, "sort", "dyn"), param(params, "dir", "desc") != "asc")
+                    rows = sort_detail_rows(detail_summary(merge_amount_roll_rows(rows_with_luck(filter_exact_source_rows(index, params), result, luck)), index, source_scope), param(params, "sort", "dyn"), param(params, "dir", "desc") != "asc")
                 else:
                     rows = []
                 filename = quote("source_drops.csv")
@@ -4625,7 +4694,7 @@ class LootWebHandler(BaseHTTPRequestHandler):
         kind = unquote(param(params, "kind"))
         source_scope = index.source_values_for_query(source, kind)
         base_rows = filter_exact_source_rows(index, params)
-        rows = detail_summary(rows_with_luck(base_rows, result, luck), index, source_scope)
+        rows = detail_summary(merge_amount_roll_rows(rows_with_luck(base_rows, result, luck)), index, source_scope)
         compare_luck = None
         compare_param = param(params, "compareLuck")
         if compare_param.strip():
@@ -4655,7 +4724,7 @@ class LootWebHandler(BaseHTTPRequestHandler):
             self.send_json({"total": 0, "offset": 0, "limit": DEFAULT_LIMIT, "rows": [], "item": None})
             return
         base_rows = filter_item_source_rows(index, params)
-        rows = rows_with_luck(base_rows, result, luck)
+        rows = merge_amount_roll_rows(rows_with_luck(base_rows, result, luck))
         summaries = item_source_summary(rows, index)
         summaries = sort_item_source_rows(summaries, param(params, "sort", "chance"), param(params, "dir", "desc") != "asc")
         selected, total, offset, limit = page(summaries, params)

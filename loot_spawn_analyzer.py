@@ -1198,8 +1198,8 @@ def build_database(root: Path, luck: int = 500) -> ScanResult:
                                 "dyn_per_roll": dyn_per_roll,
                                 "base_at_least_one": base_at_least_one,
                                 "dyn_at_least_one": dyn_at_least_one,
-                                "base_expected": base_per_roll * rolls,
-                                "dyn_expected": dyn_per_roll * rolls,
+                                "base_expected": base_per_roll * rolls * choice.item_count,
+                                "dyn_expected": dyn_per_roll * rolls * choice.item_count,
                                 "merged_rows": 0,
                             }
                             aggregate_rows[key] = row
