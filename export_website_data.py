@@ -63,6 +63,7 @@ STAT_KEY_ALIASES = {
     "MoveSpeedBase": "MoveSpeed",
     "MoveSpeedMod": "MoveSpeedBonus",
     "PhysicalDamageMod": "PhysicalDamageBonus",
+    "PhysicalDamageReduction": "PhysicalArmorReduction",
     "PhysicalHealBase": "PhysicalHealing",
     "PhysicalReduction": "PhysicalArmorReduction",
     "PhysicalWeaponDamageAdd": "PhysicalWeaponDamage",
@@ -91,6 +92,7 @@ PERCENT_STAT_KEYS = {
     "MagicalDamageBonus",
     "MagicalInteractionSpeed",
     "MagicalInteractionSpeedBonus",
+    "MemoryCapacityBonus",
     "ManualDexterity",
     "ManualDexterityBonus",
     "MaxHealthBonus",
@@ -643,7 +645,7 @@ def property_item_entry(row: dict, property_types: dict) -> dict | None:
         return None
     type_info = property_types.get(type_id, {
         "id": type_id,
-        "statKey": normalize_stat_key(type_id),
+        "statKey": ITEM_PROPERTY_STAT_KEY_OVERRIDES.get(type_id) or normalize_stat_key(type_id),
         "label": humanize_identifier(type_id),
         "propertyLabel": humanize_identifier(type_id),
         "valueRatio": None,
@@ -654,7 +656,7 @@ def property_item_entry(row: dict, property_types: dict) -> dict | None:
     max_value = row.get("MaxValue", min_value)
     value_ratio = type_info.get("valueRatio")
     is_percent = type_info["statKey"] in PERCENT_STAT_KEYS
-    value_scale = value_ratio * 100 if is_percent and isinstance(value_ratio, (int, float)) else 1
+    value_scale = value_ratio * 100 if is_percent and isinstance(value_ratio, (int, float)) else (0.1 if is_percent else 1)
     unit = "%" if is_percent else ""
     scale_override = ITEM_PROPERTY_VALUE_SCALE_OVERRIDES.get(type_info["statKey"])
     if scale_override:
