@@ -2138,7 +2138,7 @@ th.num .sort-button {
 
 .damage-target-controls {
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) minmax(140px, .8fr) repeat(2, minmax(0, 96px)) auto;
+  grid-template-columns: minmax(160px, 1fr) minmax(130px, .8fr) repeat(3, minmax(0, 88px)) auto;
   gap: 10px;
   align-items: end;
 }
