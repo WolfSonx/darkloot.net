@@ -33,6 +33,10 @@
     confirmAction: null,
     shareStatus: "",
   },
+  damageTarget: {
+    pdr: 10,
+    mdr: 10,
+  },
   itemByAsset: new Map(),
   sourceByKey: new Map(),
   rateWeights: {},
@@ -62,7 +66,7 @@ const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
-const APP_BUILD_ID = "20260529-6";
+const APP_BUILD_ID = "20260529-7";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -170,6 +174,11 @@ const BUILDER_DEFAULTS = {
   headshotDamageBonus: 150,
   primaryUnarmedDamage: 8,
   primaryUnarmedImpactPower: 1,
+};
+const DAMAGE_TARGET_DEFAULTS = {
+  name: "Training Dummy",
+  pdr: 10,
+  mdr: 10,
 };
 const BUILDER_SLOTS = [
   { id: "weapon1Primary", label: "Primary", marker: "1", accepts: ["Primary"], area: "weapon1Primary", kind: "weapon", weaponSet: "1", weaponRole: "primary" },
@@ -1440,6 +1449,15 @@ function itemStatTotal(slotId, statKey) {
   };
 }
 
+function itemExactStatValue(slotId, statKey) {
+  const resolvedSlotId = resolveBuilderSlotId(slotId);
+  const item = state.kit.itemByAsset.get(state.builder.equipped[resolvedSlotId]);
+  if (!item || !statKey || !slotStatsAreActive(resolvedSlotId)) return defaultSlotStatValue(resolvedSlotId, statKey);
+  const totals = new Map();
+  addItemStats(totals, resolvedSlotId, item);
+  return directStatValue(totals, statKey);
+}
+
 function defaultSlotStatValue(slotId, statKey) {
   if (builderSlotById(slotId).weaponRole !== "primary") return 0;
   if (statKey === "PhysicalWeaponDamage") return BUILDER_DEFAULTS.primaryUnarmedDamage;
@@ -1621,6 +1639,154 @@ function builderStatTotals(rows = builderStatRows()) {
       if (rank) return rank;
       return left.label.localeCompare(right.label, undefined, { sensitivity: "base" });
     });
+}
+
+function clampPercentInput(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(-100, Math.min(100, parsed));
+}
+
+function damageNumber(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return "0";
+  return Math.abs(number % 1) < 0.0001
+    ? number.toLocaleString()
+    : number.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function targetMitigationMultiplier(percent) {
+  return 1 - (clampPercentInput(percent, 0) / 100);
+}
+
+function builderDamageOutput() {
+  const totals = builderStatMap();
+  const derived = builderDerivedStatValues(totals, selectedBuilderCharacter());
+  const primarySlotId = activeWeaponSlotId("primary");
+  const primary = state.kit.itemByAsset.get(state.builder.equipped[primarySlotId]);
+  const physicalWeaponBase = itemExactStatValue(primarySlotId, "PhysicalWeaponDamage");
+  const additionalWeapon = itemExactStatValue(primarySlotId, "AdditionalWeaponDamage");
+  const physicalWeapon = physicalWeaponBase + additionalWeapon;
+  const magicalWeapon = itemStatTotal(primarySlotId, "MagicalWeaponDamage").value;
+  const magicalBase = itemStatTotal(primarySlotId, "MagicalDamage").value;
+  const physicalAdd = directStatValue(totals, "PhysicalDamageAdd");
+  const magicalAdd = directStatValue(totals, "MagicalDamageAdd");
+  const truePhysical = directStatValue(totals, "PhysicalDamageTrue");
+  const trueMagical = directStatValue(totals, "MagicalDamageTrue");
+  const physicalBonus = Number(derived.get("PhysicalDamageBonus") || 0);
+  const magicalBonus = Number(derived.get("MagicalDamageBonus") || 0);
+  const pdr = clampPercentInput(state.damageTarget.pdr, DAMAGE_TARGET_DEFAULTS.pdr);
+  const mdr = clampPercentInput(state.damageTarget.mdr, DAMAGE_TARGET_DEFAULTS.mdr);
+  const physicalHitBase = physicalWeapon + physicalAdd;
+  const magicalHitBase = magicalWeapon + magicalBase + magicalAdd;
+  const physicalBeforeReduction = physicalHitBase * (1 + (physicalBonus / 100));
+  const magicalBeforeReduction = magicalHitBase * (1 + (magicalBonus / 100));
+  const physicalAfterReduction = Math.max(0, physicalBeforeReduction * targetMitigationMultiplier(pdr)) + truePhysical;
+  const magicalAfterReduction = Math.max(0, magicalBeforeReduction * targetMitigationMultiplier(mdr)) + trueMagical;
+  return {
+    primaryName: primary?.name || "Bare Hands",
+    physical: {
+      weaponBase: physicalWeaponBase,
+      additionalWeapon,
+      weapon: physicalWeapon,
+      add: physicalAdd,
+      hitBase: physicalHitBase,
+      bonus: physicalBonus,
+      trueDamage: truePhysical,
+      targetReduction: pdr,
+      beforeReduction: physicalBeforeReduction,
+      afterReduction: physicalAfterReduction,
+    },
+    magical: {
+      weapon: magicalWeapon,
+      base: magicalBase,
+      add: magicalAdd,
+      hitBase: magicalHitBase,
+      bonus: magicalBonus,
+      trueDamage: trueMagical,
+      targetReduction: mdr,
+      beforeReduction: magicalBeforeReduction,
+      afterReduction: magicalAfterReduction,
+    },
+    total: physicalAfterReduction + magicalAfterReduction,
+  };
+}
+
+function damageBreakdownRows(section) {
+  const baseRows = section.weaponBase == null && section.base != null
+    ? [
+      ["Magical Weapon Damage", section.weapon],
+      ["Magical Damage", section.base],
+    ]
+    : section.weaponBase == null
+      ? [["Base", section.weapon]]
+    : [
+      ["Weapon Damage", section.weaponBase],
+      ["Additional Weapon Damage", section.additionalWeapon],
+    ];
+  return [
+    ...baseRows,
+    ["Additional", section.add],
+    ["Weapon Hit", section.hitBase],
+    ["Power Bonus", `${damageNumber(section.bonus)}%`],
+    ["Before Mitigation", section.beforeReduction],
+    ["Target Reduction", `${damageNumber(section.targetReduction)}%`],
+    ["True Damage", section.trueDamage],
+    ["Output", section.afterReduction],
+  ];
+}
+
+function damageBreakdownHtml(title, section) {
+  return `
+    <section class="damage-card">
+      <h3>${escapeHtml(title)}</h3>
+      <strong>${escapeHtml(damageNumber(section.afterReduction))}</strong>
+      <div class="damage-breakdown">
+        ${damageBreakdownRows(section).map(([label, value]) => `
+          <span>${escapeHtml(label)}</span>
+          <b>${escapeHtml(typeof value === "string" ? value : damageNumber(value))}</b>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderDamageChecker(focusKey = "") {
+  const target = $("damageCheckerContent");
+  if (!target) return;
+  const output = builderDamageOutput();
+  $("damageDialogMeta").textContent = `${DAMAGE_TARGET_DEFAULTS.name} target, active weapon: ${output.primaryName}`;
+  target.innerHTML = `
+    <div class="damage-target-controls">
+      <label>PDR
+        <input type="number" min="-100" max="100" step="0.1" value="${escapeHtml(state.damageTarget.pdr)}" data-damage-target="pdr">
+      </label>
+      <label>MDR
+        <input type="number" min="-100" max="100" step="0.1" value="${escapeHtml(state.damageTarget.mdr)}" data-damage-target="mdr">
+      </label>
+      <button type="button" data-reset-damage-target>Reset Dummy</button>
+    </div>
+    <div class="damage-total">
+      <span>Total Output</span>
+      <strong>${escapeHtml(damageNumber(output.total))}</strong>
+    </div>
+    <div class="damage-grid">
+      ${damageBreakdownHtml("Physical", output.physical)}
+      ${damageBreakdownHtml("Magical", output.magical)}
+    </div>
+  `;
+  if (focusKey) {
+    const input = target.querySelector(`[data-damage-target="${CSS.escape(focusKey)}"]`);
+    if (input) {
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+  }
+}
+
+function openDamageChecker() {
+  renderDamageChecker();
+  $("damageDialog")?.showModal();
 }
 
 function fillFilters() {
@@ -3175,6 +3341,7 @@ function renderBuilder() {
     $("builderItemList").innerHTML = `<div class="builder-empty">${escapeHtml(message)}</div>`;
     renderBuilderStats();
     renderBuilderSavedKits();
+    if ($("damageDialog")?.open) renderDamageChecker();
     positionBuilderPicker();
     return;
   }
@@ -3188,6 +3355,7 @@ function renderBuilder() {
   renderBuilderItems();
   renderBuilderStats(stats);
   renderBuilderSavedKits();
+  if ($("damageDialog")?.open) renderDamageChecker();
   positionBuilderPicker();
 }
 
@@ -3780,6 +3948,11 @@ function wireEvents() {
         confirmOrDeleteSavedKit(button.dataset.deleteBuilderKit);
         return;
       }
+      if (button.dataset.resetDamageTarget != null) {
+        state.damageTarget = { pdr: DAMAGE_TARGET_DEFAULTS.pdr, mdr: DAMAGE_TARGET_DEFAULTS.mdr };
+        renderDamageChecker();
+        return;
+      }
       if (button.dataset.favType === "item") {
         toggleFavoriteItem(button.dataset.favKey);
         return;
@@ -3852,6 +4025,15 @@ function wireEvents() {
 
   document.body.addEventListener("input", (event) => {
     const input = event.target;
+    if (input.dataset?.damageTarget) {
+      const key = input.dataset.damageTarget;
+      state.damageTarget = {
+        ...state.damageTarget,
+        [key]: clampPercentInput(input.value, DAMAGE_TARGET_DEFAULTS[key] ?? 0),
+      };
+      renderDamageChecker(key);
+      return;
+    }
     if (input.id === "sourceDetailSearch" && state.activeDetail?.type === "source") {
       const position = input.selectionStart ?? input.value.length;
       state.activeDetail.search = input.value;
@@ -3917,6 +4099,15 @@ function wireEvents() {
     }
     if (input.dataset?.builderPrimaryValue) {
       setBuilderPrimaryValue(input.dataset.builderPrimaryValue, Number(input.dataset.primaryIndex || 0), input.value);
+      return;
+    }
+    if (input.dataset?.damageTarget) {
+      const key = input.dataset.damageTarget;
+      state.damageTarget = {
+        ...state.damageTarget,
+        [key]: clampPercentInput(input.value, DAMAGE_TARGET_DEFAULTS[key] ?? 0),
+      };
+      renderDamageChecker(key);
     }
   });
 
@@ -3927,6 +4118,11 @@ function wireEvents() {
   $("detailDialog").addEventListener("close", () => {
     state.activeDetail = null;
     hideChipPopover(true);
+  });
+  $("openDamageChecker").addEventListener("click", openDamageChecker);
+  $("closeDamageChecker").addEventListener("click", () => $("damageDialog").close());
+  $("damageDialog").addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) $("damageDialog").close();
   });
   $("clearFavorites").addEventListener("click", () => {
     state.favorites = { items: [], sources: [] };

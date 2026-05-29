@@ -1193,6 +1193,12 @@ th.num .sort-button {
   margin-bottom: 9px;
 }
 
+.builder-equipment-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .builder-panel h3 {
   color: #f4f8fb;
   font-size: 13px;
@@ -2119,6 +2125,95 @@ th.num .sort-button {
   padding: 16px 10px;
   color: var(--muted);
   text-align: center;
+}
+
+.damage-dialog {
+  width: min(760px, calc(100vw - 28px));
+}
+
+.damage-checker {
+  display: grid;
+  gap: 12px;
+}
+
+.damage-target-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 130px)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.damage-target-controls label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.damage-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid rgba(242, 189, 85, .48);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(242, 189, 85, .16), rgba(75, 214, 188, .08));
+  padding: 12px 14px;
+}
+
+.damage-total span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.damage-total strong {
+  color: var(--gold);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.damage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.damage-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(83, 105, 128, .52);
+  border-radius: 8px;
+  background: rgba(10, 16, 23, .58);
+  padding: 12px;
+}
+
+.damage-card h3 {
+  color: #f4f8fb;
+  font-size: 13px;
+}
+
+.damage-card > strong {
+  color: var(--lime);
+  font-size: 22px;
+}
+
+.damage-breakdown {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px 12px;
+  border-top: 1px solid rgba(83, 105, 128, .34);
+  padding-top: 9px;
+}
+
+.damage-breakdown span {
+  color: var(--muted);
+}
+
+.damage-breakdown b {
+  color: var(--text);
+  text-align: right;
 }
 
 dialog {

@@ -14,7 +14,7 @@
   <meta property="og:image" content="https://darkloot.net/assets/darkloot-mark.png">
   <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png?v=20260508-1">
   <link rel="apple-touch-icon" href="/assets/darkloot-mark.png?v=20260508-1">
-  <link rel="stylesheet" href="/src/styles.css?v=20260529-6">
+  <link rel="stylesheet" href="/src/styles.css?v=20260529-7">
 </head>
 <body>
   <header class="app-header">
@@ -149,7 +149,10 @@
           <section class="builder-panel builder-equipment-panel">
             <div class="builder-panel-head">
               <h3>Equipment</h3>
-              <button id="clearBuilder" class="danger">Clear</button>
+              <div class="builder-equipment-actions">
+                <button id="openDamageChecker" type="button">Damage</button>
+                <button id="clearBuilder" class="danger">Clear</button>
+              </div>
             </div>
             <div id="builderEquipment" class="builder-equipment"></div>
             <div id="builderPicker" class="builder-picker" hidden>
@@ -272,6 +275,19 @@
     <div id="detailContent"></div>
   </dialog>
 
-  <script type="module" src="/src/main.js?v=20260529-6"></script>
+  <dialog id="damageDialog" class="damage-dialog">
+    <div class="dialog-head">
+      <div>
+        <h2>Damage Output</h2>
+        <p id="damageDialogMeta">Training Dummy target</p>
+      </div>
+      <div class="dialog-actions">
+        <button id="closeDamageChecker" aria-label="Close">Close</button>
+      </div>
+    </div>
+    <div id="damageCheckerContent" class="damage-checker"></div>
+  </dialog>
+
+  <script type="module" src="/src/main.js?v=20260529-7"></script>
 </body>
 </html>
