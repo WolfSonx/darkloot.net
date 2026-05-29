@@ -34,6 +34,8 @@
     shareStatus: "",
   },
   damageTarget: {
+    hand: "primary",
+    hitLocation: "torso",
     pdr: 10,
     mdr: 10,
   },
@@ -177,9 +179,17 @@ const BUILDER_DEFAULTS = {
 };
 const DAMAGE_TARGET_DEFAULTS = {
   name: "Training Dummy",
+  hand: "primary",
+  hitLocation: "torso",
   pdr: 10,
   mdr: 10,
 };
+const DAMAGE_HIT_LOCATIONS = [
+  { value: "head", label: "Head", multiplier: null },
+  { value: "torso", label: "Torso", multiplier: 1 },
+  { value: "arms", label: "Arms / Hands", multiplier: 0.5 },
+  { value: "legs", label: "Legs / Feet", multiplier: 0.5 },
+];
 const BUILDER_SLOTS = [
   { id: "weapon1Primary", label: "Primary", marker: "1", accepts: ["Primary"], area: "weapon1Primary", kind: "weapon", weaponSet: "1", weaponRole: "primary" },
   { id: "weapon1Secondary", label: "Secondary", accepts: ["Secondary"], area: "weapon1Secondary", kind: "weapon", weaponSet: "1", weaponRole: "secondary" },
@@ -1668,38 +1678,75 @@ function targetMitigationMultiplier(percent) {
   return 1 - (clampPercentInput(percent, 0) / 100);
 }
 
-function builderDamageOutput() {
+function damageHandRole() {
+  return state.damageTarget.hand === "secondary" ? "secondary" : "primary";
+}
+
+function damageHandSlotId() {
+  return activeWeaponSlotId(damageHandRole());
+}
+
+function damageHandLabel() {
+  return damageHandRole() === "secondary" ? "Secondary" : "Primary";
+}
+
+function damageHitLocation() {
+  const value = String(state.damageTarget.hitLocation || DAMAGE_TARGET_DEFAULTS.hitLocation);
+  return DAMAGE_HIT_LOCATIONS.find((location) => location.value === value) || DAMAGE_HIT_LOCATIONS[1];
+}
+
+function damageHitLocationMultiplier(derived) {
+  const location = damageHitLocation();
+  if (location.value === "head") {
+    return Math.max(0, Number(derived.get("HeadshotDamageBonus") || BUILDER_DEFAULTS.headshotDamageBonus) / 100);
+  }
+  return Number(location.multiplier ?? 1);
+}
+
+function damageStatMap(handSlotId) {
   const totals = builderStatMap();
+  const item = state.kit.itemByAsset.get(state.builder.equipped[handSlotId]);
+  if (item) addItemStats(totals, handSlotId, item);
+  return totals;
+}
+
+function builderDamageOutput() {
+  const handSlotId = damageHandSlotId();
+  const totals = damageStatMap(handSlotId);
   const derived = builderDerivedStatValues(totals, selectedBuilderCharacter());
-  const primarySlotId = activeWeaponSlotId("primary");
-  const primary = state.kit.itemByAsset.get(state.builder.equipped[primarySlotId]);
-  const physicalWeaponBase = activeWeaponStatValue(primarySlotId, "PhysicalWeaponDamage");
-  const additionalWeapon = activeWeaponStatValue(primarySlotId, "AdditionalWeaponDamage");
+  const handItem = state.kit.itemByAsset.get(state.builder.equipped[handSlotId]);
+  const physicalWeaponBase = activeWeaponStatValue(handSlotId, "PhysicalWeaponDamage");
+  const additionalWeapon = activeWeaponStatValue(handSlotId, "AdditionalWeaponDamage");
   const physicalWeapon = physicalWeaponBase + additionalWeapon;
-  const magicalWeapon = activeWeaponStatValue(primarySlotId, "MagicalWeaponDamage");
-  const magicalBase = activeWeaponStatValue(primarySlotId, "MagicalDamage");
+  const magicalWeapon = activeWeaponStatValue(handSlotId, "MagicalWeaponDamage");
+  const magicalBase = activeWeaponStatValue(handSlotId, "MagicalDamage");
   const physicalAdd = directStatValue(totals, "PhysicalDamageAdd");
   const magicalAdd = directStatValue(totals, "MagicalDamageAdd");
   const truePhysical = directStatValue(totals, "PhysicalDamageTrue");
   const trueMagical = directStatValue(totals, "MagicalDamageTrue");
   const physicalBonus = Number(derived.get("PhysicalDamageBonus") || 0);
   const magicalBonus = Number(derived.get("MagicalDamageBonus") || 0);
+  const hitLocation = damageHitLocation();
+  const locationMultiplier = damageHitLocationMultiplier(derived);
   const pdr = clampPercentInput(state.damageTarget.pdr, DAMAGE_TARGET_DEFAULTS.pdr);
   const mdr = clampPercentInput(state.damageTarget.mdr, DAMAGE_TARGET_DEFAULTS.mdr);
   const physicalHitBase = physicalWeapon + physicalAdd;
   const magicalHitBase = magicalWeapon + magicalBase + magicalAdd;
-  const physicalBeforeReduction = physicalHitBase * (1 + (physicalBonus / 100));
-  const magicalBeforeReduction = magicalHitBase * (1 + (magicalBonus / 100));
+  const physicalBeforeReduction = physicalHitBase * locationMultiplier * (1 + (physicalBonus / 100));
+  const magicalBeforeReduction = magicalHitBase * locationMultiplier * (1 + (magicalBonus / 100));
   const physicalAfterReduction = Math.max(0, physicalBeforeReduction * targetMitigationMultiplier(pdr)) + truePhysical;
   const magicalAfterReduction = Math.max(0, magicalBeforeReduction * targetMitigationMultiplier(mdr)) + trueMagical;
   return {
-    primaryName: primary?.name || "Bare Hands",
+    handLabel: damageHandLabel(),
+    handName: handItem?.name || (damageHandRole() === "primary" ? "Bare Hands" : "None"),
     physical: {
       weaponBase: physicalWeaponBase,
       additionalWeapon,
       weapon: physicalWeapon,
       add: physicalAdd,
       hitBase: physicalHitBase,
+      locationLabel: hitLocation.label,
+      locationMultiplier,
       bonus: physicalBonus,
       trueDamage: truePhysical,
       targetReduction: pdr,
@@ -1711,6 +1758,8 @@ function builderDamageOutput() {
       base: magicalBase,
       add: magicalAdd,
       hitBase: magicalHitBase,
+      locationLabel: hitLocation.label,
+      locationMultiplier,
       bonus: magicalBonus,
       trueDamage: trueMagical,
       targetReduction: mdr,
@@ -1737,6 +1786,7 @@ function damageBreakdownRows(section) {
     ...baseRows,
     ["Additional", section.add],
     ["Weapon Hit", section.hitBase],
+    [section.locationLabel || "Hit Location", `${damageNumber((section.locationMultiplier || 1) * 100)}%`],
     ["Power Bonus", `${damageNumber(section.bonus)}%`],
     ["Before Mitigation", section.beforeReduction],
     ["Target Reduction", `${damageNumber(section.targetReduction)}%`],
@@ -1760,13 +1810,53 @@ function damageBreakdownHtml(title, section) {
   `;
 }
 
+function damageHandOptions() {
+  const primary = state.kit.itemByAsset.get(state.builder.equipped[activeWeaponSlotId("primary")]);
+  const secondary = state.kit.itemByAsset.get(state.builder.equipped[activeWeaponSlotId("secondary")]);
+  const secondaryBlocked = itemIsTwoHanded(primary);
+  return [
+    {
+      value: "primary",
+      label: `Primary - ${primary?.name || "Bare Hands"}`,
+      disabled: false,
+    },
+    {
+      value: "secondary",
+      label: secondaryBlocked ? "Secondary - blocked by two-handed weapon" : `Secondary - ${secondary?.name || "None"}`,
+      disabled: secondaryBlocked,
+    },
+  ];
+}
+
 function renderDamageChecker(focusKey = "") {
   const target = $("damageCheckerContent");
   if (!target) return;
+  if (damageHandOptions().find((option) => option.value === damageHandRole())?.disabled) {
+    state.damageTarget = { ...state.damageTarget, hand: "primary" };
+  }
   const output = builderDamageOutput();
-  $("damageDialogMeta").textContent = `${DAMAGE_TARGET_DEFAULTS.name} target, active weapon: ${output.primaryName}`;
+  $("damageDialogMeta").textContent = `${DAMAGE_TARGET_DEFAULTS.name} target, active hand: ${output.handLabel} (${output.handName})`;
+  const handOptions = damageHandOptions();
   target.innerHTML = `
     <div class="damage-target-controls">
+      <label>Hand
+        <select data-damage-hand>
+          ${handOptions.map((option) => `
+            <option value="${escapeHtml(option.value)}" ${option.value === damageHandRole() ? "selected" : ""} ${option.disabled ? "disabled" : ""}>
+              ${escapeHtml(option.label)}
+            </option>
+          `).join("")}
+        </select>
+      </label>
+      <label>Body Part
+        <select data-damage-location>
+          ${DAMAGE_HIT_LOCATIONS.map((location) => `
+            <option value="${escapeHtml(location.value)}" ${location.value === damageHitLocation().value ? "selected" : ""}>
+              ${escapeHtml(location.label)}
+            </option>
+          `).join("")}
+        </select>
+      </label>
       <label>PDR
         <input type="number" min="-100" max="100" step="0.1" value="${escapeHtml(state.damageTarget.pdr)}" data-damage-target="pdr">
       </label>
@@ -3958,7 +4048,11 @@ function wireEvents() {
         return;
       }
       if (button.dataset.resetDamageTarget != null) {
-        state.damageTarget = { pdr: DAMAGE_TARGET_DEFAULTS.pdr, mdr: DAMAGE_TARGET_DEFAULTS.mdr };
+        state.damageTarget = {
+          ...state.damageTarget,
+          pdr: DAMAGE_TARGET_DEFAULTS.pdr,
+          mdr: DAMAGE_TARGET_DEFAULTS.mdr,
+        };
         renderDamageChecker();
         return;
       }
@@ -4043,6 +4137,24 @@ function wireEvents() {
       renderDamageChecker(key);
       return;
     }
+    if (input.dataset?.damageHand != null) {
+      state.damageTarget = {
+        ...state.damageTarget,
+        hand: input.value === "secondary" ? "secondary" : "primary",
+      };
+      renderDamageChecker();
+      return;
+    }
+    if (input.dataset?.damageLocation != null) {
+      state.damageTarget = {
+        ...state.damageTarget,
+        hitLocation: DAMAGE_HIT_LOCATIONS.some((location) => location.value === input.value)
+          ? input.value
+          : DAMAGE_TARGET_DEFAULTS.hitLocation,
+      };
+      renderDamageChecker();
+      return;
+    }
     if (input.id === "sourceDetailSearch" && state.activeDetail?.type === "source") {
       const position = input.selectionStart ?? input.value.length;
       state.activeDetail.search = input.value;
@@ -4117,6 +4229,24 @@ function wireEvents() {
         [key]: clampPercentInput(input.value, DAMAGE_TARGET_DEFAULTS[key] ?? 0),
       };
       renderDamageChecker(key);
+      return;
+    }
+    if (input.dataset?.damageHand != null) {
+      state.damageTarget = {
+        ...state.damageTarget,
+        hand: input.value === "secondary" ? "secondary" : "primary",
+      };
+      renderDamageChecker();
+      return;
+    }
+    if (input.dataset?.damageLocation != null) {
+      state.damageTarget = {
+        ...state.damageTarget,
+        hitLocation: DAMAGE_HIT_LOCATIONS.some((location) => location.value === input.value)
+          ? input.value
+          : DAMAGE_TARGET_DEFAULTS.hitLocation,
+      };
+      renderDamageChecker();
     }
   });
 
