@@ -69,7 +69,7 @@ const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
-const APP_BUILD_ID = "20260529-12";
+const APP_BUILD_ID = "20260529-13";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -4078,6 +4078,7 @@ function wireEvents() {
       if (button.dataset.resetDamageTarget != null) {
         state.damageTarget = {
           ...state.damageTarget,
+          hitZoneMultiplier: DAMAGE_TARGET_DEFAULTS.hitZoneMultiplier,
           pdr: DAMAGE_TARGET_DEFAULTS.pdr,
           mdr: DAMAGE_TARGET_DEFAULTS.mdr,
         };
