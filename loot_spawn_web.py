@@ -74,14 +74,22 @@ MODULE_D_FILE_MAPS = {"firedeep", "shipgraveyard"}
 SOURCE_MAP_EXCLUSIONS: dict[tuple[str, str], set[str]] = {}
 # Manual source map overrides keep generated dungeon rows aligned with current spawn rules.
 SOURCE_MAP_INCLUSIONS = {
+    ("Boss", "Banshee"): {"Ruins"},
+    ("Boss", "Cave Troll"): {"Goblin Caves"},
+    ("Boss", "Cyclops"): {"Goblin Caves"},
     ("Boss", "Demon Overseer"): {"Inferno"},
     ("Boss", "Ghost King"): {"Crypts"},
     ("Boss", "Lich"): {"Crypts"},
     ("Boss", "Skeleton Warlord"): {"Crypts"},
+    ("Boss", "Spectral Knight"): {"Ruins"},
+    ("Monster", "Banshee"): {"Ruins"},
+    ("Monster", "Cave Troll"): {"Goblin Caves"},
+    ("Monster", "Cyclops"): {"Goblin Caves"},
     ("Monster", "Demon Overseer"): {"Inferno"},
     ("Monster", "Ghost King"): {"Crypts"},
     ("Monster", "Lich"): {"Crypts"},
     ("Monster", "Skeleton Warlord"): {"Crypts"},
+    ("Monster", "Spectral Knight"): {"Ruins"},
 }
 MODULE_SOURCE_ALIASES = {
     ("Ice Abyss", "Chest Special"): {("Golden Chest (Gold Chest)", "Prop")},
@@ -1249,7 +1257,9 @@ def source_summary(rows: list[dict], index: WebIndex | None = None, merge_varian
             summary["items"].add(row["item_asset"])
             summary["maps"].update(row_maps)
             summary["diffs"].update(row["diffs"])
-            summary["scenarios"].add(scenario_key(row))
+            for map_name in row_maps:
+                for diff in row["diffs"]:
+                    summary["scenarios"].add((map_name, diff, row["group"], row["loot_table"], row["rate_table"], row["rolls"]))
             if not summary["best"] or row["dyn_at_least_one"] > summary["best"]["dyn_at_least_one"]:
                 summary["best"] = row
         best = summary["best"]
@@ -1625,7 +1635,9 @@ def item_source_summary(rows: list[dict], index: WebIndex | None = None) -> list
                 continue
             summary["maps"].update(row_maps)
             summary["diffs"].update(row["diffs"])
-            summary["scenarios"].add(scenario_key(row))
+            for map_name in row_maps:
+                for diff in row["diffs"]:
+                    summary["scenarios"].add((map_name, diff, row["group"], row["loot_table"], row["rate_table"], row["rolls"]))
             summary["rows"] += int(row.get("merged_rows", 1) or 1)
             if not summary["best"] or row["dyn_at_least_one"] > summary["best"]["dyn_at_least_one"]:
                 summary["best"] = row
