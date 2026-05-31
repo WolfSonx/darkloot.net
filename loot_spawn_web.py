@@ -90,6 +90,7 @@ SOURCE_MAP_INCLUSIONS = {
     ("Monster", "Lich"): {"Crypts"},
     ("Monster", "Skeleton Warlord"): {"Crypts"},
     ("Monster", "Spectral Knight"): {"Ruins"},
+    ("Prop", "Ash Tree"): {"Ruins"},
 }
 MODULE_SOURCE_ALIASES = {
     ("Ice Abyss", "Chest Special"): {("Golden Chest (Gold Chest)", "Prop")},
@@ -184,6 +185,7 @@ def find_modules_root(root: Path) -> Path | None:
     root = Path(root).resolve()
     candidates = [
         root / "Content" / "DungeonCrawler" / "Maps" / "Dungeon" / "Modules",
+        root / "DungeonCrawler" / "Content" / "DungeonCrawler" / "Maps" / "Dungeon" / "Modules",
         root / "DungeonCrawler" / "Maps" / "Dungeon" / "Modules",
         root / "Maps" / "Dungeon" / "Modules",
         root / "Dungeon" / "Modules",
@@ -191,6 +193,7 @@ def find_modules_root(root: Path) -> Path | None:
     ]
     for parent in [root, *root.parents]:
         candidates.append(parent / "Content" / "DungeonCrawler" / "Maps" / "Dungeon" / "Modules")
+        candidates.append(parent / "DungeonCrawler" / "Content" / "DungeonCrawler" / "Maps" / "Dungeon" / "Modules")
     seen: set[Path] = set()
     for candidate in candidates:
         if candidate in seen:
