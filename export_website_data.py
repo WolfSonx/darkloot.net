@@ -181,6 +181,12 @@ PERK_ICON_ALIASES = {
     "Id_Perk_ComboAttack": "CombinationAttack",
     "Id_Perk_HideMastery": "HideExpert",
 }
+ITEM_ICON_ALIASES = {
+    "RingOfSurvival": "Item_Icon_BasicRing01",
+    "RingOfQuickness": "Item_Icon_BasicRing02",
+    "RingOfCourage": "Item_Icon_BasicRing03",
+    "RingOfResolve": "Item_Icon_BasicRing04",
+}
 
 
 def slug_for(*parts: object) -> str:
@@ -314,6 +320,8 @@ def item_icon_from_art_path(art_json_path: Path | None, art_asset: str, output_d
     if not icon_dirs:
         return ""
     tokens = [art_asset]
+    if ITEM_ICON_ALIASES.get(art_asset):
+        tokens.insert(0, ITEM_ICON_ALIASES[art_asset])
     tokens.append(art_asset.replace("Of", "of"))
     tokens.append(art_asset.replace("of", "Of"))
     if re.search(r"_1001$", art_asset):
