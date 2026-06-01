@@ -1909,7 +1909,12 @@ th.num .sort-button {
   display: none;
 }
 
-.builder-bonus-option:hover,
+.builder-bonus-option:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.builder-bonus-option:hover:not(:disabled),
 .builder-bonus-option.selected {
   border-color: rgba(75, 214, 188, .68);
   background: rgba(75, 214, 188, .14);

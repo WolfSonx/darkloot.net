@@ -727,6 +727,40 @@ def load_character_effects(generated_root: Path) -> dict:
     ])
 
 
+def load_character_skins(generated_root: Path, status_effects: dict) -> list[dict]:
+    content_root = generated_root.parents[2]
+    skin_dir = content_root / "Characters" / "Skin"
+    skin_folder_names = {
+        path.name
+        for path in skin_dir.iterdir()
+        if skin_dir.exists() and path.is_dir()
+    }
+    skins = []
+    prefix = "Id_ActorStatusEffect_CharacterSkin_"
+    for effect_id, effect in status_effects.items():
+        if not str(effect_id).startswith(prefix):
+            continue
+        token = str(effect_id)[len(prefix):]
+        folder = next(
+            (
+                name
+                for name in skin_folder_names
+                if token == name or token.startswith(name) or name.startswith(token)
+            ),
+            "",
+        )
+        skins.append({
+            "id": effect_id,
+            "name": humanize_identifier(token),
+            "skin": folder or token,
+            "effectId": effect_id,
+            "stats": effect.get("stats", []),
+            "grantedTags": effect.get("grantedTags", []),
+        })
+    skins.sort(key=lambda row: row["name"].lower())
+    return skins
+
+
 def load_curve_tables(generated_root: Path) -> dict:
     tables = {}
     curve_dir = generated_root.parent.parent / "GameplayAbility"
@@ -940,6 +974,7 @@ def build_kit_builder_data(generated_root: Path, output_dir: Path, public_items:
     requirements = load_requirement_classes(generated_root, output_dir)
     status_effects = load_status_effects(generated_root)
     character_effects = load_character_effects(generated_root)
+    character_skins = load_character_skins(generated_root, status_effects)
     curve_tables = load_curve_tables(generated_root)
     perks = load_perks(generated_root, output_dir, status_effects)
     characters = load_characters(generated_root, output_dir, perks, character_effects)
@@ -960,9 +995,11 @@ def build_kit_builder_data(generated_root: Path, output_dir: Path, public_items:
         "propertyTypes": property_types,
         "curveTables": curve_tables,
         "characters": characters,
+        "characterSkins": character_skins,
         "perks": sorted(perks.values(), key=lambda row: row["name"].lower()),
         "notes": {
             "statusEffectStats": "Direct numeric status-effect fields are exported for perks when present.",
+            "characterSkinStats": "Character skin folders are matched to Id_ActorStatusEffect_CharacterSkin_* status effects when exported.",
             "baseCharacterStats": "Class base stats are loaded from V2/PlayerCharacter/PlayerCharacterEffect, with DT_PlayerCharacter as a fallback.",
             "derivedStatCurves": "Curve tables are loaded from Data/GameplayAbility/CT_*.json when exported.",
             "localizedStatLabels": f"Loaded {len(localization):,} English game localization strings for item property labels.",
@@ -1285,11 +1322,13 @@ def export_website_data(cache_path: Path, output_dir: Path, root: Path, luck: in
             "propertyTypes": {},
             "curveTables": {},
             "characters": [],
+            "characterSkins": [],
             "perks": [],
             "notes": {"missingGeneratedRoot": str(generated_root)},
         }
     manifest["counts"]["kitItems"] = len(kit_builder.get("items") or [])
     manifest["counts"]["kitCharacters"] = len(kit_builder.get("characters") or [])
+    manifest["counts"]["kitCharacterSkins"] = len(kit_builder.get("characterSkins") or [])
     manifest["counts"]["kitPerks"] = len(kit_builder.get("perks") or [])
     manifest["counts"]["itemArt"] = len(item_art)
     write_json(output_dir / "kit-builder.json", kit_builder)

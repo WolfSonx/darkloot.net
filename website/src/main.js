@@ -10,6 +10,8 @@
     curveTables: {},
     characters: [],
     characterById: new Map(),
+    characterSkins: [],
+    skinById: new Map(),
     perks: [],
     perkById: new Map(),
   },
@@ -30,6 +32,7 @@
     primaryValues: {},
     bonuses: {},
     perks: [],
+    skinId: "",
     confirmAction: null,
     shareStatus: "",
   },
@@ -64,11 +67,12 @@ const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
 const SHARED_KIT_PARAM = "k";
 const SHARED_KIT_LEGACY_PARAM = "kit";
 const SHARED_KIT_COMPRESSED_PREFIX = "z.";
-const SHARED_KIT_VERSION = 3;
+const SHARED_KIT_VERSION = 4;
 const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
+const SHARED_SKIN_PREFIX = "Id_ActorStatusEffect_CharacterSkin_";
 const APP_BUILD_ID = "20260529-17";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
@@ -597,6 +601,7 @@ function normalizeSavedKit(raw) {
     primaryValues: cloneJson(raw.primaryValues),
     bonuses: cloneJson(raw.bonuses),
     perks: Array.isArray(raw.perks) ? raw.perks.map(String).slice(0, BUILDER_PERK_LIMIT) : [],
+    skinId: String(raw.skinId || ""),
   };
 }
 
@@ -710,12 +715,13 @@ function compactSharedKit(kit) {
     primaryValues,
     bonuses,
     Array.isArray(kit.perks) ? kit.perks.filter(Boolean).map((perkId) => stripKnownPrefix(perkId, SHARED_PERK_PREFIX)) : [],
+    stripKnownPrefix(kit.skinId || "", SHARED_SKIN_PREFIX),
   ];
 }
 
 function expandLegacyCompactSharedKit(payload) {
   if (!Array.isArray(payload) || payload[0] !== SHARED_KIT_LEGACY_VERSION) return null;
-  const [, name, characterId, activeWeaponSet, selectedSlot, equippedRows = [], primaryRows = [], bonusRows = [], perks = []] = payload;
+  const [, name, characterId, activeWeaponSet, selectedSlot, equippedRows = [], primaryRows = [], bonusRows = [], perks = [], skinId = ""] = payload;
   const equipped = {};
   (Array.isArray(equippedRows) ? equippedRows : []).forEach((row) => {
     const slotId = sharedSlotId(row?.[0]);
@@ -790,6 +796,7 @@ function expandCompactSharedKit(payload) {
     primaryValues,
     bonuses,
     perks: Array.isArray(perks) ? perks.map((perkId) => restoreKnownPrefix(perkId, SHARED_PERK_PREFIX)) : [],
+    skinId: restoreKnownPrefix(skinId, SHARED_SKIN_PREFIX),
   });
 }
 
@@ -883,6 +890,7 @@ function currentBuilderKit(name, existing = null) {
     primaryValues: cloneJson(state.builder.primaryValues),
     bonuses: cloneJson(state.builder.bonuses),
     perks: [...state.builder.perks],
+    skinId: state.builder.skinId,
   };
 }
 
@@ -966,6 +974,7 @@ function applyBuilderKit(kit) {
   state.builder.equipped = equipped;
   state.builder.primaryValues = primaryValues;
   state.builder.bonuses = bonuses;
+  state.builder.skinId = state.kit.skinById.has(kit.skinId) ? kit.skinId : "";
   const input = $("builderKitName");
   if (input) input.value = kit.name;
   renderBuilder();
@@ -1440,6 +1449,15 @@ function addActivePerkStats(totals) {
   });
 }
 
+function selectedBuilderSkin() {
+  return state.kit.skinById.get(state.builder.skinId) || null;
+}
+
+function addActiveSkinStats(totals) {
+  const skin = selectedBuilderSkin();
+  (skin?.stats || []).forEach((entry) => addBuilderStat(totals, entry, skin.name || "Skin"));
+}
+
 function builderStatMap() {
   const totals = new Map();
   const character = selectedBuilderCharacter();
@@ -1450,6 +1468,7 @@ function builderStatMap() {
     addItemStats(totals, slotId, item);
   });
   addActivePerkStats(totals);
+  addActiveSkinStats(totals);
   const armorMoveSpeedPenalty = activeArmorMoveSpeedPenalty();
   const armorMoveSpeedPenaltyReduction = directStatValue(totals, "MoveSpeedArmorPenaltyReduction");
   if (armorMoveSpeedPenalty < 0 && armorMoveSpeedPenaltyReduction > 0) {
@@ -1954,8 +1973,13 @@ function fillBuilderFilters() {
   $("builderCharacter").innerHTML = state.kit.characters.length
     ? state.kit.characters.map((character) => `<option value="${escapeHtml(character.id)}">${escapeHtml(character.name)}</option>`).join("")
     : `<option value="">No character data</option>`;
+  $("builderSkin").innerHTML = [
+    `<option value="">No skin</option>`,
+    ...state.kit.characterSkins.map((skin) => `<option value="${escapeHtml(skin.id)}">${escapeHtml(skin.name)}</option>`),
+  ].join("");
   setSelectIfAvailable("builderRarity", state.builder.rarity);
   setSelectIfAvailable("builderCharacter", state.builder.characterId);
+  setSelectIfAvailable("builderSkin", state.builder.skinId);
 }
 
 function formatDate(value) {
@@ -1998,6 +2022,7 @@ async function loadKitData() {
       const kit = state.manifest.files.kit ? await fetchJson(state.manifest.files.kit, dataVersionToken()) : {};
       const kitItems = kit.items || [];
       const kitCharacters = kit.characters || [];
+      const kitSkins = kit.characterSkins || [];
       const kitPerks = kit.perks || [];
       state.kit = {
         items: kitItems,
@@ -2007,6 +2032,8 @@ async function loadKitData() {
         curveTables: kit.curveTables || {},
         characters: kitCharacters,
         characterById: new Map(kitCharacters.map((row) => [row.id, row])),
+        characterSkins: kitSkins,
+        skinById: new Map(kitSkins.map((row) => [row.id, row])),
         perks: kitPerks,
         perkById: new Map(kitPerks.map((row) => [row.id, row])),
       };
@@ -3039,12 +3066,16 @@ function renderBuilderCharacter() {
   const target = $("builderCharacterCurrent");
   if (!target) return;
   const character = selectedBuilderCharacter();
+  const skin = selectedBuilderSkin();
+  const skinStats = (skin?.stats || [])
+    .map((entry) => `${entry.label} ${statValue(entry.value, entry.unit)}`)
+    .join(", ");
   target.innerHTML = character
     ? `
       ${iconImage(classIconUrl(character), "builder-class-icon", character.name)}
       <div>
         <strong>${escapeHtml(character.name)}</strong>
-        <span>${escapeHtml((character.perks || []).length.toLocaleString())} perks</span>
+        <span>${escapeHtml((character.perks || []).length.toLocaleString())} perks${skin ? ` | ${escapeHtml(skin.name)}${skinStats ? `: ${escapeHtml(skinStats)}` : ""}` : ""}</span>
       </div>
     `
     : "";
@@ -3260,6 +3291,9 @@ function bonusSelect(slotId, item, poolId, index) {
   const selectedEntry = state.builder.bonuses[slotId]?.[index] || {};
   const options = secondaryOptionsForItem(item, poolId);
   const selectedOption = options.find((option) => option.propertyId === selectedEntry.propertyId);
+  const selectedPropertyIds = new Set((state.builder.bonuses[slotId] || [])
+    .map((entry, entryIndex) => (entryIndex === index ? "" : entry?.propertyId))
+    .filter(Boolean));
   const value = Number.isFinite(Number(selectedEntry.value))
     ? Number(selectedEntry.value)
     : Number(selectedOption?.max ?? selectedOption?.min ?? 0);
@@ -3297,11 +3331,13 @@ function bonusSelect(slotId, item, poolId, index) {
             const optionLabel = bonusOptionText(option);
             const optionText = `${optionLabel} (${statRange(option)})`;
             const searchText = bonusOptionSearchText(option);
+            const duplicate = selectedPropertyIds.has(option.propertyId);
             return `
               <option
                 value="${escapeHtml(option.propertyId)}"
                 data-search-text="${escapeHtml(searchText.toLowerCase())}"
-                ${option.propertyId === selectedEntry.propertyId ? "selected" : ""}>
+                ${option.propertyId === selectedEntry.propertyId ? "selected" : ""}
+                ${duplicate ? "disabled" : ""}>
                 ${escapeHtml(optionText)}
               </option>
             `;
@@ -3320,6 +3356,7 @@ function bonusSelect(slotId, item, poolId, index) {
           ${options.map((option) => {
             const optionLabel = bonusOptionText(option);
             const searchText = bonusOptionSearchText(option);
+            const duplicate = selectedPropertyIds.has(option.propertyId);
             return `
               <button
                 type="button"
@@ -3327,7 +3364,8 @@ function bonusSelect(slotId, item, poolId, index) {
                 data-builder-bonus-option="${escapeHtml(slotId)}"
                 data-bonus-index="${index}"
                 data-property-id="${escapeHtml(option.propertyId)}"
-                data-search-text="${escapeHtml(searchText.toLowerCase())}">
+                data-search-text="${escapeHtml(searchText.toLowerCase())}"
+                ${duplicate ? "disabled" : ""}>
                 <span>${escapeHtml(optionLabel)}</span>
                 <small>${escapeHtml(statRange(option))}</small>
               </button>
@@ -3486,6 +3524,216 @@ function renderBuilderItems() {
     : `<div class="builder-empty">${escapeHtml(weaponSlotBlockReason(state.builder.selectedSlot) || "No kit items match these filters for this character.")}</div>`;
 }
 
+function photoItemLines(slotId, item) {
+  if (!item) return [];
+  const primary = slotPrimarySummary(slotId, item, 6);
+  const secondary = slotSecondarySummary(slotId, item);
+  return [...primary, ...secondary].slice(0, 9);
+}
+
+function photoLoadImage(src) {
+  return new Promise((resolve) => {
+    if (!src) {
+      resolve(null);
+      return;
+    }
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+}
+
+function photoDrawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 2) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  let line = "";
+  let lines = 0;
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (ctx.measureText(next).width > maxWidth && line) {
+      ctx.fillText(line, x, y);
+      y += lineHeight;
+      lines += 1;
+      line = word;
+      if (lines >= maxLines - 1) break;
+    } else {
+      line = next;
+    }
+  }
+  if (line && lines < maxLines) ctx.fillText(line, x, y);
+  return y + lineHeight;
+}
+
+function photoDrawCard(ctx, item, slotId, x, y, width) {
+  const lines = photoItemLines(slotId, item);
+  const height = Math.max(118, 64 + (lines.length * 20));
+  const gradient = ctx.createLinearGradient(x, y, x, y + 46);
+  gradient.addColorStop(0, "rgba(74, 43, 91, .96)");
+  gradient.addColorStop(1, "rgba(27, 17, 34, .96)");
+  ctx.fillStyle = "rgba(5, 7, 9, .88)";
+  ctx.fillRect(x, y, width, height);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(x, y, width, 46);
+  ctx.strokeStyle = "rgba(182, 117, 226, .85)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, width, height);
+  ctx.beginPath();
+  ctx.moveTo(x, y + 46);
+  ctx.lineTo(x + width, y + 46);
+  ctx.strokeStyle = "rgba(178, 72, 230, .9)";
+  ctx.stroke();
+  ctx.font = "24px Georgia, serif";
+  ctx.fillStyle = "#c783ff";
+  ctx.textAlign = "center";
+  photoDrawWrappedText(ctx, item?.name || "Empty", x + width / 2, y + 30, width - 22, 24, 1);
+  ctx.font = "15px Segoe UI, Arial";
+  lines.forEach((line, index) => {
+    ctx.fillStyle = line.includes("%") || line.includes("+") ? "#24befe" : "#f1f3f4";
+    ctx.fillText(line, x + width / 2, y + 70 + (index * 20));
+  });
+  ctx.textAlign = "left";
+  return height;
+}
+
+function photoDrawStats(ctx, rows, character) {
+  const x = 86;
+  const y = 32;
+  const width = 386;
+  const height = 648;
+  ctx.fillStyle = "rgba(23, 25, 27, .86)";
+  ctx.fillRect(x, y, width, height);
+  ctx.strokeStyle = "rgba(184, 168, 148, .32)";
+  ctx.strokeRect(x, y, width, height);
+  ctx.font = "22px Georgia, serif";
+  ctx.fillStyle = "#d7a16d";
+  ctx.textAlign = "center";
+  ctx.fillText(character?.name || "Kit", x + width / 2, y + 28);
+  ctx.font = "15px Segoe UI, Arial";
+  rows.slice(0, 30).forEach((row, index) => {
+    const rowY = y + 56 + (index * 20);
+    ctx.strokeStyle = "rgba(255,255,255,.08)";
+    ctx.beginPath();
+    ctx.moveTo(x + 8, rowY + 6);
+    ctx.lineTo(x + width - 8, rowY + 6);
+    ctx.stroke();
+    ctx.fillStyle = "#bfb8ad";
+    ctx.textAlign = "left";
+    ctx.fillText(row.label, x + 8, rowY);
+    const value = row.type === "text" ? row.value : statValue(row.value, row.unit);
+    ctx.fillStyle = Number(row.value) > 0 ? "#a7d637" : Number(row.value) < 0 ? "#dd3948" : "#d8d2c8";
+    ctx.textAlign = "right";
+    ctx.fillText(value, x + width - 10, rowY);
+  });
+  ctx.textAlign = "left";
+}
+
+async function saveBuilderPhoto() {
+  if (!state.kitReady) return;
+  closeBuilderBonusMenus();
+  hideBuilderSlotTooltip(true);
+  const canvas = document.createElement("canvas");
+  canvas.width = 1920;
+  canvas.height = 1080;
+  const ctx = canvas.getContext("2d");
+  const bg = ctx.createLinearGradient(0, 0, 1920, 1080);
+  bg.addColorStop(0, "#3b2810");
+  bg.addColorStop(.28, "#08090b");
+  bg.addColorStop(.56, "#4d0508");
+  bg.addColorStop(1, "#1e1d1b");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 1920, 1080);
+  ctx.filter = "blur(34px)";
+  ["#d59a32", "#a00010", "#b7b0a4", "#74210b"].forEach((color, index) => {
+    ctx.fillStyle = color;
+    ctx.globalAlpha = .45;
+    ctx.beginPath();
+    ctx.ellipse(240 + (index * 420), 170 + ((index % 2) * 560), 210, 170, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+  ctx.filter = "none";
+  ctx.fillStyle = "rgba(0,0,0,.34)";
+  ctx.fillRect(0, 0, 1920, 1080);
+
+  const stats = builderStatRows();
+  photoDrawStats(ctx, stats, selectedBuilderCharacter());
+
+  const equipmentRect = { x: 770, y: 244, width: 470, height: 594 };
+  ctx.fillStyle = "rgba(19, 20, 22, .9)";
+  ctx.fillRect(equipmentRect.x, equipmentRect.y, equipmentRect.width, equipmentRect.height);
+  ctx.strokeStyle = "rgba(202, 202, 202, .32)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(equipmentRect.x, equipmentRect.y, equipmentRect.width, equipmentRect.height);
+  const grid = { x: equipmentRect.x + 28, y: equipmentRect.y + 36, cell: 54, gap: 11 };
+  const slotRects = {
+    head: [5, 0, 2, 2],
+    chest: [4.5, 2.1, 2.6, 3.2],
+    legs: [4.5, 5.7, 2.6, 2.8],
+    hands: [2.4, 6.5, 2, 1.6],
+    feet: [7.4, 6.5, 2, 1.6],
+    cloak: [7.4, 2.2, 1.8, 2.7],
+    necklace: [9.4, 1.1, 1.2, 1.6],
+    ring1: [3.5, 5.4, 1.1, 1.1],
+    ring2: [7.4, 5.4, 1.1, 1.1],
+    weapon1Primary: [0, 0, 1.8, 3.9],
+    weapon1Secondary: [2, 0, 1.8, 3.9],
+    weapon2Primary: [9.6, 0, 1.8, 3.9],
+    weapon2Secondary: [11.6, 0, 1.8, 3.9],
+  };
+  const imageEntries = await Promise.all(BUILDER_SLOTS.map(async (slot) => {
+    const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
+    return [slot, item, await photoLoadImage(item?.iconUrl)];
+  }));
+  imageEntries.forEach(([slot, item, image]) => {
+    const rectDef = slotRects[slot.id];
+    if (!rectDef) return;
+    const [cx, cy, cw, ch] = rectDef;
+    const x = grid.x + (cx * (grid.cell + grid.gap));
+    const y = grid.y + (cy * (grid.cell + grid.gap));
+    const w = cw * grid.cell + ((cw - 1) * grid.gap);
+    const h = ch * grid.cell + ((ch - 1) * grid.gap);
+    ctx.fillStyle = "rgba(38, 38, 40, .96)";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = item ? "rgba(185, 185, 188, .62)" : "rgba(185, 185, 188, .26)";
+    ctx.strokeRect(x, y, w, h);
+    if (image) {
+      const scale = Math.min((w - 18) / image.width, (h - 18) / image.height);
+      const iw = image.width * scale;
+      const ih = image.height * scale;
+      ctx.drawImage(image, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+    }
+  });
+
+  const cardSlots = [
+    ["weapon1Primary", 667, 76, 282],
+    ["head", 995, 58, 236],
+    ["weapon2Primary", 1248, 118, 235],
+    ["weapon1Secondary", 488, 247, 286],
+    ["necklace", 1346, 293, 286],
+    ["chest", 603, 413, 222],
+    ["cloak", 1314, 459, 230],
+    ["ring1", 541, 645, 287],
+    ["ring2", 1305, 639, 287],
+    ["hands", 727, 810, 220],
+    ["legs", 978, 807, 236],
+    ["feet", 1239, 807, 245],
+  ];
+  cardSlots.forEach(([slotId, x, y, w]) => {
+    const item = state.kit.itemByAsset.get(state.builder.equipped[slotId]);
+    if (item) photoDrawCard(ctx, item, slotId, x, y, w);
+  });
+
+  const link = document.createElement("a");
+  const name = currentBuilderKitName().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "darkloot-kit";
+  link.download = `${name.toLowerCase()}-${Date.now()}.png`;
+  link.href = canvas.toDataURL("image/png");
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 function renderBuilderStats(stats = builderStatRows()) {
   const gearScore = Object.entries(state.builder.equipped)
     .filter(([slotId]) => slotStatsAreActive(slotId))
@@ -3535,6 +3783,7 @@ function renderBuilder() {
   $("builderSearch").value = state.builder.search;
   $("builderRarity").value = state.builder.rarity;
   if (state.builder.characterId) $("builderCharacter").value = state.builder.characterId;
+  if ($("builderSkin")) $("builderSkin").value = state.builder.skinId || "";
   if (!state.kitReady) {
     const message = state.kitPromise ? "Loading kit data..." : "Kit data is not loaded yet.";
     $("builderSummary").innerHTML = metaPill("Status", state.kitPromise ? "Loading" : "Idle");
@@ -3948,6 +4197,7 @@ function clearBuilder() {
   state.builder.primaryValues = {};
   state.builder.bonuses = {};
   state.builder.perks = [];
+  state.builder.skinId = "";
   state.builder.pickerOpen = false;
   state.builder.pickerMode = "items";
   renderBuilder();
@@ -3986,6 +4236,10 @@ function setBuilderBonusProperty(slotId, index, propertyId) {
   const bonuses = state.builder.bonuses[slotId] || defaultBonusesForItem(item);
   const entry = bonuses[index];
   const poolId = entry?.poolId || item.secondaryPoolIds[index];
+  if (propertyId && bonuses.some((bonus, bonusIndex) => bonusIndex !== index && bonus?.propertyId === propertyId)) {
+    renderBuilder();
+    return;
+  }
   const option = secondaryOptionForItem(item, poolId, propertyId);
   bonuses[index] = {
     poolId,
@@ -4069,6 +4323,12 @@ function wireEvents() {
     const allowedPerks = new Set(character?.perks || []);
     state.builder.perks = state.builder.perks.filter((perkId) => allowedPerks.has(perkId));
     pruneBuilderEquipmentForCurrentRules();
+    renderBuilder();
+  });
+  $("builderSkin").addEventListener("change", () => {
+    clearBuilderConfirmation();
+    const skinId = $("builderSkin").value;
+    state.builder.skinId = state.kit.skinById.has(skinId) ? skinId : "";
     renderBuilder();
   });
 
@@ -4387,6 +4647,12 @@ function wireEvents() {
   $("closeBuilderPicker").addEventListener("click", closeBuilderPicker);
   $("saveBuilderKit").addEventListener("click", saveCurrentBuilderKit);
   $("shareBuilderKit").addEventListener("click", () => shareBuilderKit());
+  $("builderPhotoMode").addEventListener("click", () => {
+    saveBuilderPhoto().catch((error) => {
+      console.error(error);
+      setBuilderShareStatus("Photo failed");
+    });
+  });
   $("builderKitName").addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
