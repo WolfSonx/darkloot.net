@@ -75,7 +75,7 @@ const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
 const SHARED_SKIN_PREFIX = "Id_ActorStatusEffect_CharacterSkin_";
-const APP_BUILD_ID = "20260601-3";
+const APP_BUILD_ID = "20260601-5";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -3763,6 +3763,26 @@ function photoDrawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 
   return y + lineHeight;
 }
 
+function photoDrawRoundRect(ctx, x, y, width, height, radius = 10) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+}
+
+function photoSignedStatValue(entry) {
+  const value = Number(entry?.value ?? 0);
+  const text = statValue(value, entry?.unit || "");
+  return value > 0 ? `+${text}` : text;
+}
+
 function photoRarityTheme(rarityValue) {
   const key = String(rarityValue || "").toLowerCase();
   const themes = {
@@ -3832,6 +3852,106 @@ function photoDrawCard(ctx, item, slotId, x, y, width) {
   });
   ctx.textAlign = "left";
   return height;
+}
+
+function photoDrawPerkPanel(ctx, perkEntries, x, y, width) {
+  const rows = perkEntries.length ? perkEntries : [[null, null]];
+  const rowHeight = 118;
+  rows.slice(0, BUILDER_PERK_LIMIT).forEach(([perk, image], index) => {
+    const rowY = y + (index * (rowHeight + 14));
+    const title = perk?.name || "No perk selected";
+    const summary = perk ? builderPerkSummary(perk) : "Pick perks in Kit Builder";
+    const gradient = ctx.createLinearGradient(x, rowY, x, rowY + rowHeight);
+    gradient.addColorStop(0, "rgba(88, 75, 40, .92)");
+    gradient.addColorStop(1, "rgba(22, 22, 20, .94)");
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, .55)";
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 6;
+    ctx.fillStyle = gradient;
+    photoDrawRoundRect(ctx, x, rowY, width, rowHeight, 10);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = "rgba(255, 196, 58, .9)";
+    ctx.lineWidth = 2;
+    photoDrawRoundRect(ctx, x, rowY, width, rowHeight, 10);
+    ctx.stroke();
+
+    const iconSize = 54;
+    const iconX = x + 16;
+    const iconY = rowY + 17;
+    ctx.fillStyle = "rgba(8, 10, 12, .76)";
+    photoDrawRoundRect(ctx, iconX, iconY, iconSize, iconSize, 6);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(220, 220, 210, .35)";
+    ctx.stroke();
+    if (image) ctx.drawImage(image, iconX + 5, iconY + 5, iconSize - 10, iconSize - 10);
+
+    ctx.textAlign = "left";
+    ctx.font = "700 23px Segoe UI, Arial";
+    ctx.fillStyle = "#fff8d8";
+    photoDrawWrappedText(ctx, title, x + 82, rowY + 38, width - 96, 24, 1);
+    ctx.font = "18px Segoe UI, Arial";
+    ctx.fillStyle = "#d8dde2";
+    photoDrawWrappedText(ctx, summary, x + 16, rowY + 96, width - 28, 24, 2);
+  });
+}
+
+function photoDrawSkinPanel(ctx, skin, image, x, y, width) {
+  const stats = skin?.stats || [];
+  const imageSize = image ? 142 : 0;
+  const height = (skin ? 188 : 118) + (image ? imageSize + 14 : 0);
+  const gradient = ctx.createLinearGradient(x, y, x, y + height);
+  gradient.addColorStop(0, "rgba(58, 58, 58, .92)");
+  gradient.addColorStop(.5, "rgba(28, 28, 28, .95)");
+  gradient.addColorStop(1, "rgba(9, 9, 9, .96)");
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, .58)";
+  ctx.shadowBlur = 16;
+  ctx.shadowOffsetY = 7;
+  ctx.fillStyle = gradient;
+  ctx.fillRect(x, y, width, height);
+  ctx.restore();
+  ctx.fillStyle = gradient;
+  ctx.fillRect(x, y, width, height);
+  ctx.strokeStyle = "rgba(230, 230, 230, .62)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, width, height);
+  ctx.beginPath();
+  ctx.moveTo(x, y + 58);
+  ctx.lineTo(x + width, y + 58);
+  ctx.strokeStyle = "rgba(230, 230, 230, .52)";
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.font = "24px Georgia, serif";
+  ctx.fillStyle = "#f1eee9";
+  photoDrawWrappedText(ctx, skin?.name || "No Skin", x + width / 2, y + 36, width - 20, 26, 1);
+  ctx.font = "700 18px Segoe UI, Arial";
+  if (stats.length) {
+    stats.slice(0, 5).forEach((entry, index) => {
+      const lineY = y + 88 + (index * 25);
+      const value = Number(entry.value || 0);
+      ctx.fillStyle = value >= 0 ? "#ffe35a" : "#ff7a7a";
+      ctx.fillText(`${photoSignedStatValue(entry)} ${entry.label || statLabel(entry.statKey)}`, x + width / 2, lineY);
+    });
+  } else {
+    ctx.fillStyle = "#d8dde2";
+    ctx.fillText(skin ? "No skin effects" : "Select a skin in Kit Builder", x + width / 2, y + 88);
+  }
+  if (image) {
+    const imageX = x + (width - imageSize) / 2;
+    const imageY = y + height - imageSize - 10;
+    ctx.fillStyle = "rgba(22, 22, 22, .72)";
+    ctx.fillRect(imageX, imageY, imageSize, imageSize);
+    ctx.strokeStyle = "rgba(230, 230, 230, .38)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(imageX, imageY, imageSize, imageSize);
+    const scale = Math.min((imageSize - 12) / image.width, (imageSize - 12) / image.height);
+    const iw = image.width * scale;
+    const ih = image.height * scale;
+    ctx.drawImage(image, imageX + (imageSize - iw) / 2, imageY + (imageSize - ih) / 2, iw, ih);
+  }
 }
 
 function photoStatRows(rows) {
@@ -3982,6 +4102,13 @@ async function saveBuilderPhoto() {
     const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
     return [slot, item, await photoLoadImage(item?.iconUrl)];
   }));
+  const perkEntries = await Promise.all(state.builder.perks
+    .map((perkId) => state.kit.perkById.get(perkId))
+    .filter(Boolean)
+    .map(async (perk) => [perk, await photoLoadImage(perkIconUrl(perk))]));
+  const skin = selectedBuilderSkin();
+  const character = selectedBuilderCharacter();
+  const skinImage = await photoLoadImage(skin?.iconUrl || character?.portraitUrl || character?.iconUrl);
   imageEntries.forEach(([slot, item, image]) => {
     const rectDef = slotRects[slot.id];
     if (!rectDef) return;
@@ -4024,6 +4151,12 @@ async function saveBuilderPhoto() {
     const item = state.kit.itemByAsset.get(state.builder.equipped[slotId]);
     if (item) photoDrawCard(ctx, item, slotId, x, y, w);
   });
+  photoDrawPerkPanel(ctx, perkEntries, 1648, 44, 270);
+  photoDrawSkinPanel(ctx, skin, skinImage, 1698, 718, 186);
+  ctx.textAlign = "center";
+  ctx.font = "700 18px Segoe UI, Arial";
+  ctx.fillStyle = "rgba(255, 255, 255, .72)";
+  ctx.fillText("Generated by Darkloot.net", 960, 1060);
 
   const link = document.createElement("a");
   const name = currentBuilderKitName().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "darkloot-kit";

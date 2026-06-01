@@ -367,6 +367,46 @@ def class_icon_url(generated_root: Path, output_dir: Path, class_id: str, size: 
     return public_asset_url_from_source(source, output_dir, "class-icons")
 
 
+def class_portrait_url(generated_root: Path, output_dir: Path, class_id: str) -> str:
+    if not class_id:
+        return ""
+    content_root = generated_root.parents[2]
+    icon_dirs = [
+        content_root / "UI" / "Resources" / "PortraitClass",
+        content_root / "UI" / "Resources" / "PortraitClasses",
+        content_root / "UI" / "Resources" / "IconClass",
+    ]
+    tokens = [
+        class_id,
+        f"Portrait_{class_id}_HUD_Man",
+        f"Portrait_{class_id}_HUD_Woman",
+        f"PortraitClass_{class_id}",
+        f"ClassPortrait_{class_id}",
+        f"ClassIcon_XL_{class_id}",
+    ]
+    compact_tokens = [re.sub(r"[^a-z0-9]", "", token.lower()) for token in tokens]
+    for icon_dir in icon_dirs:
+        if not icon_dir.exists():
+            continue
+        candidates = []
+        for extension in (".png", ".webp", ".jpg", ".jpeg"):
+            candidates.extend(sorted(icon_dir.glob(f"*{extension}")))
+        source = next((
+            path
+            for path in candidates
+            if any(token and token == re.sub(r"[^a-z0-9]", "", path.stem.lower()) for token in compact_tokens)
+        ), None)
+        if not source:
+            source = next((
+            path
+            for path in candidates
+            if any(token and token in re.sub(r"[^a-z0-9]", "", path.stem.lower()) for token in compact_tokens)
+            ), None)
+        if source:
+            return public_asset_url_from_source(source, output_dir, "class-portraits")
+    return ""
+
+
 def perk_icon_url(generated_root: Path, output_dir: Path, perk_id: str) -> str:
     token = PERK_ICON_ALIASES.get(str(perk_id or ""), str(perk_id or "").removeprefix("Id_Perk_"))
     if not token:
@@ -374,6 +414,68 @@ def perk_icon_url(generated_root: Path, output_dir: Path, perk_id: str) -> str:
     content_root = generated_root.parents[2]
     source = content_root / "UI" / "Resources" / "IconPerk" / f"Icon_Perk_{token}.png"
     return public_asset_url_from_source(source, output_dir, "perk-icons")
+
+
+def skin_icon_url(generated_root: Path, output_dir: Path, token: str, folder: str = "") -> str:
+    content_root = generated_root.parents[2]
+    icon_dirs = [
+        content_root / "UI" / "Resources" / "Skin",
+        content_root / "UI" / "Resources" / "Skins",
+        content_root / "UI" / "Resources" / "IconSkin",
+        content_root / "UI" / "Resources" / "IconSkins",
+    ]
+    tokens = [
+        token,
+        folder,
+        f"Icon_{token}",
+        f"Icon_Skin_{token}",
+        f"Skin_{token}",
+        f"Skin_Character_{token}",
+        f"Skin_Character_{token}Man",
+        f"Skin_Character_{token}Woman",
+        f"Skin_Character_{token}_S",
+        f"Skin_Character_{token}Man_S",
+        f"Skin_Character_{token}Woman_S",
+    ]
+    if folder:
+        tokens.extend([
+            f"Icon_{folder}",
+            f"Icon_Skin_{folder}",
+            f"Skin_{folder}",
+            f"Skin_Character_{folder}",
+            f"Skin_Character_{folder}Man",
+            f"Skin_Character_{folder}Woman",
+            f"Skin_Character_{folder}_S",
+            f"Skin_Character_{folder}Man_S",
+            f"Skin_Character_{folder}Woman_S",
+        ])
+    compact_tokens = [
+        re.sub(r"[^a-z0-9]", "", value.lower())
+        for value in dict.fromkeys(tokens)
+        if value
+    ]
+    for icon_dir in icon_dirs:
+        if not icon_dir.exists():
+            continue
+        candidates = []
+        for extension in (".png", ".webp", ".jpg", ".jpeg"):
+            candidates.extend(sorted(icon_dir.glob(f"*{extension}")))
+        source = next((
+            path
+            for path in candidates
+            if "preview" not in path.stem.lower()
+            and any(token and token == re.sub(r"[^a-z0-9]", "", path.stem.lower()) for token in compact_tokens)
+        ), None)
+        if not source:
+            source = next((
+            path
+            for path in candidates
+            if "preview" not in path.stem.lower()
+            and any(token and token in re.sub(r"[^a-z0-9]", "", path.stem.lower()) for token in compact_tokens)
+            ), None)
+        if source:
+            return public_asset_url_from_source(source, output_dir, "skin-icons")
+    return ""
 
 
 def item_art_from_reference(generated_root: Path, output_dir: Path, art_reference: object) -> dict:
@@ -754,7 +856,7 @@ def load_character_effects(generated_root: Path) -> dict:
     ])
 
 
-def load_character_skins(generated_root: Path, status_effects: dict) -> list[dict]:
+def load_character_skins(generated_root: Path, output_dir: Path, status_effects: dict) -> list[dict]:
     content_root = generated_root.parents[2]
     skin_dir = content_root / "Characters" / "Skin"
     skin_folder_names = {
@@ -783,6 +885,7 @@ def load_character_skins(generated_root: Path, status_effects: dict) -> list[dic
             "effectId": effect_id,
             "stats": effect.get("stats", []),
             "grantedTags": effect.get("grantedTags", []),
+            "iconUrl": skin_icon_url(generated_root, output_dir, token, folder),
         })
     skins.sort(key=lambda row: row["name"].lower())
     return skins
@@ -924,6 +1027,9 @@ def load_characters(generated_root: Path, output_dir: Path, perks: dict, charact
         icon_url = class_icon_url(generated_root, output_dir, key)
         if icon_url:
             character["iconUrl"] = icon_url
+        portrait_url = class_portrait_url(generated_root, output_dir, key)
+        if portrait_url:
+            character["portraitUrl"] = portrait_url
         characters.append(character)
     characters.sort(key=lambda row: row["name"].lower())
     return characters
@@ -1001,7 +1107,7 @@ def build_kit_builder_data(generated_root: Path, output_dir: Path, public_items:
     requirements = load_requirement_classes(generated_root, output_dir)
     status_effects = load_status_effects(generated_root)
     character_effects = load_character_effects(generated_root)
-    character_skins = load_character_skins(generated_root, status_effects)
+    character_skins = load_character_skins(generated_root, output_dir, status_effects)
     curve_tables = load_curve_tables(generated_root)
     perks = load_perks(generated_root, output_dir, status_effects)
     characters = load_characters(generated_root, output_dir, perks, character_effects)
