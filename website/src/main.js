@@ -75,7 +75,7 @@ const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
 const SHARED_SKIN_PREFIX = "Id_ActorStatusEffect_CharacterSkin_";
-const APP_BUILD_ID = "20260529-17";
+const APP_BUILD_ID = "20260601-1";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -1193,13 +1193,13 @@ async function shareBuilderKit(kit = currentBuilderKit(currentBuilderKitName()))
 async function applySharedBuilderKitFromLocation() {
   const sharedValue = sharedKitValueFromLocation();
   if (!sharedValue) return false;
+  await loadKitData();
   const kit = await decodeSharedKitPayload(sharedValue);
   if (!kit) {
     setActiveTab("builder", { render: false });
     state.builder.shareStatus = "Invalid kit link";
     return true;
   }
-  await loadKitData();
   setActiveTab("builder", { render: false });
   applyBuilderKit(kit);
   state.builder.shareStatus = "Shared kit loaded";
