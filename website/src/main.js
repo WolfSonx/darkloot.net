@@ -75,7 +75,7 @@ const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
 const SHARED_SKIN_PREFIX = "Id_ActorStatusEffect_CharacterSkin_";
-const APP_BUILD_ID = "20260601-1";
+const APP_BUILD_ID = "20260601-2";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -3972,7 +3972,7 @@ async function saveBuilderPhoto() {
     chest: [5, 2, 2, 3],
     cloak: [7, 2, 2, 3],
     ring1: [4, 5, 1.15, 1.15],
-    ring2: [8.45, 5, 1.15, 1.15],
+    ring2: [6.85, 5, 1.15, 1.15],
     legs: [5, 5, 2, 4],
     hands: [2, 7, 2, 2],
     feet: [8, 7, 2, 2],
