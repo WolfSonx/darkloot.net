@@ -3972,7 +3972,7 @@ async function saveBuilderPhoto() {
     chest: [5, 2, 2, 3],
     cloak: [7, 2, 2, 3],
     ring1: [4, 5, 1.15, 1.15],
-    ring2: [8.85, 5, 1.15, 1.15],
+    ring2: [8.45, 5, 1.15, 1.15],
     legs: [5, 5, 2, 4],
     hands: [2, 7, 2, 2],
     feet: [8, 7, 2, 2],
