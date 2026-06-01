@@ -3566,15 +3566,31 @@ function photoDrawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 
   return y + lineHeight;
 }
 
+function photoRarityTheme(rarityValue) {
+  const key = String(rarityValue || "").toLowerCase();
+  const themes = {
+    junk: { title: "#9d9d9d", line: "rgba(150, 150, 150, .76)", top: "rgba(55, 55, 55, .92)", bottom: "rgba(20, 20, 20, .96)" },
+    common: { title: "#d8d4c8", line: "rgba(202, 198, 185, .78)", top: "rgba(66, 64, 58, .92)", bottom: "rgba(22, 21, 19, .96)" },
+    uncommon: { title: "#57c66b", line: "rgba(87, 198, 107, .8)", top: "rgba(28, 70, 36, .92)", bottom: "rgba(12, 28, 16, .96)" },
+    rare: { title: "#5d94ff", line: "rgba(93, 148, 255, .82)", top: "rgba(28, 48, 86, .92)", bottom: "rgba(11, 19, 35, .96)" },
+    epic: { title: "#c783ff", line: "rgba(182, 117, 226, .78)", top: "rgba(78, 45, 94, .92)", bottom: "rgba(18, 13, 22, .96)" },
+    legendary: { title: "#ff8f3d", line: "rgba(255, 143, 61, .86)", top: "rgba(92, 48, 18, .92)", bottom: "rgba(32, 18, 8, .96)" },
+    unique: { title: "#ffe071", line: "rgba(255, 224, 113, .86)", top: "rgba(94, 72, 23, .92)", bottom: "rgba(32, 24, 8, .96)" },
+    artifact: { title: "#ff6666", line: "rgba(235, 91, 91, .86)", top: "rgba(92, 22, 24, .92)", bottom: "rgba(30, 8, 10, .96)" },
+  };
+  return themes[key] || themes.common;
+}
+
 function photoDrawCard(ctx, item, slotId, x, y, width) {
   const lines = photoItemLines(slotId, item);
+  const theme = photoRarityTheme(item?.rarity);
   const lineHeight = 17;
   const headerHeight = 42;
   const height = Math.max(112, 60 + (lines.length * lineHeight));
   const gradient = ctx.createLinearGradient(x, y, x, y + headerHeight);
-  gradient.addColorStop(0, "rgba(78, 45, 94, .92)");
-  gradient.addColorStop(.55, "rgba(40, 22, 52, .94)");
-  gradient.addColorStop(1, "rgba(18, 13, 22, .96)");
+  gradient.addColorStop(0, theme.top);
+  gradient.addColorStop(.56, "rgba(30, 24, 34, .94)");
+  gradient.addColorStop(1, theme.bottom);
   ctx.save();
   ctx.shadowColor = "rgba(0, 0, 0, .64)";
   ctx.shadowBlur = 18;
@@ -3596,16 +3612,16 @@ function photoDrawCard(ctx, item, slotId, x, y, width) {
     ctx.stroke();
   }
   ctx.restore();
-  ctx.strokeStyle = "rgba(182, 117, 226, .72)";
+  ctx.strokeStyle = theme.line;
   ctx.lineWidth = 2;
   ctx.strokeRect(x, y, width, height);
   ctx.beginPath();
   ctx.moveTo(x, y + headerHeight);
   ctx.lineTo(x + width, y + headerHeight);
-  ctx.strokeStyle = "rgba(178, 72, 230, .86)";
+  ctx.strokeStyle = theme.line;
   ctx.stroke();
   ctx.font = "22px Georgia, serif";
-  ctx.fillStyle = "#c783ff";
+  ctx.fillStyle = theme.title;
   ctx.textAlign = "center";
   photoDrawWrappedText(ctx, item?.name || "Empty", x + width / 2, y + 28, width - 22, 22, 1);
   ctx.font = "13px Segoe UI, Arial";
@@ -3712,7 +3728,7 @@ async function saveBuilderPhoto() {
   const stats = builderStatRows();
   photoDrawStats(ctx, stats, selectedBuilderCharacter());
 
-  const equipmentRect = { x: 760, y: 244, width: 570, height: 595 };
+  const equipmentRect = { x: 640, y: 210, width: 800, height: 700 };
   const equipmentGradient = ctx.createRadialGradient(
     equipmentRect.x + equipmentRect.width / 2,
     equipmentRect.y + equipmentRect.height / 2,
@@ -3740,10 +3756,10 @@ async function saveBuilderPhoto() {
   }
   ctx.restore();
   const grid = {
-    x: equipmentRect.x + 26,
-    y: equipmentRect.y + 36,
-    width: equipmentRect.width - 52,
-    height: equipmentRect.height - 72,
+    x: equipmentRect.x + 34,
+    y: equipmentRect.y + 46,
+    width: equipmentRect.width - 68,
+    height: equipmentRect.height - 92,
     columns: 14,
     rows: 9,
     gap: 9,

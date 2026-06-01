@@ -303,20 +303,39 @@ def icon_raster_url(icon_json_path: Path | None, icon_asset: str, output_dir: Pa
 def item_icon_from_art_path(art_json_path: Path | None, art_asset: str, output_dir: Path) -> str:
     if not art_json_path or not art_asset:
         return ""
-    icon_dir = art_json_path.with_suffix("").parent / "Icon"
-    if not icon_dir.exists():
+    icon_dirs = []
+    for candidate in (
+        art_json_path.with_suffix("").parent / "Icon",
+        art_json_path.parent / "Icon",
+        art_json_path.parent.parent / "Icon",
+    ):
+        if candidate.exists() and candidate not in icon_dirs:
+            icon_dirs.append(candidate)
+    if not icon_dirs:
         return ""
     tokens = [art_asset]
+    tokens.append(art_asset.replace("Of", "of"))
+    tokens.append(art_asset.replace("of", "Of"))
     if re.search(r"_1001$", art_asset):
         tokens.append(re.sub(r"_1001$", "_0001", art_asset))
     tokens.append(re.sub(r"_[0-9]{4}$", "", art_asset))
     candidates = []
     for token in dict.fromkeys(token for token in tokens if token):
-        for extension in (".png", ".webp", ".jpg", ".jpeg"):
-            candidates.extend(sorted(icon_dir.glob(f"*{token}*{extension}")))
+        compact_token = re.sub(r"[^a-z0-9]", "", token.lower())
+        for icon_dir in icon_dirs:
+            for extension in (".png", ".webp", ".jpg", ".jpeg"):
+                candidates.extend(
+                    path
+                    for path in sorted(icon_dir.glob(f"*{extension}"))
+                    if compact_token and compact_token in re.sub(r"[^a-z0-9]", "", path.stem.lower())
+                )
     source = next((path for path in candidates if path.exists()), None)
     if not source:
-        source = next((path for path in sorted(icon_dir.glob("*.png")) if path.exists()), None)
+        ring_dir = next((path for path in icon_dirs if path.parent.name.lower() == "ring"), None)
+        if ring_dir:
+            source = next((path for path in sorted(ring_dir.glob("Item_Icon_BasicRing*.png")) if path.exists()), None)
+    if not source:
+        source = next((path for icon_dir in icon_dirs for path in sorted(icon_dir.glob("*.png")) if path.exists()), None)
     if not source:
         return ""
     return public_asset_url_from_source(source, output_dir, "item-icons")
