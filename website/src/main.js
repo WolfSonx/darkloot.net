@@ -75,7 +75,7 @@ const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
 const SHARED_SKIN_PREFIX = "Id_ActorStatusEffect_CharacterSkin_";
-const APP_BUILD_ID = "20260601-2";
+const APP_BUILD_ID = "20260601-3";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -3722,9 +3722,10 @@ function renderBuilderItems() {
 
 function photoItemLines(slotId, item) {
   if (!item) return [];
-  const primary = slotPrimarySummary(slotId, item, 6);
+  const primary = slotPrimarySummary(slotId, item, 6).map((text) => ({ text, secondary: false }));
   const secondary = slotSecondarySummary(slotId, item)
-    .filter((line) => !/^No secondary/i.test(line));
+    .filter((line) => !/^No secondary/i.test(line))
+    .map((text) => ({ text, secondary: true }));
   return [...primary, ...secondary].slice(0, 9);
 }
 
@@ -3826,8 +3827,8 @@ function photoDrawCard(ctx, item, slotId, x, y, width) {
     ctx.fillStyle = "rgba(238, 241, 242, .88)";
     ctx.fillText("-", x + 20, lineY);
     ctx.fillText("-", x + width - 20, lineY);
-    ctx.fillStyle = line.includes("%") || line.includes("+") ? "#18bdf4" : "#f1f3f4";
-    ctx.fillText(line, x + width / 2, lineY);
+    ctx.fillStyle = line.secondary ? "#18bdf4" : "#f1f3f4";
+    ctx.fillText(line.text, x + width / 2, lineY);
   });
   ctx.textAlign = "left";
   return height;
