@@ -3527,7 +3527,8 @@ function renderBuilderItems() {
 function photoItemLines(slotId, item) {
   if (!item) return [];
   const primary = slotPrimarySummary(slotId, item, 6);
-  const secondary = slotSecondarySummary(slotId, item);
+  const secondary = slotSecondarySummary(slotId, item)
+    .filter((line) => !/^No secondary/i.test(line));
   return [...primary, ...secondary].slice(0, 9);
 }
 
@@ -3567,40 +3568,91 @@ function photoDrawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 
 
 function photoDrawCard(ctx, item, slotId, x, y, width) {
   const lines = photoItemLines(slotId, item);
-  const height = Math.max(118, 64 + (lines.length * 20));
-  const gradient = ctx.createLinearGradient(x, y, x, y + 46);
-  gradient.addColorStop(0, "rgba(74, 43, 91, .96)");
-  gradient.addColorStop(1, "rgba(27, 17, 34, .96)");
-  ctx.fillStyle = "rgba(5, 7, 9, .88)";
+  const lineHeight = 17;
+  const headerHeight = 42;
+  const height = Math.max(112, 60 + (lines.length * lineHeight));
+  const gradient = ctx.createLinearGradient(x, y, x, y + headerHeight);
+  gradient.addColorStop(0, "rgba(78, 45, 94, .92)");
+  gradient.addColorStop(.55, "rgba(40, 22, 52, .94)");
+  gradient.addColorStop(1, "rgba(18, 13, 22, .96)");
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, .64)";
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = "rgba(4, 5, 7, .88)";
+  ctx.fillRect(x, y, width, height);
+  ctx.restore();
+  ctx.fillStyle = "rgba(4, 5, 7, .88)";
   ctx.fillRect(x, y, width, height);
   ctx.fillStyle = gradient;
-  ctx.fillRect(x, y, width, 46);
-  ctx.strokeStyle = "rgba(182, 117, 226, .85)";
+  ctx.fillRect(x, y, width, headerHeight);
+  ctx.save();
+  ctx.globalAlpha = .16;
+  ctx.strokeStyle = "#ffffff";
+  for (let offset = -height; offset < width; offset += 14) {
+    ctx.beginPath();
+    ctx.moveTo(x + offset, y + height);
+    ctx.lineTo(x + offset + height, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.strokeStyle = "rgba(182, 117, 226, .72)";
   ctx.lineWidth = 2;
   ctx.strokeRect(x, y, width, height);
   ctx.beginPath();
-  ctx.moveTo(x, y + 46);
-  ctx.lineTo(x + width, y + 46);
-  ctx.strokeStyle = "rgba(178, 72, 230, .9)";
+  ctx.moveTo(x, y + headerHeight);
+  ctx.lineTo(x + width, y + headerHeight);
+  ctx.strokeStyle = "rgba(178, 72, 230, .86)";
   ctx.stroke();
-  ctx.font = "24px Georgia, serif";
+  ctx.font = "22px Georgia, serif";
   ctx.fillStyle = "#c783ff";
   ctx.textAlign = "center";
-  photoDrawWrappedText(ctx, item?.name || "Empty", x + width / 2, y + 30, width - 22, 24, 1);
-  ctx.font = "15px Segoe UI, Arial";
+  photoDrawWrappedText(ctx, item?.name || "Empty", x + width / 2, y + 28, width - 22, 22, 1);
+  ctx.font = "13px Segoe UI, Arial";
   lines.forEach((line, index) => {
-    ctx.fillStyle = line.includes("%") || line.includes("+") ? "#24befe" : "#f1f3f4";
-    ctx.fillText(line, x + width / 2, y + 70 + (index * 20));
+    const lineY = y + 64 + (index * lineHeight);
+    ctx.fillStyle = "rgba(238, 241, 242, .88)";
+    ctx.fillText("-", x + 20, lineY);
+    ctx.fillText("-", x + width - 20, lineY);
+    ctx.fillStyle = line.includes("%") || line.includes("+") ? "#18bdf4" : "#f1f3f4";
+    ctx.fillText(line, x + width / 2, lineY);
   });
   ctx.textAlign = "left";
   return height;
 }
 
+function photoStatRows(rows) {
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  const physicalBonus = byKey.get("PhysicalDamageBonus");
+  const magicalBonus = byKey.get("MagicalDamageBonus");
+  const skipKeys = new Set([
+    "PhysicalDamageBonus",
+    "PhysicalDamageBonusFromPower",
+    "PhysicalDamageBonusFromBonuses",
+    "MagicalDamageBonus",
+    "MagicalDamageBonusFromPower",
+    "MagicalDamageBonusFromBonuses",
+  ]);
+  return rows
+    .map((row) => {
+      if (row.key === "PhysicalPower" && physicalBonus) {
+        return { ...physicalBonus, key: "PhotoPhysicalPowerBonus", label: "Physical Power Bonus" };
+      }
+      if (row.key === "MagicalPower" && magicalBonus) {
+        return { ...magicalBonus, key: "PhotoMagicalPowerBonus", label: "Magic Power Bonus" };
+      }
+      return row;
+    })
+    .filter((row) => !skipKeys.has(row.key));
+}
+
 function photoDrawStats(ctx, rows, character) {
-  const x = 86;
-  const y = 32;
-  const width = 386;
-  const height = 648;
+  const x = 54;
+  const y = 30;
+  const width = 430;
+  const height = 1018;
+  const lineHeight = 17;
+  const topPadding = 52;
   ctx.fillStyle = "rgba(23, 25, 27, .86)";
   ctx.fillRect(x, y, width, height);
   ctx.strokeStyle = "rgba(184, 168, 148, .32)";
@@ -3609,13 +3661,14 @@ function photoDrawStats(ctx, rows, character) {
   ctx.fillStyle = "#d7a16d";
   ctx.textAlign = "center";
   ctx.fillText(character?.name || "Kit", x + width / 2, y + 28);
-  ctx.font = "15px Segoe UI, Arial";
-  rows.slice(0, 30).forEach((row, index) => {
-    const rowY = y + 56 + (index * 20);
+  ctx.font = "14px Segoe UI, Arial";
+  photoStatRows(rows).forEach((row, index) => {
+    const rowY = y + topPadding + (index * lineHeight);
+    if (rowY > y + height - 12) return;
     ctx.strokeStyle = "rgba(255,255,255,.08)";
     ctx.beginPath();
-    ctx.moveTo(x + 8, rowY + 6);
-    ctx.lineTo(x + width - 8, rowY + 6);
+    ctx.moveTo(x + 8, rowY + 5);
+    ctx.lineTo(x + width - 8, rowY + 5);
     ctx.stroke();
     ctx.fillStyle = "#bfb8ad";
     ctx.textAlign = "left";
@@ -3659,27 +3712,58 @@ async function saveBuilderPhoto() {
   const stats = builderStatRows();
   photoDrawStats(ctx, stats, selectedBuilderCharacter());
 
-  const equipmentRect = { x: 770, y: 244, width: 470, height: 594 };
-  ctx.fillStyle = "rgba(19, 20, 22, .9)";
+  const equipmentRect = { x: 760, y: 244, width: 570, height: 595 };
+  const equipmentGradient = ctx.createRadialGradient(
+    equipmentRect.x + equipmentRect.width / 2,
+    equipmentRect.y + equipmentRect.height / 2,
+    40,
+    equipmentRect.x + equipmentRect.width / 2,
+    equipmentRect.y + equipmentRect.height / 2,
+    390,
+  );
+  equipmentGradient.addColorStop(0, "rgba(52, 53, 54, .96)");
+  equipmentGradient.addColorStop(.62, "rgba(22, 22, 24, .96)");
+  equipmentGradient.addColorStop(1, "rgba(10, 10, 12, .98)");
+  ctx.fillStyle = equipmentGradient;
   ctx.fillRect(equipmentRect.x, equipmentRect.y, equipmentRect.width, equipmentRect.height);
   ctx.strokeStyle = "rgba(202, 202, 202, .32)";
   ctx.lineWidth = 2;
   ctx.strokeRect(equipmentRect.x, equipmentRect.y, equipmentRect.width, equipmentRect.height);
-  const grid = { x: equipmentRect.x + 28, y: equipmentRect.y + 36, cell: 54, gap: 11 };
+  ctx.save();
+  ctx.globalAlpha = .14;
+  ctx.strokeStyle = "#ffffff";
+  for (let offset = -equipmentRect.height; offset < equipmentRect.width; offset += 12) {
+    ctx.beginPath();
+    ctx.moveTo(equipmentRect.x + offset, equipmentRect.y + equipmentRect.height);
+    ctx.lineTo(equipmentRect.x + offset + equipmentRect.height, equipmentRect.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+  const grid = {
+    x: equipmentRect.x + 26,
+    y: equipmentRect.y + 36,
+    width: equipmentRect.width - 52,
+    height: equipmentRect.height - 72,
+    columns: 14,
+    rows: 9,
+    gap: 9,
+  };
+  grid.cellWidth = (grid.width - ((grid.columns - 1) * grid.gap)) / grid.columns;
+  grid.cellHeight = (grid.height - ((grid.rows - 1) * grid.gap)) / grid.rows;
   const slotRects = {
-    head: [5, 0, 2, 2],
-    chest: [4.5, 2.1, 2.6, 3.2],
-    legs: [4.5, 5.7, 2.6, 2.8],
-    hands: [2.4, 6.5, 2, 1.6],
-    feet: [7.4, 6.5, 2, 1.6],
-    cloak: [7.4, 2.2, 1.8, 2.7],
-    necklace: [9.4, 1.1, 1.2, 1.6],
-    ring1: [3.5, 5.4, 1.1, 1.1],
-    ring2: [7.4, 5.4, 1.1, 1.1],
-    weapon1Primary: [0, 0, 1.8, 3.9],
-    weapon1Secondary: [2, 0, 1.8, 3.9],
-    weapon2Primary: [9.6, 0, 1.8, 3.9],
-    weapon2Secondary: [11.6, 0, 1.8, 3.9],
+    weapon1Primary: [0, 0, 2, 3],
+    weapon1Secondary: [2, 0, 2, 3],
+    head: [6, 0, 2, 2],
+    weapon2Primary: [10, 0, 2, 3],
+    weapon2Secondary: [12, 0, 2, 3],
+    necklace: [8, 1, 1, 1],
+    chest: [6, 2, 2, 3],
+    cloak: [8, 2, 2, 3],
+    ring1: [4, 5, 1, 1],
+    ring2: [9, 5, 1, 1],
+    legs: [6, 5, 2, 4],
+    hands: [2, 7, 2, 2],
+    feet: [10, 7, 2, 2],
   };
   const imageEntries = await Promise.all(BUILDER_SLOTS.map(async (slot) => {
     const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
@@ -3689,16 +3773,20 @@ async function saveBuilderPhoto() {
     const rectDef = slotRects[slot.id];
     if (!rectDef) return;
     const [cx, cy, cw, ch] = rectDef;
-    const x = grid.x + (cx * (grid.cell + grid.gap));
-    const y = grid.y + (cy * (grid.cell + grid.gap));
-    const w = cw * grid.cell + ((cw - 1) * grid.gap);
-    const h = ch * grid.cell + ((ch - 1) * grid.gap);
-    ctx.fillStyle = "rgba(38, 38, 40, .96)";
+    const x = grid.x + (cx * (grid.cellWidth + grid.gap));
+    const y = grid.y + (cy * (grid.cellHeight + grid.gap));
+    const w = cw * grid.cellWidth + ((cw - 1) * grid.gap);
+    const h = ch * grid.cellHeight + ((ch - 1) * grid.gap);
+    ctx.fillStyle = "rgba(36, 36, 38, .72)";
     ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = item ? "rgba(185, 185, 188, .62)" : "rgba(185, 185, 188, .26)";
+    ctx.lineWidth = 2;
     ctx.strokeRect(x, y, w, h);
+    ctx.strokeStyle = "rgba(255, 255, 255, .16)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
     if (image) {
-      const scale = Math.min((w - 18) / image.width, (h - 18) / image.height);
+      const scale = Math.min((w - 16) / image.width, (h - 16) / image.height);
       const iw = image.width * scale;
       const ih = image.height * scale;
       ctx.drawImage(image, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
@@ -3706,18 +3794,18 @@ async function saveBuilderPhoto() {
   });
 
   const cardSlots = [
-    ["weapon1Primary", 667, 76, 282],
+    ["weapon1Primary", 666, 76, 284],
     ["head", 995, 58, 236],
-    ["weapon2Primary", 1248, 118, 235],
+    ["weapon2Primary", 1248, 118, 236],
     ["weapon1Secondary", 488, 247, 286],
     ["necklace", 1346, 293, 286],
-    ["chest", 603, 413, 222],
-    ["cloak", 1314, 459, 230],
-    ["ring1", 541, 645, 287],
-    ["ring2", 1305, 639, 287],
+    ["chest", 602, 413, 224],
+    ["cloak", 1314, 459, 232],
+    ["ring1", 540, 645, 288],
+    ["ring2", 1305, 638, 288],
     ["hands", 727, 810, 220],
     ["legs", 978, 807, 236],
-    ["feet", 1239, 807, 245],
+    ["feet", 1238, 807, 246],
   ];
   cardSlots.forEach(([slotId, x, y, w]) => {
     const item = state.kit.itemByAsset.get(state.builder.equipped[slotId]);
