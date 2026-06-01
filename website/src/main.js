@@ -3756,30 +3756,30 @@ async function saveBuilderPhoto() {
   }
   ctx.restore();
   const grid = {
-    x: equipmentRect.x + 34,
-    y: equipmentRect.y + 46,
-    width: equipmentRect.width - 68,
-    height: equipmentRect.height - 92,
-    columns: 14,
+    x: equipmentRect.x + 46,
+    y: equipmentRect.y + 42,
+    width: equipmentRect.width - 92,
+    height: equipmentRect.height - 84,
+    columns: 12,
     rows: 9,
-    gap: 9,
+    gap: 7,
   };
   grid.cellWidth = (grid.width - ((grid.columns - 1) * grid.gap)) / grid.columns;
   grid.cellHeight = (grid.height - ((grid.rows - 1) * grid.gap)) / grid.rows;
   const slotRects = {
     weapon1Primary: [0, 0, 2, 3],
     weapon1Secondary: [2, 0, 2, 3],
-    head: [6, 0, 2, 2],
-    weapon2Primary: [10, 0, 2, 3],
-    weapon2Secondary: [12, 0, 2, 3],
-    necklace: [8, 1, 1, 1],
-    chest: [6, 2, 2, 3],
-    cloak: [8, 2, 2, 3],
-    ring1: [4, 5, 1, 1],
-    ring2: [9, 5, 1, 1],
-    legs: [6, 5, 2, 4],
+    head: [5, 0, 2, 2],
+    weapon2Primary: [8, 0, 2, 3],
+    weapon2Secondary: [10, 0, 2, 3],
+    necklace: [7, 1, 1.15, 1.15],
+    chest: [5, 2, 2, 3],
+    cloak: [7, 2, 2, 3],
+    ring1: [4, 5, 1.15, 1.15],
+    ring2: [8.85, 5, 1.15, 1.15],
+    legs: [5, 5, 2, 4],
     hands: [2, 7, 2, 2],
-    feet: [10, 7, 2, 2],
+    feet: [8, 7, 2, 2],
   };
   const imageEntries = await Promise.all(BUILDER_SLOTS.map(async (slot) => {
     const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
