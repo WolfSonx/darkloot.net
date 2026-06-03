@@ -109,6 +109,165 @@ PERCENT_STAT_KEYS = {
     "UndeadDamageBonus",
     "UndeadDamageReduction",
 }
+FALLBACK_CLASS_PERKS = {
+    "Barbarian": (
+        "Id_Perk_AxeSpecialization",
+        "Id_Perk_Berserker",
+        "Id_Perk_Carnage",
+        "Id_Perk_Executioner",
+        "Id_Perk_HeavySwing",
+        "Id_Perk_IronWill",
+        "Id_Perk_MoraleBoost",
+        "Id_Perk_PotionChugger",
+        "Id_Perk_Savage",
+        "Id_Perk_SkullSplitter",
+        "Id_Perk_Crush",
+        "Id_Perk_Robust",
+        "Id_Perk_TreacherousLungs",
+        "Id_Perk_TwoHander",
+    ),
+    "Bard": (
+        "Id_Perk_CharismaticPerformance",
+        "Id_Perk_DancingFeet",
+        "Id_Perk_Fermata",
+        "Id_Perk_JollyTime",
+        "Id_Perk_LoreMastery",
+        "Id_Perk_MelodicProtection",
+        "Id_Perk_RapierMastery",
+        "Id_Perk_ReinforcedInstruments",
+        "Id_Perk_StoryTeller",
+        "Id_Perk_SuperiorDexterity",
+        "Id_Perk_WanderersLuck",
+        "Id_Perk_WarSong",
+    ),
+    "Cleric": (
+        "Id_Perk_AdvancedHealer",
+        "Id_Perk_BluntWeaponMastery",
+        "Id_Perk_Brewmaster",
+        "Id_Perk_Faithfulness",
+        "Id_Perk_HolyAura",
+        "Id_Perk_HolyWater",
+        "Id_Perk_Kindness",
+        "Id_Perk_OverHealing",
+        "Id_Perk_Perseverance",
+        "Id_Perk_ProtectionfromEvil",
+        "Id_Perk_Requiem",
+        "Id_Perk_UndeadSlaying",
+        "Id_Perk_QuickChant",
+    ),
+    "Druid": (
+        "Id_Perk_Dreamwalk",
+        "Id_Perk_EnhancedWildness",
+        "Id_Perk_ForceOfNature",
+        "Id_Perk_HerbalSensing",
+        "Id_Perk_NaturalHealing",
+        "Id_Perk_ShapeshiftMastery",
+        "Id_Perk_SpiritBond",
+        "Id_Perk_SpiritMagicMastery",
+        "Id_Perk_SunAndMoon",
+        "Id_Perk_ThornCoat",
+        "Id_Perk_LifebloomAura",
+    ),
+    "Fighter": (
+        "Id_Perk_AdrenalineSpike",
+        "Id_Perk_Barricade",
+        "Id_Perk_CombinationAttack",
+        "Id_Perk_Counterattack",
+        "Id_Perk_DefenseMastery",
+        "Id_Perk_DualWield",
+        "Id_Perk_LastBastion",
+        "Id_Perk_ProjectileResistance",
+        "Id_Perk_ShieldMastery",
+        "Id_Perk_Slayer",
+        "Id_Perk_Swift",
+        "Id_Perk_SwordMastery",
+        "Id_Perk_VeteranInstinct",
+        "Id_Perk_WeaponGuard",
+        "Id_Perk_WeaponMastery",
+    ),
+    "Ranger": (
+        "Id_Perk_Chase",
+        "Id_Perk_CripplingShot",
+        "Id_Perk_CrossbowMastery",
+        "Id_Perk_FirstAid",
+        "Id_Perk_Kinesthesia",
+        "Id_Perk_LongshotExpert",
+        "Id_Perk_NimbleHands",
+        "Id_Perk_PointBlankExpert",
+        "Id_Perk_PurgeShot",
+        "Id_Perk_QuickReload",
+        "Id_Perk_RangedWeaponsMastery",
+        "Id_Perk_Sharpshooter",
+        "Id_Perk_SpearProficiency",
+        "Id_Perk_WindFletch",
+    ),
+    "Rogue": (
+        "Id_Perk_Ambush",
+        "Id_Perk_BackAttack",
+        "Id_Perk_Creep",
+        "Id_Perk_DaggerMastery",
+        "Id_Perk_DoubleJump",
+        "Id_Perk_HideExpert",
+        "Id_Perk_Pickpocket",
+        "Id_Perk_PoisonedWeapon",
+        "Id_Perk_Stealth",
+        "Id_Perk_Thrust",
+        "Id_Perk_TrapsandLocks",
+        "Id_Perk_Trickster",
+        "Id_Perk_VeilOfShadows",
+    ),
+    "Sorcerer": (
+        "Id_Perk_ApexOfSorcery",
+        "Id_Perk_ManaFold",
+        "Id_Perk_SpellSculpting",
+        "Id_Perk_SpellStride",
+        "Id_Perk_TimeDistortion",
+        "Id_Perk_MergedMight",
+        "Id_Perk_InnateTalent",
+        "Id_Perk_ElementalFury",
+        "Id_Perk_ManaFlow",
+        "Id_Perk_LightningMastery",
+        "Id_Perk_AirMastery",
+        "Id_Perk_QuickChant",
+    ),
+    "Warlock": (
+        "Id_Perk_Antimagic",
+        "Id_Perk_CurseMastery",
+        "Id_Perk_DarkEnhancement",
+        "Id_Perk_DarkReflection",
+        "Id_Perk_DemonArmor",
+        "Id_Perk_ImmortalLament",
+        "Id_Perk_InfernalPledge",
+        "Id_Perk_Malice",
+        "Id_Perk_ShadowTouch",
+        "Id_Perk_SoulCollector",
+        "Id_Perk_TortureMastery",
+        "Id_Perk_Vampirism",
+        "Id_Perk_QuickChant",
+    ),
+    "Wizard": (
+        "Id_Perk_ArcaneFeedback",
+        "Id_Perk_ArcaneMastery",
+        "Id_Perk_FireMastery",
+        "Id_Perk_IceMastery",
+        "Id_Perk_IceShield",
+        "Id_Perk_ManaSurge",
+        "Id_Perk_Melt",
+        "Id_Perk_QuickChant",
+        "Id_Perk_ReactiveShield",
+        "Id_Perk_Sage",
+        "Id_Perk_SpellOverload",
+        "Id_Perk_StaffMastery",
+    ),
+}
+FALLBACK_CHARACTER_SKINS = (
+    ("Demon", "Demon"),
+    ("Dwarf", "Dwarf"),
+    ("Ifrit", "Ifrit"),
+    ("NecroticImp", "Necrotic Imp"),
+    ("Seawalker", "Seawalker"),
+    ("SkeletonMage", "Skeleton Mage"),
+)
 ITEM_PROPERTY_EXCLUDED_STAT_KEYS = {"Primitive"}
 ITEM_PROPERTY_STAT_KEY_OVERRIDES = {
     "Id_ItemPropertyType_Effect_PhysicalWeaponDamageAdd": "AdditionalWeaponDamage",
@@ -865,6 +1024,7 @@ def load_character_skins(generated_root: Path, output_dir: Path, status_effects:
         if skin_dir.exists() and path.is_dir()
     }
     skins = []
+    seen_ids = set()
     prefix = "Id_ActorStatusEffect_CharacterSkin_"
     for effect_id, effect in status_effects.items():
         if not str(effect_id).startswith(prefix):
@@ -878,6 +1038,7 @@ def load_character_skins(generated_root: Path, output_dir: Path, status_effects:
             ),
             "",
         )
+        seen_ids.add(effect_id)
         skins.append({
             "id": effect_id,
             "name": humanize_identifier(token),
@@ -885,6 +1046,27 @@ def load_character_skins(generated_root: Path, output_dir: Path, status_effects:
             "effectId": effect_id,
             "stats": effect.get("stats", []),
             "grantedTags": effect.get("grantedTags", []),
+            "iconUrl": skin_icon_url(generated_root, output_dir, token, folder),
+        })
+    for token, display_name in FALLBACK_CHARACTER_SKINS:
+        effect_id = f"{prefix}{token}"
+        if effect_id in seen_ids:
+            continue
+        folder = next(
+            (
+                name
+                for name in skin_folder_names
+                if token == name or token.startswith(name) or name.startswith(token)
+            ),
+            token,
+        )
+        skins.append({
+            "id": effect_id,
+            "name": display_name,
+            "skin": folder,
+            "effectId": effect_id,
+            "stats": [],
+            "grantedTags": [],
             "iconUrl": skin_icon_url(generated_root, output_dir, token, folder),
         })
     skins.sort(key=lambda row: row["name"].lower())
@@ -1008,6 +1190,11 @@ def load_characters(generated_root: Path, output_dir: Path, perks: dict, charact
             perk_id
             for perk_id, perk in perks.items()
             if perk.get("canUse", True) and key in (perk.get("classes") or [])
+        )
+        perk_ids.update(
+            perk_id
+            for perk_id in FALLBACK_CLASS_PERKS.get(key, ())
+            if perk_id in perks and perks[perk_id].get("canUse", True)
         )
         effect_ids = asset_names(props.get("Effects"))
         base_stats = []
