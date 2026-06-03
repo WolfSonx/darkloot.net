@@ -1550,7 +1550,7 @@ function statIdentity(entry) {
 }
 
 function primaryStatIdentitiesForItem(item) {
-  return new Set((item?.primary || []).map(statIdentity).filter(Boolean));
+  return new Set((item?.primary || []).map((entry) => entry?.propertyId).filter(Boolean));
 }
 
 function bonusOptionText(option) {
