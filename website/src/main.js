@@ -69,13 +69,13 @@ const SHARED_KIT_LEGACY_PARAM = "kit";
 const SHARED_KIT_COMPRESSED_PREFIX = "z.";
 const SHARED_KIT_BINARY_PREFIX = "d.";
 const SHARED_KIT_VERSION = 4;
-const SHARED_KIT_BINARY_VERSION = 5;
+const SHARED_KIT_BINARY_VERSION = 6;
 const SHARED_KIT_LEGACY_VERSION = 2;
 const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
 const SHARED_SKIN_PREFIX = "Id_ActorStatusEffect_CharacterSkin_";
-const APP_BUILD_ID = "20260606-1";
+const APP_BUILD_ID = "20260606-2";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -864,25 +864,26 @@ function unscaledSharedStatValue(value) {
   return Math.abs(value % 10) < 0.0001 ? value / 10 : value / 10;
 }
 
+const SHARED_BINARY_HAS_CHARACTER = 1;
+const SHARED_BINARY_ACTIVE_SET_2 = 2;
+const SHARED_BINARY_HAS_SELECTED_SLOT = 4;
+const SHARED_BINARY_HAS_SKIN = 8;
+const SHARED_BINARY_HAS_EQUIPPED = 16;
+const SHARED_BINARY_HAS_PRIMARY = 32;
+const SHARED_BINARY_HAS_BONUSES = 64;
+const SHARED_BINARY_HAS_PERKS = 128;
+
 function encodeBinarySharedKit(kit) {
   const dict = sharedKitDictionary();
-  const bytes = [0x44, SHARED_KIT_BINARY_VERSION];
-  writeSharedVarint(bytes, (dict.characterIndexById.get(kit.characterId) ?? -1) + 1);
-  writeSharedVarint(bytes, kit.activeWeaponSet === "2" ? 2 : 1);
-  writeSharedVarint(bytes, compactSlotIndex(kit.selectedSlot));
-  writeSharedVarint(bytes, (dict.skinIndexById.get(kit.skinId) ?? -1) + 1);
-
+  const characterIndex = (dict.characterIndexById.get(kit.characterId) ?? -1) + 1;
+  const selectedSlotIndex = compactSlotIndex(kit.selectedSlot);
+  const skinIndex = (dict.skinIndexById.get(kit.skinId) ?? -1) + 1;
   const equippedRows = BUILDER_SLOTS
     .map((slot, slotIndex) => {
       const itemIndex = dict.itemIndexById.get(kit.equipped?.[slot.id]);
       return Number.isInteger(itemIndex) ? [slotIndex, itemIndex] : null;
     })
     .filter(Boolean);
-  writeSharedVarint(bytes, equippedRows.length);
-  equippedRows.forEach(([slotIndex, itemIndex]) => {
-    writeSharedVarint(bytes, slotIndex);
-    writeSharedVarint(bytes, itemIndex + 1);
-  });
 
   const primaryRows = [];
   Object.entries(plainObject(kit.primaryValues)).forEach(([slotId, values]) => {
@@ -898,12 +899,6 @@ function encodeBinarySharedKit(kit) {
       primaryRows.push([compactSlotIndex(slotId), index, scaledSharedStatValue(selectedValue)]);
     });
   });
-  writeSharedVarint(bytes, primaryRows.length);
-  primaryRows.forEach(([slotIndex, index, value]) => {
-    writeSharedVarint(bytes, slotIndex);
-    writeSharedVarint(bytes, index);
-    writeSharedSigned(bytes, value);
-  });
 
   const bonusRows = [];
   Object.entries(plainObject(kit.bonuses)).forEach(([slotId, entries]) => {
@@ -912,40 +907,74 @@ function encodeBinarySharedKit(kit) {
     if (!item || !Array.isArray(entries)) return;
     entries.forEach((entry, index) => {
       if (!entry?.propertyId) return;
-      const propertyIndex = dict.propertyIndexById.get(entry.propertyId);
-      if (!Number.isInteger(propertyIndex)) return;
       const poolId = entry.poolId || item.secondaryPoolIds?.[index];
+      const options = secondaryOptionsForItem(item, poolId);
+      const optionIndex = options.findIndex((optionRow) => optionRow.propertyId === entry.propertyId);
+      if (optionIndex < 0) return;
       const option = secondaryOptionForItem(item, poolId, entry.propertyId);
       const defaultValue = Number(option?.max ?? option?.min ?? 0);
       const selectedValue = entry.value === "" || entry.value == null
         ? defaultValue
         : clampStatEntryValue(option, entry.value);
       const valueChanged = Number.isFinite(selectedValue) && Math.abs(selectedValue - defaultValue) > 0.0001;
-      bonusRows.push([compactSlotIndex(slotId), index, propertyIndex, valueChanged ? scaledSharedStatValue(selectedValue) : null]);
+      bonusRows.push([compactSlotIndex(slotId), index, optionIndex, valueChanged ? scaledSharedStatValue(selectedValue) : null]);
     });
-  });
-  writeSharedVarint(bytes, bonusRows.length);
-  bonusRows.forEach(([slotIndex, index, propertyIndex, value]) => {
-    writeSharedVarint(bytes, slotIndex);
-    writeSharedVarint(bytes, index);
-    writeSharedVarint(bytes, propertyIndex + 1);
-    bytes.push(value == null ? 0 : 1);
-    if (value != null) writeSharedSigned(bytes, value);
   });
 
   const perkRows = (Array.isArray(kit.perks) ? kit.perks : [])
     .map((perkId) => dict.perkIndexById.get(perkId))
     .filter((index) => Number.isInteger(index));
-  writeSharedVarint(bytes, perkRows.length);
-  perkRows.forEach((index) => writeSharedVarint(bytes, index + 1));
+
+  let flags = 0;
+  if (characterIndex > 0) flags |= SHARED_BINARY_HAS_CHARACTER;
+  if (kit.activeWeaponSet === "2") flags |= SHARED_BINARY_ACTIVE_SET_2;
+  if (selectedSlotIndex > 0) flags |= SHARED_BINARY_HAS_SELECTED_SLOT;
+  if (skinIndex > 0) flags |= SHARED_BINARY_HAS_SKIN;
+  if (equippedRows.length) flags |= SHARED_BINARY_HAS_EQUIPPED;
+  if (primaryRows.length) flags |= SHARED_BINARY_HAS_PRIMARY;
+  if (bonusRows.length) flags |= SHARED_BINARY_HAS_BONUSES;
+  if (perkRows.length) flags |= SHARED_BINARY_HAS_PERKS;
+
+  const bytes = [0x44, SHARED_KIT_BINARY_VERSION, flags];
+  if (flags & SHARED_BINARY_HAS_CHARACTER) writeSharedVarint(bytes, characterIndex);
+  if (flags & SHARED_BINARY_HAS_SELECTED_SLOT) writeSharedVarint(bytes, selectedSlotIndex);
+  if (flags & SHARED_BINARY_HAS_SKIN) writeSharedVarint(bytes, skinIndex);
+
+  if (flags & SHARED_BINARY_HAS_EQUIPPED) {
+    writeSharedVarint(bytes, equippedRows.length);
+    equippedRows.forEach(([slotIndex, itemIndex]) => {
+      writeSharedVarint(bytes, slotIndex);
+      writeSharedVarint(bytes, itemIndex + 1);
+    });
+  }
+
+  if (flags & SHARED_BINARY_HAS_PRIMARY) {
+    writeSharedVarint(bytes, primaryRows.length);
+    primaryRows.forEach(([slotIndex, index, value]) => {
+      writeSharedVarint(bytes, slotIndex);
+      writeSharedVarint(bytes, index);
+      writeSharedSigned(bytes, value);
+    });
+  }
+
+  if (flags & SHARED_BINARY_HAS_BONUSES) {
+    writeSharedVarint(bytes, bonusRows.length);
+    bonusRows.forEach(([slotIndex, index, optionIndex, value]) => {
+      writeSharedVarint(bytes, slotIndex);
+      writeSharedVarint(bytes, index);
+      writeSharedVarint(bytes, (optionIndex * 2) + (value == null ? 0 : 1));
+      if (value != null) writeSharedSigned(bytes, value);
+    });
+  }
+
+  if (flags & SHARED_BINARY_HAS_PERKS) {
+    writeSharedVarint(bytes, perkRows.length);
+    perkRows.forEach((index) => writeSharedVarint(bytes, index + 1));
+  }
   return `${SHARED_KIT_BINARY_PREFIX}${base64UrlEncodeBytes(Uint8Array.from(bytes))}`;
 }
 
-function decodeBinarySharedKit(value) {
-  const bytes = base64UrlDecodeBytes(String(value || "").slice(SHARED_KIT_BINARY_PREFIX.length));
-  const reader = { bytes, offset: 0 };
-  if (readSharedVarint(reader) !== 0x44 || readSharedVarint(reader) !== SHARED_KIT_BINARY_VERSION) return null;
-  const dict = sharedKitDictionary();
+function decodeBinarySharedKitV5(reader, dict) {
   const characterId = dict.characterIds[readSharedVarint(reader) - 1] || "";
   const activeWeaponSet = readSharedVarint(reader) === 2 ? "2" : "1";
   const selectedSlot = sharedSlotId(readSharedVarint(reader)) || "weapon1Primary";
@@ -974,7 +1003,7 @@ function decodeBinarySharedKit(value) {
     const slotId = sharedSlotId(readSharedVarint(reader));
     const index = readSharedVarint(reader);
     const propertyId = dict.propertyIds[readSharedVarint(reader) - 1] || "";
-    const hasValue = bytes[reader.offset] === 1;
+    const hasValue = reader.bytes[reader.offset] === 1;
     reader.offset += 1;
     const item = state.kit.itemByAsset.get(equipped[slotId]);
     const poolId = item?.secondaryPoolIds?.[index] || "";
@@ -990,6 +1019,93 @@ function decodeBinarySharedKit(value) {
     const perkId = dict.perkIds[readSharedVarint(reader) - 1];
     if (perkId) perks.push(perkId);
   }
+  return normalizeSavedKit({
+    name: defaultSavedKitName(),
+    characterId,
+    activeWeaponSet,
+    selectedSlot,
+    equipped,
+    primaryValues,
+    bonuses,
+    perks,
+    skinId,
+  });
+}
+
+function decodeBinarySharedKit(value) {
+  const bytes = base64UrlDecodeBytes(String(value || "").slice(SHARED_KIT_BINARY_PREFIX.length));
+  const reader = { bytes, offset: 0 };
+  if (readSharedVarint(reader) !== 0x44) return null;
+  const version = readSharedVarint(reader);
+  const dict = sharedKitDictionary();
+  if (version === 5) return decodeBinarySharedKitV5(reader, dict);
+  if (version !== SHARED_KIT_BINARY_VERSION) return null;
+
+  const flags = bytes[reader.offset] || 0;
+  reader.offset += 1;
+  const characterId = (flags & SHARED_BINARY_HAS_CHARACTER)
+    ? dict.characterIds[readSharedVarint(reader) - 1] || ""
+    : "";
+  const activeWeaponSet = (flags & SHARED_BINARY_ACTIVE_SET_2) ? "2" : "1";
+  const selectedSlot = (flags & SHARED_BINARY_HAS_SELECTED_SLOT)
+    ? sharedSlotId(readSharedVarint(reader)) || "weapon1Primary"
+    : "weapon1Primary";
+  const skinId = (flags & SHARED_BINARY_HAS_SKIN)
+    ? dict.skinIds[readSharedVarint(reader) - 1] || ""
+    : "";
+  const equipped = {};
+
+  if (flags & SHARED_BINARY_HAS_EQUIPPED) {
+    const equippedCount = readSharedVarint(reader);
+    for (let row = 0; row < equippedCount; row += 1) {
+      const slotId = sharedSlotId(readSharedVarint(reader));
+      const asset = dict.itemIds[readSharedVarint(reader) - 1];
+      if (slotId && asset) equipped[slotId] = asset;
+    }
+  }
+
+  const primaryValues = {};
+  if (flags & SHARED_BINARY_HAS_PRIMARY) {
+    const primaryCount = readSharedVarint(reader);
+    for (let row = 0; row < primaryCount; row += 1) {
+      const slotId = sharedSlotId(readSharedVarint(reader));
+      const index = readSharedVarint(reader);
+      const value = unscaledSharedStatValue(readSharedSigned(reader));
+      const item = state.kit.itemByAsset.get(equipped[slotId]);
+      if (!slotId || !item?.primary?.[index]) continue;
+      if (!Array.isArray(primaryValues[slotId])) primaryValues[slotId] = defaultPrimaryValuesForItem(item);
+      primaryValues[slotId][index] = clampStatEntryValue(item.primary[index], value);
+    }
+  }
+
+  const bonuses = {};
+  if (flags & SHARED_BINARY_HAS_BONUSES) {
+    const bonusCount = readSharedVarint(reader);
+    for (let row = 0; row < bonusCount; row += 1) {
+      const slotId = sharedSlotId(readSharedVarint(reader));
+      const index = readSharedVarint(reader);
+      const optionAndFlag = readSharedVarint(reader);
+      const optionIndex = Math.floor(optionAndFlag / 2);
+      const hasValue = (optionAndFlag % 2) === 1;
+      const item = state.kit.itemByAsset.get(equipped[slotId]);
+      const poolId = item?.secondaryPoolIds?.[index] || "";
+      const option = secondaryOptionsForItem(item, poolId)[optionIndex] || null;
+      const value = hasValue ? clampStatEntryValue(option, unscaledSharedStatValue(readSharedSigned(reader))) : Number(option?.max ?? option?.min ?? 0);
+      if (!slotId || !item || !option) continue;
+      if (!Array.isArray(bonuses[slotId])) bonuses[slotId] = defaultBonusesForItem(item);
+      bonuses[slotId][index] = { poolId, propertyId: option.propertyId, value };
+    }
+  }
+
+  const perks = [];
+  if (flags & SHARED_BINARY_HAS_PERKS) {
+    const perkCount = readSharedVarint(reader);
+    for (let row = 0; row < perkCount; row += 1) {
+      const perkId = dict.perkIds[readSharedVarint(reader) - 1];
+      if (perkId) perks.push(perkId);
+    }
+  }
+
   return normalizeSavedKit({
     name: defaultSavedKitName(),
     characterId,
