@@ -2365,6 +2365,20 @@ dialog::backdrop {
 }
 
 @media (max-width: 900px) {
+  html {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  body {
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
   .app-header,
   .view-head,
   .detail-toolbar,
@@ -2416,6 +2430,40 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 
+  main {
+    display: block;
+    min-height: auto;
+    overflow: visible;
+    padding: 12px;
+  }
+
+  .view {
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .view.active {
+    display: block;
+  }
+
+  .table-wrap,
+  .view > .table-wrap {
+    min-height: 260px;
+    max-height: min(70dvh, 620px);
+  }
+
+  .favorites-layout {
+    overflow: visible;
+  }
+
+  .favorites-layout > div {
+    min-width: 0;
+  }
+
+  .favorites-layout .table-wrap {
+    width: 100%;
+  }
+
   .builder-stats-panel,
   .builder-side-stack {
     position: static;
@@ -2424,8 +2472,7 @@ dialog::backdrop {
   }
 
   .builder-layout {
-    overflow: auto;
-    scrollbar-gutter: stable;
+    overflow: visible;
   }
 
   .builder-playfield {
@@ -2556,9 +2603,6 @@ dialog::backdrop {
     padding: 0 10px;
   }
 
-  main {
-    padding: 12px;
-  }
 }
 
 @media (max-width: 520px) {

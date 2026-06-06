@@ -75,7 +75,7 @@ const SHARED_ITEM_PREFIX = "Id_Item_";
 const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
 const SHARED_PERK_PREFIX = "Id_Perk_";
 const SHARED_SKIN_PREFIX = "Id_ActorStatusEffect_CharacterSkin_";
-const APP_BUILD_ID = "20260601-5";
+const APP_BUILD_ID = "20260606-1";
 const SITE_UPDATED_AT = "2026-05-29T00:00:00+03:00";
 const MAX_ROWS = 500;
 const MAX_BUILDER_ITEMS = 180;
@@ -803,14 +803,20 @@ function expandCompactSharedKit(payload) {
 }
 
 function sharedKitDictionary() {
-  const propertyIds = Object.keys(state.kit.propertyTypes || {}).sort();
+  const propertyIds = new Set(Object.keys(state.kit.propertyTypes || {}));
+  Object.values(state.kit.secondaryPools || {}).forEach((pool) => {
+    (pool?.options || []).forEach((option) => {
+      if (option?.propertyId) propertyIds.add(option.propertyId);
+    });
+  });
+  const sortedPropertyIds = [...propertyIds].sort();
   return {
     itemIds: state.kit.items.map((item) => item.asset),
     itemIndexById: new Map(state.kit.items.map((item, index) => [item.asset, index])),
     characterIds: state.kit.characters.map((character) => character.id),
     characterIndexById: new Map(state.kit.characters.map((character, index) => [character.id, index])),
-    propertyIds,
-    propertyIndexById: new Map(propertyIds.map((propertyId, index) => [propertyId, index])),
+    propertyIds: sortedPropertyIds,
+    propertyIndexById: new Map(sortedPropertyIds.map((propertyId, index) => [propertyId, index])),
     perkIds: state.kit.perks.map((perk) => perk.id),
     perkIndexById: new Map(state.kit.perks.map((perk, index) => [perk.id, index])),
     skinIds: state.kit.characterSkins.map((skin) => skin.id),
