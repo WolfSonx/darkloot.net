@@ -37,6 +37,7 @@
     shareStatus: "",
   },
   damageTarget: {
+    weaponSet: "1",
     hand: "primary",
     hitLocation: "torso",
     pdr: -22,
@@ -180,6 +181,7 @@ const BUILDER_DEFAULTS = {
 };
 const DAMAGE_TARGET_DEFAULTS = {
   name: "Training Dummy",
+  weaponSet: "1",
   hand: "primary",
   hitLocation: "torso",
   pdr: -22,
@@ -1981,12 +1983,20 @@ function damageHandRole() {
   return state.damageTarget.hand === "secondary" ? "secondary" : "primary";
 }
 
+function damageWeaponSet() {
+  return state.damageTarget.weaponSet === "2" ? "2" : "1";
+}
+
 function damageHandSlotId() {
-  return activeWeaponSlotId(damageHandRole());
+  return `weapon${damageWeaponSet()}${damageHandRole() === "secondary" ? "Secondary" : "Primary"}`;
 }
 
 function damageHandLabel() {
   return damageHandRole() === "secondary" ? "Secondary" : "Primary";
+}
+
+function damageWeaponSetLabel() {
+  return damageWeaponSet() === "2" ? "Set 2" : "Set 1";
 }
 
 function damageHitLocation() {
@@ -2130,8 +2140,9 @@ function damageBreakdownHtml(title, section) {
 }
 
 function damageHandOptions() {
-  const primary = state.kit.itemByAsset.get(state.builder.equipped[activeWeaponSlotId("primary")]);
-  const secondary = state.kit.itemByAsset.get(state.builder.equipped[activeWeaponSlotId("secondary")]);
+  const weaponSet = damageWeaponSet();
+  const primary = state.kit.itemByAsset.get(state.builder.equipped[`weapon${weaponSet}Primary`]);
+  const secondary = state.kit.itemByAsset.get(state.builder.equipped[`weapon${weaponSet}Secondary`]);
   const secondaryBlocked = itemIsTwoHanded(primary);
   return [
     {
@@ -2150,14 +2161,23 @@ function damageHandOptions() {
 function renderDamageChecker(focusKey = "") {
   const target = $("damageCheckerContent");
   if (!target) return;
+  if (!state.damageTarget.weaponSet) {
+    state.damageTarget = { ...state.damageTarget, weaponSet: state.builder.activeWeaponSet === "2" ? "2" : "1" };
+  }
   if (damageHandOptions().find((option) => option.value === damageHandRole())?.disabled) {
     state.damageTarget = { ...state.damageTarget, hand: "primary" };
   }
   const output = builderDamageOutput();
-  $("damageDialogMeta").textContent = `${DAMAGE_TARGET_DEFAULTS.name} target, active hand: ${output.handLabel} (${output.handName})`;
+  $("damageDialogMeta").textContent = `${DAMAGE_TARGET_DEFAULTS.name} target, ${damageWeaponSetLabel()}: ${output.handLabel} (${output.handName})`;
   const handOptions = damageHandOptions();
   target.innerHTML = `
     <div class="damage-target-controls">
+      <label>Set
+        <select data-damage-weapon-set>
+          <option value="1" ${damageWeaponSet() === "1" ? "selected" : ""}>Weapon Set 1</option>
+          <option value="2" ${damageWeaponSet() === "2" ? "selected" : ""}>Weapon Set 2</option>
+        </select>
+      </label>
       <label>Hand
         <select data-damage-hand>
           ${handOptions.map((option) => `
@@ -3792,7 +3812,7 @@ function photoItemLines(slotId, item) {
   const secondary = slotSecondarySummary(slotId, item)
     .filter((line) => !/^No secondary/i.test(line))
     .map((text) => ({ text, secondary: true }));
-  return [...primary, ...secondary].slice(0, 9);
+  return [...primary, ...secondary].slice(0, 7);
 }
 
 function photoLoadImage(src) {
@@ -3867,9 +3887,9 @@ function photoRarityTheme(rarityValue) {
 function photoDrawCard(ctx, item, slotId, x, y, width) {
   const lines = photoItemLines(slotId, item);
   const theme = photoRarityTheme(item?.rarity);
-  const lineHeight = 17;
-  const headerHeight = 42;
-  const height = Math.max(112, 60 + (lines.length * lineHeight));
+  const lineHeight = 15;
+  const headerHeight = 38;
+  const height = Math.max(98, 54 + (lines.length * lineHeight));
   const gradient = ctx.createLinearGradient(x, y, x, y + headerHeight);
   gradient.addColorStop(0, theme.top);
   gradient.addColorStop(.56, "rgba(30, 24, 34, .94)");
@@ -3903,13 +3923,13 @@ function photoDrawCard(ctx, item, slotId, x, y, width) {
   ctx.lineTo(x + width, y + headerHeight);
   ctx.strokeStyle = theme.line;
   ctx.stroke();
-  ctx.font = "22px Georgia, serif";
+  ctx.font = "21px Georgia, serif";
   ctx.fillStyle = theme.title;
   ctx.textAlign = "center";
-  photoDrawWrappedText(ctx, item?.name || "Empty", x + width / 2, y + 28, width - 22, 22, 1);
-  ctx.font = "13px Segoe UI, Arial";
+  photoDrawWrappedText(ctx, item?.name || "Empty", x + width / 2, y + 26, width - 18, 21, 1);
+  ctx.font = "12px Segoe UI, Arial";
   lines.forEach((line, index) => {
-    const lineY = y + 64 + (index * lineHeight);
+    const lineY = y + 58 + (index * lineHeight);
     ctx.fillStyle = "rgba(238, 241, 242, .88)";
     ctx.fillText("-", x + 20, lineY);
     ctx.fillText("-", x + width - 20, lineY);
@@ -4200,18 +4220,19 @@ async function saveBuilderPhoto() {
   });
 
   const cardSlots = [
-    ["weapon1Primary", 666, 76, 284],
-    ["head", 995, 58, 236],
-    ["weapon2Primary", 1248, 118, 236],
-    ["weapon1Secondary", 488, 247, 286],
-    ["necklace", 1346, 293, 286],
-    ["chest", 602, 413, 224],
-    ["cloak", 1314, 459, 232],
-    ["ring1", 540, 645, 288],
-    ["ring2", 1305, 638, 288],
-    ["hands", 727, 810, 220],
-    ["legs", 978, 807, 236],
-    ["feet", 1238, 807, 246],
+    ["weapon1Primary", 560, 46, 236],
+    ["weapon2Primary", 820, 46, 236],
+    ["head", 1080, 46, 224],
+    ["weapon1Secondary", 500, 232, 232],
+    ["weapon2Secondary", 500, 402, 232],
+    ["chest", 500, 572, 232],
+    ["ring1", 500, 742, 232],
+    ["hands", 736, 866, 220],
+    ["legs", 974, 866, 220],
+    ["feet", 1212, 866, 220],
+    ["necklace", 1416, 232, 222],
+    ["cloak", 1416, 402, 222],
+    ["ring2", 1416, 572, 222],
   ];
   cardSlots.forEach(([slotId, x, y, w]) => {
     const item = state.kit.itemByAsset.get(state.builder.equipped[slotId]);
@@ -4918,6 +4939,7 @@ function wireEvents() {
       if (button.dataset.resetDamageTarget != null) {
         state.damageTarget = {
           ...state.damageTarget,
+          weaponSet: state.builder.activeWeaponSet === "2" ? "2" : DAMAGE_TARGET_DEFAULTS.weaponSet,
           pdr: DAMAGE_TARGET_DEFAULTS.pdr,
           mdr: DAMAGE_TARGET_DEFAULTS.mdr,
           comboMultiplier: DAMAGE_TARGET_DEFAULTS.comboMultiplier,
@@ -5017,6 +5039,14 @@ function wireEvents() {
       renderDamageChecker();
       return;
     }
+    if (input.dataset?.damageWeaponSet != null) {
+      state.damageTarget = {
+        ...state.damageTarget,
+        weaponSet: input.value === "2" ? "2" : "1",
+      };
+      renderDamageChecker();
+      return;
+    }
     if (input.dataset?.damageLocation != null) {
       state.damageTarget = {
         ...state.damageTarget,
@@ -5110,6 +5140,14 @@ function wireEvents() {
       state.damageTarget = {
         ...state.damageTarget,
         hand: input.value === "secondary" ? "secondary" : "primary",
+      };
+      renderDamageChecker();
+      return;
+    }
+    if (input.dataset?.damageWeaponSet != null) {
+      state.damageTarget = {
+        ...state.damageTarget,
+        weaponSet: input.value === "2" ? "2" : "1",
       };
       renderDamageChecker();
       return;

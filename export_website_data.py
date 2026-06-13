@@ -264,6 +264,7 @@ FALLBACK_CHARACTER_SKINS = (
     ("Demon", "Demon"),
     ("Dwarf", "Dwarf"),
     ("Ifrit", "Ifrit"),
+    ("NightmareMummy", "Nightmare Mummy"),
     ("NecroticImp", "Necrotic Imp"),
     ("Seawalker", "Seawalker"),
     ("SkeletonMage", "Skeleton Mage"),
@@ -1067,7 +1068,8 @@ def load_character_skins(generated_root: Path, output_dir: Path, status_effects:
             "effectId": effect_id,
             "stats": [],
             "grantedTags": [],
-            "iconUrl": skin_icon_url(generated_root, output_dir, token, folder),
+            "iconUrl": skin_icon_url(generated_root, output_dir, token, folder)
+            or (skin_icon_url(generated_root, output_dir, "Mummy", "Mummy") if token == "NightmareMummy" else ""),
         })
     skins.sort(key=lambda row: row["name"].lower())
     return skins
