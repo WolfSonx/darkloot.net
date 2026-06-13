@@ -39,9 +39,8 @@
   damageTarget: {
     hand: "primary",
     hitLocation: "torso",
-    hitZoneMultiplier: 110,
-    pdr: -10,
-    mdr: -10,
+    pdr: -22,
+    mdr: -22,
     comboMultiplier: 0,
   },
   itemByAsset: new Map(),
@@ -183,9 +182,8 @@ const DAMAGE_TARGET_DEFAULTS = {
   name: "Training Dummy",
   hand: "primary",
   hitLocation: "torso",
-  hitZoneMultiplier: 110,
-  pdr: -10,
-  mdr: -10,
+  pdr: -22,
+  mdr: -22,
   comboMultiplier: 0,
 };
 const DAMAGE_HIT_LOCATIONS = [
@@ -2032,12 +2030,6 @@ function builderDamageOutput() {
   const hitLocation = damageHitLocation();
   const locationMultiplier = damageHitLocationMultiplier(derived);
   const locationModifier = locationMultiplier - 1;
-  const hitZoneMultiplier = clampNumberInput(
-    state.damageTarget.hitZoneMultiplier,
-    DAMAGE_TARGET_DEFAULTS.hitZoneMultiplier,
-    0,
-    500,
-  ) / 100;
   const comboMultiplier = clampNumberInput(state.damageTarget.comboMultiplier, DAMAGE_TARGET_DEFAULTS.comboMultiplier, -1, 10);
   const pdr = clampPercentInput(state.damageTarget.pdr, DAMAGE_TARGET_DEFAULTS.pdr);
   const mdr = clampPercentInput(state.damageTarget.mdr, DAMAGE_TARGET_DEFAULTS.mdr);
@@ -2045,8 +2037,8 @@ function builderDamageOutput() {
   const physicalEnchantedBase = physicalComboBase + additionalWeapon;
   const physicalHitBase = physicalEnchantedBase * (1 + (physicalBonus / 100)) + physicalAdd;
   const magicalHitBase = magicalWeapon + magicalBase + magicalAdd;
-  const physicalBeforeReduction = physicalHitBase * hitZoneMultiplier * (1 + locationModifier);
-  const magicalBeforeReduction = magicalHitBase * hitZoneMultiplier * locationMultiplier * (1 + (magicalBonus / 100));
+  const physicalBeforeReduction = physicalHitBase * (1 + locationModifier);
+  const magicalBeforeReduction = magicalHitBase * locationMultiplier * (1 + (magicalBonus / 100));
   const physicalMitigationMultiplier = effectiveTargetReductionMultiplier(pdr, armorPenetration);
   const magicalMitigationMultiplier = effectiveTargetReductionMultiplier(mdr, magicPenetration);
   const physicalAfterReduction = Math.max(0, physicalBeforeReduction * physicalMitigationMultiplier) + truePhysical;
@@ -2062,7 +2054,6 @@ function builderDamageOutput() {
       enchantedBase: physicalEnchantedBase,
       add: physicalAdd,
       hitBase: physicalHitBase,
-      hitZoneMultiplier,
       locationLabel: hitLocation.label,
       locationMultiplier,
       locationModifier,
@@ -2079,7 +2070,6 @@ function builderDamageOutput() {
       base: magicalBase,
       add: magicalAdd,
       hitBase: magicalHitBase,
-      hitZoneMultiplier,
       locationLabel: hitLocation.label,
       locationMultiplier,
       bonus: magicalBonus,
@@ -2114,7 +2104,6 @@ function damageBreakdownRows(section) {
     ["Power Bonus", `${damageNumber(section.bonus)}%`],
     [additionalLabel, section.add],
     ["Weapon Hit", section.hitBase],
-    ["Hit Zone", `${damageNumber((section.hitZoneMultiplier || 1) * 100)}%`],
     [section.locationLabel || "Hit Location", `${damageNumber(((section.locationModifier ?? ((section.locationMultiplier || 1) - 1)) * 100))}%`],
     ["Before Mitigation", section.beforeReduction],
     ["Target Reduction", `${damageNumber(section.targetReduction)}%`],
@@ -2186,9 +2175,6 @@ function renderDamageChecker(focusKey = "") {
             </option>
           `).join("")}
         </select>
-      </label>
-      <label>Hit Zone
-        <input type="number" min="0" max="500" step="0.1" value="${escapeHtml(state.damageTarget.hitZoneMultiplier)}" data-damage-target="hitZoneMultiplier">
       </label>
       <label>Combo
         <input type="number" min="-1" max="10" step="0.01" value="${escapeHtml(state.damageTarget.comboMultiplier)}" data-damage-target="comboMultiplier">
@@ -4932,7 +4918,6 @@ function wireEvents() {
       if (button.dataset.resetDamageTarget != null) {
         state.damageTarget = {
           ...state.damageTarget,
-          hitZoneMultiplier: DAMAGE_TARGET_DEFAULTS.hitZoneMultiplier,
           pdr: DAMAGE_TARGET_DEFAULTS.pdr,
           mdr: DAMAGE_TARGET_DEFAULTS.mdr,
           comboMultiplier: DAMAGE_TARGET_DEFAULTS.comboMultiplier,
@@ -5014,11 +4999,9 @@ function wireEvents() {
     const input = event.target;
     if (input.dataset?.damageTarget) {
       const key = input.dataset.damageTarget;
-      const value = key === "hitZoneMultiplier"
-        ? clampNumberInput(input.value, DAMAGE_TARGET_DEFAULTS.hitZoneMultiplier, 0, 500)
-        : key === "comboMultiplier"
-          ? clampNumberInput(input.value, DAMAGE_TARGET_DEFAULTS.comboMultiplier, -1, 10)
-          : clampPercentInput(input.value, DAMAGE_TARGET_DEFAULTS[key] ?? 0);
+      const value = key === "comboMultiplier"
+        ? clampNumberInput(input.value, DAMAGE_TARGET_DEFAULTS.comboMultiplier, -1, 10)
+        : clampPercentInput(input.value, DAMAGE_TARGET_DEFAULTS[key] ?? 0);
       state.damageTarget = {
         ...state.damageTarget,
         [key]: value,
@@ -5113,11 +5096,9 @@ function wireEvents() {
     }
     if (input.dataset?.damageTarget) {
       const key = input.dataset.damageTarget;
-      const value = key === "hitZoneMultiplier"
-        ? clampNumberInput(input.value, DAMAGE_TARGET_DEFAULTS.hitZoneMultiplier, 0, 500)
-        : key === "comboMultiplier"
-          ? clampNumberInput(input.value, DAMAGE_TARGET_DEFAULTS.comboMultiplier, -1, 10)
-          : clampPercentInput(input.value, DAMAGE_TARGET_DEFAULTS[key] ?? 0);
+      const value = key === "comboMultiplier"
+        ? clampNumberInput(input.value, DAMAGE_TARGET_DEFAULTS.comboMultiplier, -1, 10)
+        : clampPercentInput(input.value, DAMAGE_TARGET_DEFAULTS[key] ?? 0);
       state.damageTarget = {
         ...state.damageTarget,
         [key]: value,
