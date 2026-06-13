@@ -2145,7 +2145,7 @@ th.num .sort-button {
 }
 
 .damage-dialog {
-  width: min(760px, calc(100vw - 28px));
+  width: min(820px, calc(100vw - 28px));
 }
 
 .damage-checker {
@@ -2155,7 +2155,7 @@ th.num .sort-button {
 
 .damage-target-controls {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(130px, .8fr) repeat(3, minmax(0, 88px)) auto;
+  grid-template-columns: minmax(160px, 1fr) minmax(130px, .8fr) repeat(4, minmax(0, 88px)) auto;
   gap: 10px;
   align-items: end;
 }
@@ -2427,6 +2427,18 @@ dialog::backdrop {
   .builder-playfield,
   .builder-side-stack,
   .builder-browser-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .damage-target-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .damage-target-controls button {
+    grid-column: 1 / -1;
+  }
+
+  .damage-grid {
     grid-template-columns: 1fr;
   }
 
