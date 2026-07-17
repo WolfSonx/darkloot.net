@@ -1009,6 +1009,150 @@ def load_status_effects(generated_root: Path) -> dict:
     return load_effect_assets([generated_root / "ActorStatus" / "StatusEffect"])
 
 
+def format_effect_value(key: str, value: object) -> str:
+    if not isinstance(value, (int, float)):
+        return str(value or "")
+    if key.lower() == "duration":
+        seconds = value / 1000 if value > 1000 else value
+        return f"{seconds:g}"
+    if key == "MovementMod":
+        return f"{value:g}"
+    stat_key = normalize_stat_key(key)
+    scale = 0.1 if stat_key in PERCENT_STAT_KEYS or key.endswith("Mod") else 1
+    return f"{value * scale:g}"
+
+
+def effect_tag_label(key: str) -> str:
+    cleaned = str(key or "").split(".", 1)[-1]
+    overrides = {
+        "MagicalFireDamageBase": "fire magical damage",
+        "MagicalIceDamageBase": "ice magical damage",
+        "MagicalAirDamageBase": "air magical damage",
+        "MagicalLightningDamageBase": "lightning magical damage",
+        "MagicalDarkDamageBase": "dark magical damage",
+        "MagicalHolyDamageBase": "holy magical damage",
+        "MoveSpeedMod": "movement speed",
+        "PhysicalDamageBase": "physical damage",
+        "MagicalDamageBase": "magical damage",
+        "MagicalWaterDamageBase": "water magical damage",
+        "PhysicalHealBase": "health",
+        "MagicalHealBase": "health",
+    }
+    return overrides.get(cleaned, humanize_identifier(cleaned).lower())
+
+
+def clean_effect_description(text: str) -> str:
+    text = re.sub(r"<[^>]+>", "", text or "")
+    text = text.replace(" _", "")
+    text = text.replace("_", " ")
+    text = text.replace("â€™", "'").replace("â€œ", '"').replace("â€", '"')
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def effect_description_from_asset(desc_asset: dict, content_root: Path) -> dict | None:
+    props = desc_asset.get("Properties") or {}
+    text = localized_text(props.get("DescriptionFormatTextId"))
+    if not text:
+        return None
+    effect_refs = props.get("DCGameplayEffectDataAssetArray") or []
+    movement_refs = props.get("MovementModifierDataAssetArray") or []
+    constant_refs = props.get("ConstantDataAssetArray") or []
+    def load_ref_props(refs: list[object]) -> list[dict]:
+        loaded = []
+        for ref in refs:
+            path = exported_content_asset_path(content_root, asset_reference_path(ref))
+            asset = read_asset(path) if path else None
+            loaded.append((asset or {}).get("Properties") or {})
+        return loaded
+    effects = load_ref_props(effect_refs)
+    movements = load_ref_props(movement_refs)
+    constants = load_ref_props(constant_refs)
+    def effect_value(effect: dict, key: str) -> object:
+        if key in effect:
+            return effect.get(key)
+        compacted = re.sub(r"[^a-z0-9]", "", key.lower())
+        for effect_key, value in effect.items():
+            if re.sub(r"[^a-z0-9]", "", str(effect_key).lower()) == compacted:
+                return value
+        return None
+    def constant_value(index: int) -> object:
+        if not 0 <= index < len(constants):
+            return None
+        constant = constants[index]
+        for key in ("FloatValue", "IntValue", "Value"):
+            if key in constant:
+                return constant.get(key)
+        return None
+    def movement_value(index: int, key: str, value_format: str) -> object:
+        if not 0 <= index < len(movements):
+            return None
+        value = effect_value(movements[index], key)
+        if isinstance(value, (int, float)) and value_format == "AbsFromOne":
+            return abs(1 - value) * 100
+        return value
+    def render_tag(tag: str, attrs: str, body: str) -> str:
+        if not re.search(r"\[(\d+)\]", body or ""):
+            return effect_tag_label(tag) if str(body or "").strip() == "_" else str(body or "")
+        attr_type = re.search(r'Type="([^"]+)"', attrs or "")
+        attr_format = re.search(r'Format="([^"]+)"', attrs or "")
+        def replace_placeholder(match: re.Match) -> str:
+            index = int(match.group(1))
+            if tag == "Constant":
+                value = constant_value(index)
+                return format_effect_value(tag, value)
+            if tag == "MovementMod":
+                value = movement_value(index, attr_type.group(1) if attr_type else "", attr_format.group(1) if attr_format else "")
+                return format_effect_value(tag, value)
+            value = effect_value(effects[index], tag) if 0 <= index < len(effects) else None
+            return format_effect_value(tag, value)
+        body = re.sub(r"\[(\d+)\]", replace_placeholder, str(body or ""))
+        return body.replace("_", effect_tag_label(tag))
+    def replace_tag(match: re.Match) -> str:
+        return render_tag(match.group(1), match.group(2) or "", match.group(3))
+    description = re.sub(r"<([A-Za-z0-9_.]+)([^>]*)>(.*?)</>", replace_tag, text, flags=re.DOTALL)
+    description = clean_effect_description(description)
+    if not description:
+        return None
+    return {
+        "name": str(desc_asset.get("Name") or ""),
+        "description": description,
+        "effects": [
+            {
+                "id": asset_name(ref),
+                "durationSeconds": (effect.get("duration") / 1000 if isinstance(effect.get("duration"), (int, float)) else None),
+                "stats": numeric_stat_entries(effect),
+                "grantedTags": [tag_leaf(row) for row in effect.get("GrantedTags") or [] if tag_leaf(row)],
+            }
+            for ref, effect in zip(effect_refs, effects)
+        ],
+    }
+
+
+def load_item_special_effects(generated_root: Path, props: dict) -> list[dict]:
+    content_root = generated_root.parents[2]
+    special_effects = []
+    seen = set()
+    for ability_ref in props.get("Abilities") or []:
+        ability_path = exported_content_asset_path(content_root, asset_reference_path(ability_ref))
+        ability_asset = read_asset(ability_path) if ability_path else None
+        ability_props = (ability_asset or {}).get("Properties") or {}
+        desc_ref = ability_props.get("Desc")
+        desc_path = exported_content_asset_path(content_root, asset_reference_path(desc_ref))
+        desc_asset = read_asset(desc_path) if desc_path else None
+        if not desc_asset:
+            continue
+        effect = effect_description_from_asset(desc_asset, content_root)
+        if not effect:
+            continue
+        key = effect["description"]
+        if key in seen:
+            continue
+        seen.add(key)
+        effect["abilityId"] = asset_name(ability_ref)
+        special_effects.append(effect)
+    return special_effects
+
+
 def load_character_effects(generated_root: Path) -> dict:
     return load_effect_assets([
         generated_root / "PlayerCharacter" / "PlayerCharacterEffect",
@@ -1276,6 +1420,7 @@ def load_kit_items(generated_root: Path, public_items: list[dict], property_asse
             "primary": property_assets.get(primary_id, []),
             "primaryPropertyId": primary_id,
             "secondaryPoolIds": secondary_ids,
+            "specialEffects": load_item_special_effects(generated_root, props),
             "allowedClasses": allowed_classes,
             "detailPath": public_row.get("detailPath"),
         }

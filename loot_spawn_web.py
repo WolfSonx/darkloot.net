@@ -418,7 +418,7 @@ def summarize_diffs(values, limit: int = 4) -> str:
 
 
 def visible_source_row(row: dict) -> bool:
-    if str(row.get("source_kind", "")) in HIDDEN_SOURCE_KINDS:
+    if str(row.get("source_kind", "")) in HIDDEN_SOURCE_KINDS and str(row.get("source", "")) != str(row.get("item", "")):
         return False
     if not any(str(value) not in HIDDEN_MAPS for value in row.get("maps", ()) if value is not None and str(value)):
         return False

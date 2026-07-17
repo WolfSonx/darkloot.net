@@ -3422,6 +3422,12 @@ function slotPrimarySummary(slotId, item, limit = Infinity) {
   });
 }
 
+function itemSpecialEffectSummary(item) {
+  return (item?.specialEffects || [])
+    .map((effect) => effect?.description || "")
+    .filter(Boolean);
+}
+
 function builderSlotAriaLabel(slot, item, blockReason) {
   if (item) return `${slot.label}: ${item.name}, ${item.rarity}, ${item.gearScore || 0} gear score`;
   return `${slot.label}: ${blockReason ? `blocked, ${blockReason}` : "empty"}`;
@@ -3454,6 +3460,7 @@ function builderSlotTooltipHtml(slotId) {
   }
   const primary = slotPrimarySummary(slot.id, item);
   const secondary = slotSecondarySummary(slot.id, item);
+  const specialEffects = itemSpecialEffectSummary(item);
   return `
     <div class="builder-slot-tooltip-head">
       ${itemThumbnail(item, "tooltip")}
@@ -3472,6 +3479,12 @@ function builderSlotTooltipHtml(slotId) {
       <div class="builder-slot-tooltip-section secondary">
         <b>Secondary</b>
         ${secondary.map((entry) => `<span>${escapeHtml(entry)}</span>`).join("")}
+      </div>
+    ` : ""}
+    ${specialEffects.length ? `
+      <div class="builder-slot-tooltip-section special">
+        <b>Effect</b>
+        ${specialEffects.map((entry) => `<span>${escapeHtml(entry)}</span>`).join("")}
       </div>
     ` : ""}
     <div class="builder-slot-tooltip-meta">
@@ -3711,6 +3724,7 @@ function renderBuilderBonusPanel() {
   }
   const primary = (item.primary || []).map((entry, index) => primaryValueControl(slotId, entry, index)).join("");
   const secondary = (item.secondaryPoolIds || []).map((poolId, index) => bonusSelect(slotId, item, poolId, index)).join("");
+  const specialEffects = itemSpecialEffectSummary(item);
   $("builderBonusPanel").innerHTML = `
     <div class="builder-bonus-title">
       <div>
@@ -3723,6 +3737,12 @@ function renderBuilderBonusPanel() {
       </div>
     </div>
     <div class="builder-primary-list">${primary || `<span><b>Primary</b>None</span>`}</div>
+    ${specialEffects.length ? `
+      <div class="builder-special-list">
+        <b>Effect</b>
+        ${specialEffects.map((entry) => `<span>${escapeHtml(entry)}</span>`).join("")}
+      </div>
+    ` : ""}
     <div class="builder-secondary-list">${secondary || `<div class="builder-empty">No secondary bonus slots.</div>`}</div>
   `;
 }
@@ -3809,10 +3829,11 @@ function renderBuilderItems() {
 function photoItemLines(slotId, item) {
   if (!item) return [];
   const primary = slotPrimarySummary(slotId, item, 6).map((text) => ({ text, secondary: false }));
+  const special = itemSpecialEffectSummary(item).map((text) => ({ text, special: true }));
   const secondary = slotSecondarySummary(slotId, item)
     .filter((line) => !/^No secondary/i.test(line))
     .map((text) => ({ text, secondary: true }));
-  return [...primary, ...secondary].slice(0, 7);
+  return [...primary, ...special, ...secondary].slice(0, 7);
 }
 
 function photoLoadImage(src) {
@@ -3933,7 +3954,7 @@ function photoDrawCard(ctx, item, slotId, x, y, width) {
     ctx.fillStyle = "rgba(238, 241, 242, .88)";
     ctx.fillText("-", x + 20, lineY);
     ctx.fillText("-", x + width - 20, lineY);
-    ctx.fillStyle = line.secondary ? "#18bdf4" : "#f1f3f4";
+    ctx.fillStyle = line.special ? "#f0c76a" : (line.secondary ? "#18bdf4" : "#f1f3f4");
     ctx.fillText(line.text, x + width / 2, lineY);
   });
   ctx.textAlign = "left";

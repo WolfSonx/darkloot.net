@@ -1658,6 +1658,10 @@ th.num .sort-button {
   color: #25b8ff;
 }
 
+.builder-slot-tooltip-section.special span {
+  color: #f0c76a;
+}
+
 .builder-slot-tooltip-meta {
   border-top: 1px solid rgba(207, 211, 214, .16);
   padding-top: 12px;
@@ -1848,6 +1852,29 @@ th.num .sort-button {
 
 .builder-primary-list b {
   color: var(--accent);
+}
+
+.builder-special-list {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(240, 199, 106, .28);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  padding: 12px;
+  background: rgba(60, 42, 8, .22);
+}
+
+.builder-special-list b {
+  color: rgba(240, 199, 106, .86);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.builder-special-list span {
+  color: #f6d889;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .builder-secondary-list {
