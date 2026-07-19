@@ -1,3 +1,12 @@
+/
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/items/*
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/sources/*
+  Cache-Control: no-cache, no-store, must-revalidate
+
 /data/manifest.json
   Cache-Control: no-cache, no-store, must-revalidate
 

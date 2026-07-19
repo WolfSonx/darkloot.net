@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,17 +8,14 @@ import { minifyCss } from "./css.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
-const client = path.join(dist, "client");
-const server = path.join(dist, "server");
 
 await rm(dist, { recursive: true, force: true });
-await mkdir(client, { recursive: true });
-await mkdir(server, { recursive: true });
-await cp(path.join(root, "index.html"), path.join(client, "index.html"));
-await cp(path.join(root, "public"), client, { recursive: true });
+await mkdir(dist, { recursive: true });
+await cp(path.join(root, "index.html"), path.join(dist, "index.html"));
+await cp(path.join(root, "public"), dist, { recursive: true });
 
 const sourceDir = path.join(root, "src");
-const clientSourceDir = path.join(client, "src");
+const clientSourceDir = path.join(dist, "src");
 await mkdir(clientSourceDir, { recursive: true });
 for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
   if (entry.isFile() && path.extname(entry.name) === ".js") {
@@ -53,7 +50,7 @@ async function writeRoute(type, row, title, description) {
   if (!slug) return "";
   const relative = `/${type}/${encodeURIComponent(slug)}/`;
   const url = `https://darkloot.net${relative}`;
-  const outputDir = path.join(client, type, slug);
+  const outputDir = path.join(dist, type, slug);
   await mkdir(outputDir, { recursive: true });
   await writeFile(path.join(outputDir, "index.html"), routeHtml({ title, description, url }));
   return url;
@@ -79,19 +76,19 @@ const routes = [
 await writeRoutes(routes);
 
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls.map((url) => `  <url><loc>${url}</loc></url>`).join("\n")}\n</urlset>\n`;
-await writeFile(path.join(client, "sitemap.xml"), sitemap);
+await writeFile(path.join(dist, "sitemap.xml"), sitemap);
 
-const worker = `export default {
-  async fetch(request, env) {
-    const response = await env.ASSETS.fetch(request);
-    if (response.status !== 404) return response;
-    const acceptsHtml = request.headers.get("accept")?.includes("text/html");
-    if (!acceptsHtml) return response;
-    const fallback = new URL("/index.html", request.url);
-    return env.ASSETS.fetch(new Request(fallback, request));
-  },
-};
-`;
-await writeFile(path.join(server, "index.js"), worker);
+await Promise.all([
+  access(path.join(dist, "index.html")),
+  access(path.join(dist, "src", "main.js")),
+  access(path.join(dist, "src", "app.css")),
+  access(path.join(dist, "data", "manifest.json")),
+]);
+try {
+  await access(path.join(dist, "client", "index.html"));
+  throw new Error("Build output is nested under dist/client instead of the deploy root");
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+}
 
 console.log(`Built DarkLoot static site at ${dist}`);
