@@ -179,6 +179,7 @@ const BUILDER_DEFAULTS = {
   primaryUnarmedDamage: 8,
   primaryUnarmedImpactPower: 1,
 };
+const BUILDER_MAX_HEALTH_BASE_RATING = 15;
 const DAMAGE_TARGET_DEFAULTS = {
   name: "Training Dummy",
   weaponSet: "1",
@@ -1847,7 +1848,7 @@ function builderDerivedStatValues(totals, character) {
   values.set("Will", will);
   values.set("Knowledge", knowledge);
 
-  const maxHealthRating = (strength * 0.25) + (vigor * 0.75);
+  const maxHealthRating = BUILDER_MAX_HEALTH_BASE_RATING + (strength * 0.25) + (vigor * 0.75);
   const baseHealth = curveValue(
     "CT_MaxHealthBase",
     "MaxHealthBase",
