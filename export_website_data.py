@@ -27,8 +27,9 @@ from loot_spawn_web import (
 )
 
 
-DATA_VERSION = 1
+DATA_VERSION = 2
 MAX_SOURCE_DETAIL_ROWS = 12000
+SOURCE_DETAIL_PAGE_SIZE = 300
 BASE_STAT_KEYS = {
     "Strength",
     "Vigor",
@@ -1378,6 +1379,20 @@ def kit_slot_from_item(props: dict) -> dict | None:
     return {"id": raw_slot, "label": label}
 
 
+def public_stat_entry(entry: dict) -> dict:
+    keys = ("propertyId", "statKey", "label", "min", "max", "value", "unit")
+    return {
+        key: entry[key]
+        for key in keys
+        if key in entry and entry[key] not in (None, "", [], {})
+    }
+
+
+def public_art(art: dict | None) -> dict:
+    icon_size = (art or {}).get("iconSize") or {}
+    return {"iconSize": icon_size} if icon_size else {}
+
+
 def load_kit_items(generated_root: Path, public_items: list[dict], property_assets: dict, requirements: dict, item_art: dict) -> list[dict]:
     public_by_asset = {row.get("itemAsset"): row for row in public_items}
     kit_items = []
@@ -1404,7 +1419,6 @@ def load_kit_items(generated_root: Path, public_items: list[dict], property_asse
             "asset": name,
             "name": localized_text(props.get("Name"), public_row.get("item") or humanize_identifier(name)),
             "rarity": rarity_value,
-            "category": public_row.get("category") or "Equipment",
             "itemType": item_type,
             "slot": slot,
             "hand": tag_leaf(props.get("HandType")),
@@ -1415,20 +1429,27 @@ def load_kit_items(generated_root: Path, public_items: list[dict], property_asse
                 "width": props.get("InventoryWidth", 1),
                 "height": props.get("InventoryHeight", 1),
             },
-            "artAsset": asset_name(props.get("ArtData")),
-            "artPath": asset_reference_path(props.get("ArtData")),
-            "primary": property_assets.get(primary_id, []),
-            "primaryPropertyId": primary_id,
+            "primary": [public_stat_entry(entry) for entry in property_assets.get(primary_id, [])],
             "secondaryPoolIds": secondary_ids,
-            "specialEffects": load_item_special_effects(generated_root, props),
-            "allowedClasses": allowed_classes,
-            "detailPath": public_row.get("detailPath"),
+            "specialEffects": [
+                {"description": effect["description"]}
+                for effect in load_item_special_effects(generated_root, props)
+                if effect.get("description")
+            ],
+            "allowedClasses": [row["id"] for row in allowed_classes if row.get("id")],
         }
         art = item_art.get(name)
         if art:
-            kit_item["art"] = art
+            compact_art = public_art(art)
+            if compact_art:
+                kit_item["art"] = compact_art
             if art.get("iconUrl"):
                 kit_item["iconUrl"] = art["iconUrl"]
+        kit_item = {
+            key: value
+            for key, value in kit_item.items()
+            if value not in (None, "", [], {})
+        }
         kit_items.append(kit_item)
     kit_items.sort(key=lambda row: (row["slot"]["label"], row["name"].lower(), row["rarity"]))
     return kit_items
@@ -1446,31 +1467,61 @@ def build_kit_builder_data(generated_root: Path, output_dir: Path, public_items:
     perks = load_perks(generated_root, output_dir, status_effects)
     characters = load_characters(generated_root, output_dir, perks, character_effects)
     kit_items = load_kit_items(generated_root, public_items, property_assets, requirements, item_art)
-    secondary_pool_ids = sorted({pool_id for item in kit_items for pool_id in item["secondaryPoolIds"]})
+    secondary_pool_ids = sorted({pool_id for item in kit_items for pool_id in item.get("secondaryPoolIds", [])})
     secondary_pools = {
         pool_id: {
-            "id": pool_id,
-            "name": humanize_identifier(pool_id),
-            "options": property_assets.get(pool_id, []),
+            "options": [public_stat_entry(entry) for entry in property_assets.get(pool_id, [])],
         }
         for pool_id in secondary_pool_ids
     }
+    public_characters = [
+        {
+            key: value
+            for key, value in {
+                "id": character.get("id"),
+                "name": character.get("name"),
+                "perks": character.get("perks") or [],
+                "baseStats": [public_stat_entry(entry) for entry in character.get("baseStats") or []],
+                "iconUrl": character.get("iconUrl"),
+                "portraitUrl": character.get("portraitUrl"),
+            }.items()
+            if value not in (None, "", [], {})
+        }
+        for character in characters
+    ]
+    public_skins = [
+        {
+            key: value
+            for key, value in {
+                "id": skin.get("id"),
+                "name": skin.get("name"),
+                "stats": [public_stat_entry(entry) for entry in skin.get("stats") or []],
+                "iconUrl": skin.get("iconUrl"),
+            }.items()
+            if value not in (None, "", [], {})
+        }
+        for skin in character_skins
+    ]
+    public_perks = [
+        {
+            key: value
+            for key, value in {
+                "id": perk.get("id"),
+                "name": perk.get("name"),
+                "iconUrl": perk.get("iconUrl"),
+            }.items()
+            if value not in (None, "", [], {})
+        }
+        for perk in sorted(perks.values(), key=lambda row: row["name"].lower())
+    ]
     return {
         "dataVersion": DATA_VERSION,
         "items": kit_items,
         "secondaryPools": secondary_pools,
-        "propertyTypes": property_types,
         "curveTables": curve_tables,
-        "characters": characters,
-        "characterSkins": character_skins,
-        "perks": sorted(perks.values(), key=lambda row: row["name"].lower()),
-        "notes": {
-            "statusEffectStats": "Direct numeric status-effect fields are exported for perks when present.",
-            "characterSkinStats": "Character skin folders are matched to Id_ActorStatusEffect_CharacterSkin_* status effects when exported.",
-            "baseCharacterStats": "Class base stats are loaded from V2/PlayerCharacter/PlayerCharacterEffect, with DT_PlayerCharacter as a fallback.",
-            "derivedStatCurves": "Curve tables are loaded from Data/GameplayAbility/CT_*.json when exported.",
-            "localizedStatLabels": f"Loaded {len(localization):,} English game localization strings for item property labels.",
-        },
+        "characters": public_characters,
+        "characterSkins": public_skins,
+        "perks": public_perks,
     }
 
 
@@ -1611,10 +1662,33 @@ def public_source_drop_row(row: dict, item_art: dict | None = None) -> dict:
     }
     art = (item_art or {}).get(compact["itemAsset"])
     if art:
-        public["art"] = art
+        compact_art = public_art(art)
+        if compact_art:
+            public["art"] = compact_art
         if art.get("iconUrl"):
             public["iconUrl"] = art["iconUrl"]
     return attach_luck_model(public, row)
+
+
+def public_item_index_row(row: dict) -> dict:
+    public = {
+        "item": row["item"],
+        "itemAsset": row["itemAsset"],
+        "rarity": row["rarity"],
+        "category": row["category"],
+        "sourceCount": row["sourceCount"],
+        "maps": row["maps"],
+        "diffs": row["diffs"],
+        "detailPath": row["detailPath"],
+    }
+    art = row.get("art") or {}
+    icon_url = row.get("iconUrl") or art.get("iconUrl")
+    if icon_url:
+        public["iconUrl"] = icon_url
+        compact_art = public_art(art)
+        if compact_art:
+            public["art"] = compact_art
+    return public
 
 
 def export_source_details(output_dir: Path, state: AppState, sources: list[dict], item_art: dict) -> None:
@@ -1637,7 +1711,19 @@ def export_source_details(output_dir: Path, state: AppState, sources: list[dict]
         source_scope = index.source_values_for_query(source, kind)
         detail_rows = detail_summary(merge_amount_roll_rows(rows_with_luck(base_rows, result, luck)), index, source_scope)
         detail_rows = sort_detail_rows(detail_rows, "dyn", True)
-        public_rows = detail_rows[:MAX_SOURCE_DETAIL_ROWS]
+        public_rows = [
+            public_source_drop_row(detail_row, item_art)
+            for detail_row in detail_rows[:MAX_SOURCE_DETAIL_ROWS]
+        ]
+        pages = [
+            public_rows[offset:offset + SOURCE_DETAIL_PAGE_SIZE]
+            for offset in range(0, len(public_rows), SOURCE_DETAIL_PAGE_SIZE)
+        ] or [[]]
+        detail_stem = row["detailPath"][:-5] if row["detailPath"].endswith(".json") else row["detailPath"]
+        page_paths = [
+            f"{detail_stem}-page-{page_number}.json"
+            for page_number in range(2, len(pages) + 1)
+        ]
         locations = index.locations_for_source(source, kind)
         payload = {
             "dataVersion": DATA_VERSION,
@@ -1649,10 +1735,23 @@ def export_source_details(output_dir: Path, state: AppState, sources: list[dict]
             "scenarios": source_pair_summary(base_rows, index),
             "spawnLocationCount": len(locations),
             "spawnLocations": index.compact_locations(locations, 160),
-            "rowsLimited": len(public_rows),
-            "rows": [public_source_drop_row(detail_row, item_art) for detail_row in public_rows],
+            "rowsLimited": len(pages[0]),
+            "rowsExported": len(public_rows),
+            "nextPage": page_paths[0] if page_paths else None,
+            "rows": pages[0],
         }
         write_json(output_path_for_public_data(output_dir, row["detailPath"]), payload)
+        for page_index, page_rows in enumerate(pages[1:]):
+            page_path = page_paths[page_index]
+            next_page = page_paths[page_index + 1] if page_index + 1 < len(page_paths) else None
+            write_json(
+                output_path_for_public_data(output_dir, page_path),
+                {
+                    "dataVersion": DATA_VERSION,
+                    "rows": page_rows,
+                    "nextPage": next_page,
+                },
+            )
 
 
 def export_item_details(output_dir: Path, state: AppState, items: list[dict]) -> None:
@@ -1685,7 +1784,7 @@ def export_item_details(output_dir: Path, state: AppState, items: list[dict]) ->
                 "maps": row["maps"],
                 "diffs": row["diffs"],
                 "sourceCount": row["sourceCount"],
-                "art": row.get("art"),
+                "art": public_art(row.get("art")),
                 "iconUrl": row.get("iconUrl"),
             },
             "total": len(source_rows),
@@ -1722,6 +1821,7 @@ def build_indexes(output_dir: Path, state: AppState) -> tuple[list[dict], list[d
     sources.sort(key=lambda row: (-float(row.get("bestDynValue") or 0), row["source"].lower(), row["sourceKind"].lower()))
 
     stats = dict(result.stats)
+    stats.pop("generated_root", None)
     stats["rows"] = len(index.rows)
     stats["items"] = len(items)
     stats["sources"] = len(sources)
@@ -1776,7 +1876,10 @@ def export_website_data(cache_path: Path, output_dir: Path, root: Path, luck: in
     generated_root = Path(result.stats.get("generated_root") or "")
     item_art = load_item_art(generated_root, output_dir) if generated_root.exists() else {}
     apply_item_art(items, item_art)
-    write_json(output_dir / "items-index.json", {"dataVersion": DATA_VERSION, "rows": items})
+    write_json(
+        output_dir / "items-index.json",
+        {"dataVersion": DATA_VERSION, "rows": [public_item_index_row(row) for row in items]},
+    )
     write_json(output_dir / "sources-index.json", {"dataVersion": DATA_VERSION, "rows": sources})
     write_json(output_dir / "rates.json", {"dataVersion": DATA_VERSION, "rows": result.rate_weights})
     if generated_root.exists():
@@ -1786,12 +1889,10 @@ def export_website_data(cache_path: Path, output_dir: Path, root: Path, luck: in
             "dataVersion": DATA_VERSION,
             "items": [],
             "secondaryPools": {},
-            "propertyTypes": {},
             "curveTables": {},
             "characters": [],
             "characterSkins": [],
             "perks": [],
-            "notes": {"missingGeneratedRoot": str(generated_root)},
         }
     manifest["counts"]["kitItems"] = len(kit_builder.get("items") or [])
     manifest["counts"]["kitCharacters"] = len(kit_builder.get("characters") or [])

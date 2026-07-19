@@ -5,7 +5,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "dist");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "dist", "client");
 const port = Number.parseInt(process.env.PORT || "5173", 10);
 
 const types = {

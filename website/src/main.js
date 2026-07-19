@@ -1,365 +1,63 @@
-﻿const state = {
-  manifest: null,
-  items: [],
-  sources: [],
-  kit: {
-    items: [],
-    itemByAsset: new Map(),
-    secondaryPools: {},
-    propertyTypes: {},
-    curveTables: {},
-    characters: [],
-    characterById: new Map(),
-    characterSkins: [],
-    skinById: new Map(),
-    perks: [],
-    perkById: new Map(),
-  },
-  kitReady: false,
-  kitPromise: null,
-  itemSearchIndex: new Map(),
-  sourceSearchIndex: new Map(),
-  kitSearchIndex: new Map(),
-  builder: {
-    characterId: "",
-    selectedSlot: "weapon1Primary",
-    activeWeaponSet: "1",
-    search: "",
-    rarity: "All",
-    pickerOpen: false,
-    pickerMode: "items",
-    equipped: {},
-    primaryValues: {},
-    bonuses: {},
-    perks: [],
-    skinId: "",
-    confirmAction: null,
-    shareStatus: "",
-  },
-  damageTarget: {
-    weaponSet: "1",
-    hand: "primary",
-    hitLocation: "torso",
-    pdr: -22,
-    mdr: -22,
-    comboMultiplier: 0,
-  },
-  itemByAsset: new Map(),
-  sourceByKey: new Map(),
-  rateWeights: {},
-  favorites: { items: [], sources: [] },
-  favoriteItemSet: new Set(),
-  favoriteSourceSet: new Set(),
-  savedKits: [],
-  chipPopover: { target: null, pinned: false },
-  slotTooltip: { target: null },
-  activeTab: "items",
-  detailCache: new Map(),
-  currentLuck: 0,
-  activeDetail: null,
-  sort: {
-    items: { key: "item", direction: "asc" },
-    sources: { key: "source", direction: "asc" },
-  },
-};
+import {
+  buildSearchIndex,
+  clampLuck,
+  escapeHtml,
+  isTwoHandedItem,
+  matchesSearchGroups,
+  sourceKey,
+  terms,
+} from "./core.js";
+import { detailSlug, readRoute, urlForState } from "./router.js";
+import { createAppState } from "./state.js";
+import {
+  FAVORITES_KEY,
+  SAVED_KITS_KEY,
+  SHARED_KIT_BINARY_PREFIX,
+  APP_BUILD_ID,
+  SITE_UPDATED_AT,
+  ROW_PAGE_SIZE,
+  MAX_BUILDER_ITEMS,
+  MAX_DETAIL_ROWS,
+  RARITY_ORDER,
+  SQUIRE_MAPS,
+  SQUIRE_MAP_SET,
+  BUILDER_PERK_LIMIT,
+  BUILDER_WEAPON_MASTERY_PERK_ID,
+  BUILDER_DEMON_ARMOR_PERK_ID,
+  BUILDER_SPEAR_PROFICIENCY_PERK_ID,
+  BUILDER_IRON_WILL_PERK_ID,
+  BUILDER_SAVAGE_PERK_ID,
+  BUILDER_NO_STAT_PERK_SUMMARY,
+  BUILDER_PERK_STAT_OVERRIDES,
+  BUILDER_PERK_SUMMARIES,
+  PERK_ICON_ALIASES,
+  BUILDER_DEFAULTS,
+  BUILDER_MAX_HEALTH_BASE_RATING,
+  DAMAGE_TARGET_DEFAULTS,
+  DAMAGE_HIT_LOCATIONS,
+  BUILDER_SLOTS,
+  BUILDER_WEAPON_GRID,
+  BUILDER_STAT_ROWS,
+  BUILDER_STAT_ORDER,
+  STAT_CONTRIBUTION_KEYS,
+  DEFAULT_SORT_DIRECTION,
+  DEFAULT_DIFFICULTY,
+  LUCK_500_SCALARS,
+  GRADE4_ANCHORS,
+} from "./config.js";
 
-const FAVORITES_KEY = "darkloot:favorites:v1";
-const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
-const SHARED_KIT_BINARY_PREFIX = "~";
-const SHARED_ITEM_PREFIX = "Id_Item_";
-const SHARED_PROPERTY_PREFIX = "Id_ItemPropertyType_Effect_";
-const SHARED_PERK_PREFIX = "Id_Perk_";
-const SHARED_SKIN_PREFIX = "Id_ActorStatusEffect_CharacterSkin_";
-const APP_BUILD_ID = "20260717-1";
-const SITE_UPDATED_AT = "2026-07-17T00:00:00+03:00";
-const MAX_ROWS = 500;
-const MAX_BUILDER_ITEMS = 180;
-const MAX_DETAIL_ROWS = 500;
-const TERMS_CACHE_LIMIT = 6000;
-const RARITY_ORDER = ["Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
-const SQUIRE_MAPS = ["Ruins", "Crypts", "Inferno"];
-const SQUIRE_MAP_SET = new Set(SQUIRE_MAPS);
-const BUILDER_PERK_LIMIT = 4;
-const BUILDER_WEAPON_MASTERY_PERK_ID = "Id_Perk_WeaponMastery";
-const BUILDER_DEMON_ARMOR_PERK_ID = "Id_Perk_DemonArmor";
-const BUILDER_SPEAR_PROFICIENCY_PERK_ID = "Id_Perk_SpearProficiency";
-const BUILDER_IRON_WILL_PERK_ID = "Id_Perk_IronWill";
-const BUILDER_SAVAGE_PERK_ID = "Id_Perk_Savage";
-const BUILDER_NO_STAT_PERK_SUMMARY = "This perk doesnt affect stats";
-const BUILDER_PERK_STAT_OVERRIDES = {
-  Id_Perk_DefenseMastery: [
-    { statKey: "ItemArmorRatingMod", label: "Armor Rating Bonus", value: 15, unit: "%" },
-  ],
-  Id_Perk_ProjectileResistance: [
-    { statKey: "ProjectileReduction", label: "Projectile Damage Reduction", value: 10, unit: "%" },
-  ],
-  Id_Perk_Swift: [
-    { statKey: "MoveSpeedArmorPenaltyReduction", label: "Armor Move Speed Penalty Reduction", value: 20, unit: "%" },
-  ],
-  Id_Perk_Jokester: [
-    { statKey: "Strength", label: "Strength", value: 2, unit: "" },
-    { statKey: "Vigor", label: "Vigor", value: 2, unit: "" },
-    { statKey: "Agility", label: "Agility", value: 2, unit: "" },
-    { statKey: "Dexterity", label: "Dexterity", value: 2, unit: "" },
-    { statKey: "Will", label: "Will", value: 2, unit: "" },
-    { statKey: "Knowledge", label: "Knowledge", value: 2, unit: "" },
-    { statKey: "Resourcefulness", label: "Resourcefulness", value: 2, unit: "" },
-  ],
-  Id_Perk_ManaFold: [
-    { statKey: "SpellCastingSpeed", label: "Spell Casting Speed", value: -15, unit: "%" },
-  ],
-  Id_Perk_DemonArmor: [
-    { statKey: "SpellCastingSpeed", label: "Spell Casting Speed", value: -10, unit: "%" },
-  ],
-  Id_Perk_InfernalPledge: [
-    { statKey: "DemonDamageBonus", label: "Demon Damage Bonus", value: 15, unit: "%" },
-    { statKey: "DemonDamageReduction", label: "Demon Damage Reduction", value: 10, unit: "%" },
-    { statKey: "UndeadDamageBonus", label: "Undead Damage Bonus", value: 15, unit: "%" },
-    { statKey: "UndeadDamageReduction", label: "Undead Damage Reduction", value: 10, unit: "%" },
-  ],
-  Id_Perk_Malice: [
-    { statKey: "WillMod", label: "Will Bonus", value: 15, unit: "%" },
-  ],
-  Id_Perk_Vampirism: [
-    { statKey: "MagicalHealingBonus", label: "Magical Healing Bonus", value: 20, unit: "%" },
-  ],
-  Id_Perk_QuickChant: [
-    { statKey: "SpellCastingSpeed", label: "Spell Casting Speed", value: 15, unit: "%" },
-  ],
-  Id_Perk_ManaSurge: [
-    { statKey: "MagicalDamageBonus", label: "Magical Damage Bonus", value: 10, unit: "%" },
-  ],
-  Id_Perk_Sage: [
-    { statKey: "KnowledgeMod", label: "Knowledge Bonus", value: 15, unit: "%" },
-  ],
-  Id_Perk_SpellOverload: [
-    { statKey: "KnowledgeMod", label: "Knowledge Reduction", value: -20, unit: "%" },
-  ],
-  Id_Perk_AdvancedHealer: [
-    { statKey: "MagicalHealing", label: "Magical Healing", value: 5, unit: "" },
-  ],
-  Id_Perk_UndeadSlaying: [
-    { statKey: "UndeadDamageBonus", label: "Undead Damage Bonus", value: 20, unit: "%" },
-  ],
-  Id_Perk_Fermata: [
-    { statKey: "Resourcefulness", label: "Resourcefulness", value: 5, unit: "" },
-  ],
-  Id_Perk_LoreMastery: [
-    { statKey: "RegularInteractionSpeed", label: "Regular Interaction Speed", value: 30, unit: "%" },
-    { statKey: "MemoryCapacity", label: "Memory Capacity", value: 5, unit: "" },
-  ],
-  Id_Perk_WanderersLuck: [
-    { statKey: "Luck", label: "Luck", value: 100, unit: "" },
-  ],
-  Id_Perk_Robust: [
-    { statKey: "MaxHealthBonus", label: "Max Health Bonus", value: 8, unit: "%" },
-  ],
-  Id_Perk_IronWill: [
-    { statKey: "MagicResistance", label: "Magic Resistance", value: 75, unit: "" },
-  ],
-  Id_Perk_Savage: [
-    { statKey: "PhysicalDamageBonus", label: "Physical Damage Bonus", value: 10, unit: "%" },
-    { statKey: "ImpactPower", label: "Impact Power", value: 1, unit: "" },
-  ],
-};
-const BUILDER_PERK_SUMMARIES = {
-  Id_Perk_Jokester: "All Attributes +2",
-  Id_Perk_WeaponMastery: "Allows all weapons",
-  Id_Perk_DemonArmor: "Spell Casting Speed -10%, allows plate armor",
-  Id_Perk_IronWill: "Magic Resistance +75, Magical Damage Reduction cap 75%",
-  Id_Perk_Savage: "Physical Damage Bonus 10%, Impact Power 1 when not wearing chest armor",
-  Id_Perk_SpearProficiency: "Allows Spear",
-};
-const PERK_ICON_ALIASES = {
-  Id_Perk_ComboAttack: "CombinationAttack",
-  Id_Perk_HideMastery: "HideExpert",
-};
-const BUILDER_DEFAULTS = {
-  headshotDamageBonus: 150,
-  primaryUnarmedDamage: 8,
-  primaryUnarmedImpactPower: 1,
-};
-const BUILDER_MAX_HEALTH_BASE_RATING = 15;
-const DAMAGE_TARGET_DEFAULTS = {
-  name: "Training Dummy",
-  weaponSet: "1",
-  hand: "primary",
-  hitLocation: "torso",
-  pdr: -22,
-  mdr: -22,
-  comboMultiplier: 0,
-};
-const DAMAGE_HIT_LOCATIONS = [
-  { value: "head", label: "Head", multiplier: null },
-  { value: "torso", label: "Torso", multiplier: 1 },
-  { value: "arms", label: "Arms", multiplier: 0.7 },
-  { value: "hands", label: "Hands", multiplier: 0.7 },
-  { value: "legs", label: "Legs", multiplier: 0.7 },
-  { value: "feet", label: "Feet", multiplier: 0.7 },
-];
-const BUILDER_SLOTS = [
-  { id: "weapon1Primary", label: "Primary", marker: "1", accepts: ["Primary"], area: "weapon1Primary", kind: "weapon", weaponSet: "1", weaponRole: "primary" },
-  { id: "weapon1Secondary", label: "Secondary", accepts: ["Secondary"], area: "weapon1Secondary", kind: "weapon", weaponSet: "1", weaponRole: "secondary" },
-  { id: "weapon2Primary", label: "Primary", marker: "2", accepts: ["Primary"], area: "weapon2Primary", kind: "weapon", weaponSet: "2", weaponRole: "primary" },
-  { id: "weapon2Secondary", label: "Secondary", accepts: ["Secondary"], area: "weapon2Secondary", kind: "weapon", weaponSet: "2", weaponRole: "secondary" },
-  { id: "head", label: "Head", accepts: ["Head"], area: "head", kind: "medium" },
-  { id: "chest", label: "Chest", accepts: ["Chest"], area: "chest", kind: "tall" },
-  { id: "hands", label: "Hands", accepts: ["Hands"], area: "hands", kind: "medium" },
-  { id: "legs", label: "Legs", accepts: ["Legs", "Leg"], area: "legs", kind: "tall" },
-  { id: "feet", label: "Feet", accepts: ["Foot", "Feet"], area: "feet", kind: "medium" },
-  { id: "cloak", label: "Cloak", accepts: ["Back", "Cloak"], area: "cloak", kind: "medium" },
-  { id: "necklace", label: "Necklace", accepts: ["Necklace"], area: "necklace", kind: "small" },
-  { id: "ring1", label: "Ring 1", accepts: ["Ring"], area: "ring1", kind: "small" },
-  { id: "ring2", label: "Ring 2", accepts: ["Ring"], area: "ring2", kind: "small" },
-];
-const BUILDER_WEAPON_GRID = {
-  weapon1Primary: { column: 1, row: 1 },
-  weapon1Secondary: { column: 3, row: 1 },
-  weapon2Primary: { column: 11, row: 1 },
-  weapon2Secondary: { column: 13, row: 1 },
-};
-const BUILDER_STAT_ROWS = [
-  { key: "Strength", label: "Strength" },
-  { key: "Vigor", label: "Vigor" },
-  { key: "Agility", label: "Agility" },
-  { key: "Dexterity", label: "Dexterity" },
-  { key: "Will", label: "Will" },
-  { key: "Knowledge", label: "Knowledge" },
-  { key: "Resourcefulness", label: "Resourcefulness" },
-  { key: "Health", label: "Health" },
-  { key: "PhysicalHealing", label: "Physical Healing" },
-  { key: "MagicalHealing", label: "Magical Healing" },
-  { key: "MemoryCapacity", label: "Memory Capacity" },
-  { key: "MemorySpellPayload", label: "Memory Spell Payload" },
-  { key: "MemoryMusicPayload", label: "Memory Music Payload" },
-  { key: "UtilityEffectiveness", label: "Utility Effectiveness" },
-  { key: "Luck", label: "Luck" },
-  { key: "ArmorRating", label: "Armor Rating" },
-  { key: "MagicResistance", label: "Magic Resistance" },
-  { key: "PhysicalWeaponDamage", label: "Physical Weapon Damage", slot: "activePrimaryWeapon", sourceKey: "PhysicalWeaponDamage" },
-  { key: "MagicalWeaponDamage", label: "Magical Weapon Damage", slot: "activePrimaryWeapon", sourceKey: "MagicalWeaponDamage" },
-  { key: "MagicalDamage", label: "Magical Damage", slot: "activePrimaryWeapon", sourceKey: "MagicalDamage" },
-  { key: "PhysicalDamageAdd", label: "Additional Physical Damage" },
-  { key: "MagicalDamageAdd", label: "Additional Magical Damage" },
-  { key: "AdditionalWeaponDamage", label: "Additional Weapon Damage" },
-  { key: "PhysicalDamageTrue", label: "True Physical Damage" },
-  { key: "MagicalDamageTrue", label: "True Magical Damage" },
-  { key: "PhysicalPower", label: "Physical Power" },
-  { key: "MagicalPower", label: "Magical Power" },
-  { key: "ImpactPower", label: "Impact Power", slot: "activePrimaryWeapon", sourceKey: "ImpactPower" },
-  { key: "HealthRecoveryBonus", label: "Health Recovery Bonus", unit: "%" },
-  { key: "SpellRecoveryBonus", label: "Spell Recovery Bonus", unit: "%" },
-  { key: "MoveSpeed", label: "Move Speed" },
-  { key: "MoveSpeedBonus", label: "Move Speed Bonus", unit: "%" },
-  { key: "ActionSpeed", label: "Action Speed", unit: "%" },
-  { key: "ManualDexterity", label: "Manual Dexterity", unit: "%" },
-  { key: "SpellCastingSpeed", label: "Spell Casting Speed", unit: "%" },
-  { key: "EquipSpeed", label: "Equip Speed", unit: "%" },
-  { key: "RegularInteractionSpeed", label: "Regular Interaction Speed", unit: "%" },
-  { key: "MagicalInteractionSpeed", label: "Magical Interaction Speed", unit: "%" },
-  { key: "Persuasiveness", label: "Persuasiveness" },
-  { key: "BuffDurationBonus", label: "Buff Duration Bonus", unit: "%" },
-  { key: "DebuffDurationBonus", label: "Debuff Duration Bonus", unit: "%" },
-  { key: "CooldownReductionBonus", label: "Cooldown Reduction Bonus", unit: "%" },
-  { key: "MaxHealthBonus", label: "Max Health Bonus", unit: "%" },
-  { key: "MemoryCapacityBonus", label: "Memory Capacity Bonus", unit: "%" },
-  { key: "ArmorPenetration", label: "Armor Penetration", unit: "%" },
-  { key: "MagicPenetration", label: "Magic Penetration", unit: "%" },
-  { key: "HeadshotReduction", label: "Headshot Damage Reduction", unit: "%" },
-  { key: "ProjectileReduction", label: "Projectile Damage Reduction", unit: "%" },
-  { key: "PhysicalArmorReduction", label: "Physical Armor Reduction", unit: "%" },
-  { key: "PhysicalArmorReductionFromArmor", label: "From Armor Rating", indent: true, unit: "%" },
-  { key: "PhysicalArmorReductionBonus", label: "From Bonuses", indent: true, unit: "%" },
-  { key: "MagicalDamageReduction", label: "Magical Damage Reduction", unit: "%" },
-  { key: "MagicalDamageReductionFromResistance", label: "From Magic Resistance", indent: true, unit: "%" },
-  { key: "MagicalDamageReductionBonus", label: "From Bonuses", indent: true, unit: "%" },
-  { key: "UndeadDamageReduction", label: "Undead Damage Reduction", unit: "%" },
-  { key: "DemonDamageReduction", label: "Demon Damage Reduction", unit: "%" },
-  { key: "HeadshotDamageBonus", label: "Headshot Damage Bonus", unit: "%" },
-  { key: "PhysicalDamageBonus", label: "Physical Power Bonus", unit: "%" },
-  { key: "PhysicalDamageBonusFromPower", label: "From Physical Power", indent: true, unit: "%" },
-  { key: "PhysicalDamageBonusFromBonuses", label: "From Bonuses", indent: true, unit: "%" },
-  { key: "MagicalDamageBonus", label: "Magic Power Bonus", unit: "%" },
-  { key: "MagicalDamageBonusFromPower", label: "From Magic Power", indent: true, unit: "%" },
-  { key: "MagicalDamageBonusFromBonuses", label: "From Bonuses", indent: true, unit: "%" },
-  { key: "UndeadDamageBonus", label: "Undead Damage Bonus", unit: "%" },
-  { key: "DemonDamageBonus", label: "Demon Damage Bonus", unit: "%" },
-];
-const BUILDER_STAT_ORDER = BUILDER_STAT_ROWS.map((row) => row.key);
-const STAT_CONTRIBUTION_KEYS = {
-  PhysicalWeaponDamage: ["PhysicalWeaponDamage", "AdditionalWeaponDamage", "PhysicalDamageBase"],
-};
-const DEFAULT_SORT_DIRECTION = {
-  sources: "desc",
-  items: "desc",
-};
-const DEFAULT_DIFFICULTY = "High Roller";
-const LUCK_500_SCALARS = [0.5, 0.5, 0.75, 1.0, 1.752, 2.584, 3.28, 3.705, 4.213];
-const GRADE4_ANCHORS = [
-  [0, 1.000],
-  [13, 1.039],
-  [30, 1.087],
-  [50, 1.143],
-  [75, 1.208],
-  [100, 1.270],
-  [125, 1.329],
-  [157, 1.398],
-  [200, 1.481],
-  [250, 1.563],
-  [300, 1.631],
-  [350, 1.684],
-  [400, 1.721],
-  [450, 1.744],
-  [500, 1.752],
-];
+const state = createAppState();
 
 const $ = (id) => document.getElementById(id);
 let builderShareStatusTimer = 0;
-const termsCache = new Map();
 const secondaryOptionsCache = new WeakMap();
 const emptySecondaryOptions = { options: [], byId: new Map() };
 const scheduledRenders = new Map();
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function terms(value) {
-  const text = String(value || "");
-  const cached = termsCache.get(text);
-  if (cached) return cached;
-  const tokens = text
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .map((term) => term.trim())
-    .filter(Boolean);
-  if (termsCache.size >= TERMS_CACHE_LIMIT) termsCache.clear();
-  termsCache.set(text, tokens);
-  return tokens;
-}
-
-function searchGroupTokens(groups) {
-  return groups.map((group) => terms((Array.isArray(group) ? group : [group]).filter(Boolean).join(" ")));
-}
-
-function buildSearchIndex(rows, groupFn) {
-  return new Map(rows.map((row) => [row, searchGroupTokens(groupFn(row))]));
-}
-
-function matchesSearchParts(parts, haystack) {
-  return parts.every((part) => haystack.some((textPart) => textPart.startsWith(part)));
-}
-
-function matchesSearchGroups(parts, groups) {
-  if (!parts.length) return true;
-  return (groups || []).some((group) => matchesSearchParts(parts, group));
-}
+let routeSyncTimer = 0;
+let routeApplying = false;
+let toastTimer = 0;
+let kitShareCodecPromise = null;
+let kitPhotoPromise = null;
 
 function scheduleRender(key, renderFn) {
   if (scheduledRenders.has(key)) return;
@@ -367,16 +65,6 @@ function scheduleRender(key, renderFn) {
     scheduledRenders.delete(key);
     renderFn();
   }));
-}
-
-function sourceKey(source, kind) {
-  return `${kind}::${source}`;
-}
-
-function clampLuck(value) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.max(0, Math.min(500, parsed));
 }
 
 function luckScalar(luck, grade) {
@@ -407,6 +95,192 @@ function gradeProbabilities(weights, luck) {
 
 function percent(value) {
   return `${(Number(value || 0) * 100).toFixed(4)}%`;
+}
+
+function showToast(message) {
+  const region = $("toastRegion");
+  if (!region) return;
+  window.clearTimeout(toastTimer);
+  region.innerHTML = `<div class="toast">${escapeHtml(message)}</div>`;
+  toastTimer = window.setTimeout(() => {
+    region.innerHTML = "";
+  }, 2600);
+}
+
+function currentRouteState() {
+  return {
+    view: state.activeTab,
+    luck: state.currentLuck,
+    itemSearch: $("itemSearch")?.value || "",
+    itemRarity: $("itemRarity")?.value || "All",
+    itemCategory: $("itemCategory")?.value || "All",
+    itemMap: $("itemMap")?.value || "All",
+    itemDiff: $("itemDiff")?.value || DEFAULT_DIFFICULTY,
+    sourceSearch: $("sourceSearch")?.value || "",
+    sourceMap: $("sourceMap")?.value || "All",
+    sourceDiff: $("sourceDiff")?.value || DEFAULT_DIFFICULTY,
+    sourceKind: $("sourceKind")?.value || "All",
+  };
+}
+
+function currentDetailRoute() {
+  if (!state.activeDetail?.routeRow) return null;
+  return { type: state.activeDetail.type, row: state.activeDetail.routeRow };
+}
+
+function updateDocumentMeta(detail = null) {
+  const title = detail?.row
+    ? `${detail.row.item || detail.row.source} | DarkLoot`
+    : state.activeTab === "builder"
+      ? "Kit Builder | DarkLoot"
+      : state.activeTab === "sources"
+        ? "Loot Sources | DarkLoot"
+        : state.activeTab === "favorites"
+          ? "Favorites | DarkLoot"
+          : "DarkLoot - Dark and Darker Loot Database & Kit Builder";
+  document.title = title;
+  const canonical = document.querySelector('link[rel="canonical"]');
+  if (canonical) canonical.href = new URL(window.location.pathname, window.location.origin).href;
+}
+
+function syncRoute({ replace = true, includeDetail = true } = {}) {
+  if (routeApplying) return;
+  const detail = includeDetail ? currentDetailRoute() : null;
+  const target = urlForState(currentRouteState(), detail);
+  const current = `${window.location.pathname}${window.location.search}`;
+  if (target !== current) history[replace ? "replaceState" : "pushState"]({ darkloot: true }, "", target);
+  updateDocumentMeta(detail);
+}
+
+function scheduleRouteSync() {
+  if (routeApplying) return;
+  window.clearTimeout(routeSyncTimer);
+  routeSyncTimer = window.setTimeout(() => syncRoute({ replace: true }), 120);
+}
+
+function setRouteControl(id, value) {
+  const control = $(id);
+  if (!control || value == null) return;
+  if (control.tagName === "SELECT") {
+    if ([...control.options].some((option) => option.value === value)) control.value = value;
+    return;
+  }
+  control.value = value;
+}
+
+function applyRouteControls(route) {
+  routeApplying = true;
+  state.currentLuck = clampLuck(route.luck || state.manifest?.luck || 0);
+  setRouteControl("itemSearch", route.itemSearch);
+  setRouteControl("itemRarity", route.itemRarity);
+  setRouteControl("itemCategory", route.itemCategory);
+  setRouteControl("itemDiff", route.itemDiff);
+  syncMapSelectForDifficulty("itemMap", "itemDiff");
+  setRouteControl("itemMap", route.itemMap);
+  setRouteControl("sourceSearch", route.sourceSearch);
+  setRouteControl("sourceDiff", route.sourceDiff);
+  syncMapSelectForDifficulty("sourceMap", "sourceDiff");
+  setRouteControl("sourceMap", route.sourceMap);
+  setRouteControl("sourceKind", route.sourceKind);
+  syncLuckInputs();
+  setActiveTab(route.view, { render: false, keepConfirmation: true, syncRoute: false });
+  routeApplying = false;
+}
+
+function itemForRoute(key) {
+  return state.itemByAsset.get(key)
+    || state.items.find((row) => detailSlug(row.detailPath) === key)
+    || null;
+}
+
+function sourceForRoute(key) {
+  return state.sourceByKey.get(key)
+    || state.sources.find((row) => detailSlug(row.detailPath) === key)
+    || null;
+}
+
+async function openRouteDetail(route) {
+  if (route.detailType === "item") {
+    const item = itemForRoute(route.detailKey);
+    if (item) await openItem(item.itemAsset, { syncRoute: false });
+  }
+  if (route.detailType === "source") {
+    const source = sourceForRoute(route.detailKey);
+    if (source) await openSource(sourceKey(source.source, source.sourceKind), { syncRoute: false });
+  }
+  updateDocumentMeta(currentDetailRoute());
+}
+
+async function copyCurrentUrl(message = "Link copied") {
+  syncRoute({ replace: true });
+  await copyText(window.location.href);
+  showToast(message);
+}
+
+function closeGlobalSearch() {
+  const panel = $("globalSearchPanel");
+  const input = $("globalSearch");
+  if (panel) panel.hidden = true;
+  input?.setAttribute("aria-expanded", "false");
+}
+
+function globalSourceMark(row) {
+  const initials = String(row.source || "?")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+  return `<span class="global-source-mark" aria-hidden="true">${escapeHtml(initials)}</span>`;
+}
+
+function renderGlobalSearch() {
+  const input = $("globalSearch");
+  const panel = $("globalSearchPanel");
+  if (!input || !panel) return;
+  state.globalSearch = input.value.trim();
+  const search = terms(state.globalSearch);
+  if (!search.length || !state.items.length) {
+    closeGlobalSearch();
+    return;
+  }
+  const items = state.items
+    .filter((row) => matchesSearchGroups(search, state.itemSearchIndex.get(row)))
+    .slice(0, 6);
+  const sources = state.sources
+    .filter((row) => matchesSearchGroups(search, state.sourceSearchIndex.get(row)))
+    .slice(0, 6);
+  const itemResults = items.map((row) => `
+    <button class="global-result" type="button" data-open-item="${escapeHtml(row.itemAsset)}" role="option">
+      ${itemThumbnail(row)}
+      <span><strong>${escapeHtml(row.item)}</strong><small>${escapeHtml(row.category)} | ${row.sourceCount.toLocaleString()} sources</small></span>
+      ${rarity(row.rarity)}
+    </button>
+  `).join("");
+  const sourceResults = sources.map((row) => `
+    <button class="global-result" type="button" data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}" role="option">
+      ${globalSourceMark(row)}
+      <span><strong>${escapeHtml(row.source)}</strong><small>${escapeHtml(row.sourceKind)} | ${Number(row.itemCount || 0).toLocaleString()} items</small></span>
+      <span class="global-result-arrow" aria-hidden="true">&gt;</span>
+    </button>
+  `).join("");
+  panel.innerHTML = items.length || sources.length
+    ? `${items.length ? `<div class="global-result-group"><span class="global-result-label">Items</span>${itemResults}</div>` : ""}${sources.length ? `<div class="global-result-group"><span class="global-result-label">Sources</span>${sourceResults}</div>` : ""}`
+    : `<div class="message-row">No items or sources match that search.</div>`;
+  panel.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+}
+
+function showInfoPopover(button) {
+  document.querySelector(".info-popover")?.remove();
+  const popover = document.createElement("div");
+  popover.className = "info-popover";
+  popover.textContent = "Luck changes grade probabilities. Per Item is the chance for one roll; Per Kill/Interaction combines every roll from that source.";
+  document.body.appendChild(popover);
+  const rect = button.getBoundingClientRect();
+  popover.style.left = `${Math.min(window.innerWidth - popover.offsetWidth - 12, Math.max(12, rect.left - popover.offsetWidth + rect.width))}px`;
+  popover.style.top = `${Math.min(window.innerHeight - popover.offsetHeight - 12, rect.bottom + 8)}px`;
 }
 
 function percentTextValue(value) {
@@ -483,10 +357,6 @@ function baseChanceValue(row) {
   );
 }
 
-function baseChanceText(row) {
-  return percent(baseChanceValue(row));
-}
-
 function syncLuckInputs() {
   const value = String(state.currentLuck);
   ["luckInput", "detailLuckInput"].forEach((id) => {
@@ -498,6 +368,14 @@ function syncLuckInputs() {
 function setCurrentLuck(value) {
   state.currentLuck = clampLuck(value);
   syncLuckInputs();
+  scheduleRouteSync();
+  if (state.currentLuck > 0) {
+    ensureRatesData().then(renderActiveDetail).catch((error) => {
+      console.error(error);
+      showToast("Luck data could not be loaded");
+    });
+    return;
+  }
   renderActiveDetail();
 }
 
@@ -530,49 +408,6 @@ function plainObject(value) {
 
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value ?? {}));
-}
-
-function base64UrlEncodeBytes(bytes) {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
-  }
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-function base64UrlDecodeBytes(value) {
-  const normalized = String(value || "").replaceAll("-", "+").replaceAll("_", "/");
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-  const binary = atob(padded);
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-}
-
-function base64UrlEncode(text) {
-  return base64UrlEncodeBytes(new TextEncoder().encode(text));
-}
-
-function base64UrlDecode(value) {
-  const bytes = base64UrlDecodeBytes(value);
-  return new TextDecoder().decode(bytes);
-}
-
-async function compressedSharedKitPayload(text) {
-  if (!globalThis.CompressionStream || !globalThis.DecompressionStream) return "";
-  try {
-    const stream = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
-    const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
-    return base64UrlEncodeBytes(bytes);
-  } catch {
-    return "";
-  }
-}
-
-async function decompressedSharedKitPayload(value) {
-  if (!globalThis.DecompressionStream) throw new Error("Compressed kit links are not supported in this browser.");
-  const bytes = base64UrlDecodeBytes(String(value || ""));
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-  return new Response(stream).text();
 }
 
 function savedKitId() {
@@ -639,445 +474,33 @@ function renderBuilderShareStatus() {
   if (status) status.textContent = state.builder.shareStatus || "";
 }
 
-function compactSlotIndex(slotId) {
-  const index = BUILDER_SLOTS.findIndex((slot) => slot.id === slotId);
-  return index >= 0 ? index : 0;
-}
-
-function sharedSlotId(value) {
-  if (typeof value === "number" && Number.isInteger(value)) {
-    return BUILDER_SLOTS[value]?.id || "";
+async function kitShareCodec() {
+  if (!kitShareCodecPromise) {
+    kitShareCodecPromise = import("./kit-share.js").then(({ createKitShareCodec }) => createKitShareCodec({
+      slots: BUILDER_SLOTS,
+      state,
+      itemSlotId,
+      defaultPrimaryValuesForItem,
+      clampStatEntryValue,
+      secondaryOptionsForItem,
+      secondaryOptionForItem,
+      defaultBonusesForItem,
+      normalizeSavedKit,
+      defaultSavedKitName,
+    }));
   }
-  return String(value || "");
-}
-
-function stripKnownPrefix(value, prefix) {
-  const text = String(value || "");
-  return text.startsWith(prefix) ? text.slice(prefix.length) : text;
-}
-
-function restoreKnownPrefix(value, prefix) {
-  const text = String(value || "");
-  if (!text || text.startsWith(prefix)) return text;
-  return `${prefix}${text}`;
-}
-
-function primaryValuesMatchDefaults(asset, values) {
-  const item = state.kit.itemByAsset.get(asset);
-  const defaults = defaultPrimaryValuesForItem(item);
-  return Array.isArray(values)
-    && values.length === defaults.length
-    && values.every((value, index) => String(value) === String(defaults[index]));
-}
-
-function compactSharedKit(kit) {
-  const equipped = BUILDER_SLOTS
-    .map((slot, index) => {
-      const asset = kit.equipped?.[slot.id];
-      return typeof asset === "string" && asset ? [index, stripKnownPrefix(asset, SHARED_ITEM_PREFIX)] : null;
-    })
-    .filter(Boolean);
-  const equippedBySlot = new Map(
-    equipped.map(([index, asset]) => [BUILDER_SLOTS[index]?.id, restoreKnownPrefix(asset, SHARED_ITEM_PREFIX)]),
-  );
-  const primaryValues = Object.entries(plainObject(kit.primaryValues))
-    .map(([slotId, values]) => {
-      const asset = equippedBySlot.get(slotId);
-      if (!asset || !Array.isArray(values) || !values.length || primaryValuesMatchDefaults(asset, values)) return null;
-      return [compactSlotIndex(slotId), values];
-    })
-    .filter(Boolean);
-  const bonuses = [];
-  Object.entries(plainObject(kit.bonuses)).forEach(([slotId, entries]) => {
-    if (!equippedBySlot.has(slotId) || !Array.isArray(entries)) return;
-    entries.forEach((entry, index) => {
-      if (!entry?.propertyId) return;
-      const item = state.kit.itemByAsset.get(equippedBySlot.get(slotId));
-      const poolId = entry.poolId || item?.secondaryPoolIds?.[index];
-      const option = secondaryOptionForItem(item, poolId, entry.propertyId);
-      const row = [compactSlotIndex(slotId), index, stripKnownPrefix(entry.propertyId, SHARED_PROPERTY_PREFIX)];
-      const defaultValue = Number(option?.max ?? option?.min ?? 0);
-      const selectedValue = entry.value === "" || entry.value === undefined || entry.value === null
-        ? defaultValue
-        : clampStatEntryValue(option, entry.value);
-      if (Number.isFinite(selectedValue) && Math.abs(selectedValue - defaultValue) > 0.0001) row.push(selectedValue);
-      bonuses.push(row);
-    });
-  });
-  return [
-    4,
-    kit.name || "",
-    kit.characterId || "",
-    kit.activeWeaponSet === "2" ? 2 : 1,
-    compactSlotIndex(kit.selectedSlot),
-    equipped,
-    primaryValues,
-    bonuses,
-    Array.isArray(kit.perks) ? kit.perks.filter(Boolean).map((perkId) => stripKnownPrefix(perkId, SHARED_PERK_PREFIX)) : [],
-    stripKnownPrefix(kit.skinId || "", SHARED_SKIN_PREFIX),
-  ];
-}
-
-function expandLegacyCompactSharedKit(payload) {
-  if (!Array.isArray(payload) || payload[0] !== 2) return null;
-  const [, name, characterId, activeWeaponSet, selectedSlot, equippedRows = [], primaryRows = [], bonusRows = [], perks = [], skinId = ""] = payload;
-  const equipped = {};
-  (Array.isArray(equippedRows) ? equippedRows : []).forEach((row) => {
-    const slotId = sharedSlotId(row?.[0]);
-    const asset = row?.[1];
-    if (slotId && typeof asset === "string") equipped[slotId] = asset;
-  });
-  const primaryValues = {};
-  (Array.isArray(primaryRows) ? primaryRows : []).forEach((row) => {
-    const slotId = sharedSlotId(row?.[0]);
-    const values = row?.[1];
-    if (slotId && Array.isArray(values) && values.length) primaryValues[slotId] = values;
-  });
-  const bonuses = {};
-  (Array.isArray(bonusRows) ? bonusRows : []).forEach((row) => {
-    const slotId = sharedSlotId(row?.[0]);
-    const index = Number(row?.[1]);
-    const propertyId = row?.[2];
-    if (!slotId || !Number.isInteger(index) || !propertyId) return;
-    if (!Array.isArray(bonuses[slotId])) bonuses[slotId] = [];
-    bonuses[slotId][index] = {
-      propertyId: String(propertyId),
-      value: row.length > 3 ? row[3] : "",
-    };
-  });
-  return normalizeSavedKit({
-    name,
-    characterId,
-    activeWeaponSet: String(activeWeaponSet || "1"),
-    selectedSlot: sharedSlotId(selectedSlot) || "weapon1Primary",
-    equipped,
-    primaryValues,
-    bonuses,
-    perks: Array.isArray(perks) ? perks : [],
-  });
-}
-
-function expandCompactSharedKit(payload) {
-  if (!Array.isArray(payload)) return null;
-  if (payload[0] === 2) return expandLegacyCompactSharedKit(payload);
-  if (payload[0] !== 4) return null;
-  const [, name, characterId, activeWeaponSet, selectedSlot, equippedRows = [], primaryRows = [], bonusRows = [], perks = [], skinId = ""] = payload;
-  const equipped = {};
-  (Array.isArray(equippedRows) ? equippedRows : []).forEach((row) => {
-    const slotId = sharedSlotId(row?.[0]);
-    const asset = restoreKnownPrefix(row?.[1], SHARED_ITEM_PREFIX);
-    if (slotId && asset) equipped[slotId] = asset;
-  });
-  const primaryValues = {};
-  (Array.isArray(primaryRows) ? primaryRows : []).forEach((row) => {
-    const slotId = sharedSlotId(row?.[0]);
-    const values = row?.[1];
-    if (slotId && Array.isArray(values) && values.length) primaryValues[slotId] = values;
-  });
-  const bonuses = {};
-  (Array.isArray(bonusRows) ? bonusRows : []).forEach((row) => {
-    const slotId = sharedSlotId(row?.[0]);
-    const index = Number(row?.[1]);
-    const propertyId = restoreKnownPrefix(row?.[2], SHARED_PROPERTY_PREFIX);
-    if (!slotId || !Number.isInteger(index) || !propertyId) return;
-    if (!Array.isArray(bonuses[slotId])) bonuses[slotId] = [];
-    bonuses[slotId][index] = {
-      propertyId,
-      value: row.length > 3 ? row[3] : "",
-    };
-  });
-  return normalizeSavedKit({
-    name,
-    characterId,
-    activeWeaponSet: String(activeWeaponSet || "1"),
-    selectedSlot: sharedSlotId(selectedSlot) || "weapon1Primary",
-    equipped,
-    primaryValues,
-    bonuses,
-    perks: Array.isArray(perks) ? perks.map((perkId) => restoreKnownPrefix(perkId, SHARED_PERK_PREFIX)) : [],
-    skinId: restoreKnownPrefix(skinId, SHARED_SKIN_PREFIX),
-  });
-}
-
-function sharedKitDictionary() {
-  const propertyIds = new Set(Object.keys(state.kit.propertyTypes || {}));
-  Object.values(state.kit.secondaryPools || {}).forEach((pool) => {
-    (pool?.options || []).forEach((option) => {
-      if (option?.propertyId) propertyIds.add(option.propertyId);
-    });
-  });
-  const sortedPropertyIds = [...propertyIds].sort();
-  const slotItemIds = new Map();
-  const slotItemIndexById = new Map();
-  BUILDER_SLOTS.forEach((slot) => {
-    const items = state.kit.items
-      .filter((item) => slot.accepts.includes(itemSlotId(item)))
-      .map((item) => item.asset);
-    slotItemIds.set(slot.id, items);
-    slotItemIndexById.set(slot.id, new Map(items.map((asset, index) => [asset, index])));
-  });
-  return {
-    itemIds: state.kit.items.map((item) => item.asset),
-    itemIndexById: new Map(state.kit.items.map((item, index) => [item.asset, index])),
-    slotItemIds,
-    slotItemIndexById,
-    characterIds: state.kit.characters.map((character) => character.id),
-    characterIndexById: new Map(state.kit.characters.map((character, index) => [character.id, index])),
-    propertyIds: sortedPropertyIds,
-    propertyIndexById: new Map(sortedPropertyIds.map((propertyId, index) => [propertyId, index])),
-    perkIds: state.kit.perks.map((perk) => perk.id),
-    perkIndexById: new Map(state.kit.perks.map((perk, index) => [perk.id, index])),
-    skinIds: state.kit.characterSkins.map((skin) => skin.id),
-    skinIndexById: new Map(state.kit.characterSkins.map((skin, index) => [skin.id, index])),
-  };
-}
-
-function writeSharedVarint(bytes, value) {
-  let next = Math.max(0, Math.floor(Number(value) || 0));
-  while (next >= 0x80) {
-    bytes.push((next & 0x7f) | 0x80);
-    next = Math.floor(next / 0x80);
-  }
-  bytes.push(next);
-}
-
-function readSharedVarint(reader) {
-  let value = 0;
-  let shift = 0;
-  while (reader.offset < reader.bytes.length) {
-    const byte = reader.bytes[reader.offset];
-    reader.offset += 1;
-    value += (byte & 0x7f) * (2 ** shift);
-    if ((byte & 0x80) === 0) return value;
-    shift += 7;
-  }
-  throw new Error("Invalid shared kit payload");
-}
-
-function writeSharedSigned(bytes, value) {
-  const next = Math.round(Number(value) || 0);
-  writeSharedVarint(bytes, next < 0 ? ((Math.abs(next) * 2) - 1) : next * 2);
-}
-
-function readSharedSigned(reader) {
-  const value = readSharedVarint(reader);
-  return value % 2 ? -((value + 1) / 2) : value / 2;
-}
-
-function scaledSharedStatValue(value) {
-  return Math.round(Number(value || 0) * 10);
-}
-
-function unscaledSharedStatValue(value) {
-  return Math.abs(value % 10) < 0.0001 ? value / 10 : value / 10;
-}
-
-const SHARED_BINARY_HAS_CHARACTER = 1;
-const SHARED_BINARY_ACTIVE_SET_2 = 2;
-const SHARED_BINARY_HAS_SELECTED_SLOT = 4;
-const SHARED_BINARY_HAS_SKIN = 8;
-const SHARED_BINARY_HAS_EQUIPPED = 16;
-const SHARED_BINARY_HAS_PRIMARY = 32;
-const SHARED_BINARY_HAS_BONUSES = 64;
-const SHARED_BINARY_HAS_PERKS = 128;
-
-function encodeBinarySharedKit(kit) {
-  const dict = sharedKitDictionary();
-  const characterIndex = (dict.characterIndexById.get(kit.characterId) ?? -1) + 1;
-  const selectedSlotIndex = compactSlotIndex(kit.selectedSlot);
-  const skinIndex = (dict.skinIndexById.get(kit.skinId) ?? -1) + 1;
-  const equippedRows = BUILDER_SLOTS
-    .map((slot, slotIndex) => {
-      const itemIndex = dict.slotItemIndexById.get(slot.id)?.get(kit.equipped?.[slot.id]);
-      return Number.isInteger(itemIndex) ? [slotIndex, itemIndex] : null;
-    })
-    .filter(Boolean);
-
-  const primaryRows = [];
-  Object.entries(plainObject(kit.primaryValues)).forEach(([slotId, values]) => {
-    const asset = kit.equipped?.[slotId];
-    const item = state.kit.itemByAsset.get(asset);
-    const defaults = defaultPrimaryValuesForItem(item);
-    if (!item || !Array.isArray(values)) return;
-    values.forEach((value, index) => {
-      const entry = item.primary?.[index];
-      if (!entry) return;
-      const selectedValue = clampStatEntryValue(entry, value);
-      if (Math.abs(Number(selectedValue) - Number(defaults[index])) < 0.0001) return;
-      primaryRows.push([compactSlotIndex(slotId), index, scaledSharedStatValue(selectedValue)]);
-    });
-  });
-
-  const bonusRows = [];
-  Object.entries(plainObject(kit.bonuses)).forEach(([slotId, entries]) => {
-    const asset = kit.equipped?.[slotId];
-    const item = state.kit.itemByAsset.get(asset);
-    if (!item || !Array.isArray(entries)) return;
-    entries.forEach((entry, index) => {
-      if (!entry?.propertyId) return;
-      const poolId = entry.poolId || item.secondaryPoolIds?.[index];
-      const options = secondaryOptionsForItem(item, poolId);
-      const optionIndex = options.findIndex((optionRow) => optionRow.propertyId === entry.propertyId);
-      if (optionIndex < 0) return;
-      const option = secondaryOptionForItem(item, poolId, entry.propertyId);
-      const defaultValue = Number(option?.max ?? option?.min ?? 0);
-      const selectedValue = entry.value === "" || entry.value == null
-        ? defaultValue
-        : clampStatEntryValue(option, entry.value);
-      const valueChanged = Number.isFinite(selectedValue) && Math.abs(selectedValue - defaultValue) > 0.0001;
-      bonusRows.push([compactSlotIndex(slotId), index, optionIndex, valueChanged ? scaledSharedStatValue(selectedValue) : null]);
-    });
-  });
-
-  const perkRows = (Array.isArray(kit.perks) ? kit.perks : [])
-    .map((perkId) => dict.perkIndexById.get(perkId))
-    .filter((index) => Number.isInteger(index));
-
-  let flags = 0;
-  if (characterIndex > 0) flags |= SHARED_BINARY_HAS_CHARACTER;
-  if (kit.activeWeaponSet === "2") flags |= SHARED_BINARY_ACTIVE_SET_2;
-  if (selectedSlotIndex > 0) flags |= SHARED_BINARY_HAS_SELECTED_SLOT;
-  if (skinIndex > 0) flags |= SHARED_BINARY_HAS_SKIN;
-  if (equippedRows.length) flags |= SHARED_BINARY_HAS_EQUIPPED;
-  if (primaryRows.length) flags |= SHARED_BINARY_HAS_PRIMARY;
-  if (bonusRows.length) flags |= SHARED_BINARY_HAS_BONUSES;
-  if (perkRows.length) flags |= SHARED_BINARY_HAS_PERKS;
-
-  const bytes = [flags];
-  if (flags & SHARED_BINARY_HAS_CHARACTER) writeSharedVarint(bytes, characterIndex);
-  if (flags & SHARED_BINARY_HAS_SELECTED_SLOT) writeSharedVarint(bytes, selectedSlotIndex);
-  if (flags & SHARED_BINARY_HAS_SKIN) writeSharedVarint(bytes, skinIndex);
-
-  if (flags & SHARED_BINARY_HAS_EQUIPPED) {
-    writeSharedVarint(bytes, equippedRows.length);
-    equippedRows.forEach(([slotIndex, itemIndex]) => {
-      writeSharedVarint(bytes, slotIndex);
-      writeSharedVarint(bytes, itemIndex + 1);
-    });
-  }
-
-  if (flags & SHARED_BINARY_HAS_PRIMARY) {
-    writeSharedVarint(bytes, primaryRows.length);
-    primaryRows.forEach(([slotIndex, index, value]) => {
-      writeSharedVarint(bytes, slotIndex);
-      writeSharedVarint(bytes, index);
-      writeSharedSigned(bytes, value);
-    });
-  }
-
-  if (flags & SHARED_BINARY_HAS_BONUSES) {
-    writeSharedVarint(bytes, bonusRows.length);
-    bonusRows.forEach(([slotIndex, index, optionIndex, value]) => {
-      writeSharedVarint(bytes, slotIndex);
-      writeSharedVarint(bytes, index);
-      writeSharedVarint(bytes, (optionIndex * 2) + (value == null ? 0 : 1));
-      if (value != null) writeSharedSigned(bytes, value);
-    });
-  }
-
-  if (flags & SHARED_BINARY_HAS_PERKS) {
-    writeSharedVarint(bytes, perkRows.length);
-    perkRows.forEach((index) => writeSharedVarint(bytes, index + 1));
-  }
-  return `${SHARED_KIT_BINARY_PREFIX}${base64UrlEncodeBytes(Uint8Array.from(bytes))}`;
-}
-
-function decodeBinarySharedKit(value) {
-  const bytes = base64UrlDecodeBytes(String(value || "").slice(SHARED_KIT_BINARY_PREFIX.length));
-  const reader = { bytes, offset: 1 };
-  const dict = sharedKitDictionary();
-  const flags = bytes[0] || 0;
-  const characterId = (flags & SHARED_BINARY_HAS_CHARACTER)
-    ? dict.characterIds[readSharedVarint(reader) - 1] || ""
-    : "";
-  const activeWeaponSet = (flags & SHARED_BINARY_ACTIVE_SET_2) ? "2" : "1";
-  const selectedSlot = (flags & SHARED_BINARY_HAS_SELECTED_SLOT)
-    ? sharedSlotId(readSharedVarint(reader)) || "weapon1Primary"
-    : "weapon1Primary";
-  const skinId = (flags & SHARED_BINARY_HAS_SKIN)
-    ? dict.skinIds[readSharedVarint(reader) - 1] || ""
-    : "";
-  const equipped = {};
-
-  if (flags & SHARED_BINARY_HAS_EQUIPPED) {
-    const equippedCount = readSharedVarint(reader);
-    for (let row = 0; row < equippedCount; row += 1) {
-      const slotId = sharedSlotId(readSharedVarint(reader));
-      const asset = dict.slotItemIds.get(slotId)?.[readSharedVarint(reader) - 1];
-      if (slotId && asset) equipped[slotId] = asset;
-    }
-  }
-
-  const primaryValues = {};
-  if (flags & SHARED_BINARY_HAS_PRIMARY) {
-    const primaryCount = readSharedVarint(reader);
-    for (let row = 0; row < primaryCount; row += 1) {
-      const slotId = sharedSlotId(readSharedVarint(reader));
-      const index = readSharedVarint(reader);
-      const value = unscaledSharedStatValue(readSharedSigned(reader));
-      const item = state.kit.itemByAsset.get(equipped[slotId]);
-      if (!slotId || !item?.primary?.[index]) continue;
-      if (!Array.isArray(primaryValues[slotId])) primaryValues[slotId] = defaultPrimaryValuesForItem(item);
-      primaryValues[slotId][index] = clampStatEntryValue(item.primary[index], value);
-    }
-  }
-
-  const bonuses = {};
-  if (flags & SHARED_BINARY_HAS_BONUSES) {
-    const bonusCount = readSharedVarint(reader);
-    for (let row = 0; row < bonusCount; row += 1) {
-      const slotId = sharedSlotId(readSharedVarint(reader));
-      const index = readSharedVarint(reader);
-      const optionAndFlag = readSharedVarint(reader);
-      const optionIndex = Math.floor(optionAndFlag / 2);
-      const hasValue = (optionAndFlag % 2) === 1;
-      const item = state.kit.itemByAsset.get(equipped[slotId]);
-      const poolId = item?.secondaryPoolIds?.[index] || "";
-      const option = secondaryOptionsForItem(item, poolId)[optionIndex] || null;
-      const value = hasValue ? clampStatEntryValue(option, unscaledSharedStatValue(readSharedSigned(reader))) : Number(option?.max ?? option?.min ?? 0);
-      if (!slotId || !item || !option) continue;
-      if (!Array.isArray(bonuses[slotId])) bonuses[slotId] = defaultBonusesForItem(item);
-      bonuses[slotId][index] = { poolId, propertyId: option.propertyId, value };
-    }
-  }
-
-  const perks = [];
-  if (flags & SHARED_BINARY_HAS_PERKS) {
-    const perkCount = readSharedVarint(reader);
-    for (let row = 0; row < perkCount; row += 1) {
-      const perkId = dict.perkIds[readSharedVarint(reader) - 1];
-      if (perkId) perks.push(perkId);
-    }
-  }
-
-  return normalizeSavedKit({
-    name: defaultSavedKitName(),
-    characterId,
-    activeWeaponSet,
-    selectedSlot,
-    equipped,
-    primaryValues,
-    bonuses,
-    perks,
-    skinId,
-  });
-}
-
-async function sharedKitPayload(kit) {
-  return encodeBinarySharedKit(kit);
+  return kitShareCodecPromise;
 }
 
 async function kitShareUrl(kit) {
-  const url = new URL(window.location.href);
-  const payload = await sharedKitPayload(kit);
-  const host = url.host.replace(/^www\./i, "");
-  return `${host}/#${payload}`;
+  const codec = await kitShareCodec();
+  return `${window.location.origin}/#${codec.encode(kit)}`;
 }
 
 async function decodeSharedKitPayload(value) {
   try {
-    if (String(value || "").startsWith(SHARED_KIT_BINARY_PREFIX)) return decodeBinarySharedKit(value);
-    return null;
+    const codec = await kitShareCodec();
+    return codec.decode(value);
   } catch {
     return null;
   }
@@ -1085,8 +508,7 @@ async function decodeSharedKitPayload(value) {
 
 function sharedKitValueFromLocation() {
   const hash = window.location.hash.slice(1);
-  if (hash.startsWith(SHARED_KIT_BINARY_PREFIX)) return hash;
-  return "";
+  return hash.startsWith(SHARED_KIT_BINARY_PREFIX) ? hash : "";
 }
 
 async function copyText(value) {
@@ -1216,7 +638,7 @@ function applyBuilderKit(kit) {
     const asset = kit.equipped?.[slot.id];
     const item = state.kit.itemByAsset.get(asset);
     if (!item || !slot.accepts.includes(itemSlotId(item)) || !builderClassAllowsItem(item)) return;
-    if (slot.weaponRole === "secondary" && itemIsTwoHanded(state.kit.itemByAsset.get(equipped[pairedWeaponSlotId(slot.id)]))) return;
+    if (slot.weaponRole === "secondary" && isTwoHandedItem(state.kit.itemByAsset.get(equipped[pairedWeaponSlotId(slot.id)]))) return;
     equipped[slot.id] = asset;
     primaryValues[slot.id] = savedPrimaryValuesForItem(item, kit.primaryValues?.[slot.id]);
     bonuses[slot.id] = savedBonusesForItem(item, kit.bonuses?.[slot.id]);
@@ -1225,6 +647,7 @@ function applyBuilderKit(kit) {
   state.builder.equipped = equipped;
   state.builder.primaryValues = primaryValues;
   state.builder.bonuses = bonuses;
+  state.builder.selectedSlot = builderItemOwnerSlotId(state.builder.selectedSlot);
   state.builder.skinId = state.kit.skinById.has(kit.skinId) ? kit.skinId : "";
   const input = $("builderKitName");
   if (input) input.value = kit.name;
@@ -1389,10 +812,6 @@ function itemSlotId(item) {
   return item?.slot?.id || "";
 }
 
-function itemIsTwoHanded(item) {
-  return String(item?.hand || "").toLowerCase() === "twohanded";
-}
-
 function pairedWeaponSlotId(slotId) {
   const slot = builderSlotById(slotId);
   if (!slot.weaponSet) return "";
@@ -1403,11 +822,25 @@ function equippedBuilderItem(slotId) {
   return state.kit.itemByAsset.get(state.builder.equipped[slotId]);
 }
 
-function weaponSlotBlockReason(slotId) {
+function twoHandedOwnerSlotId(slotId) {
   const slot = builderSlotById(slotId);
   if (slot.weaponRole !== "secondary") return "";
-  const primary = equippedBuilderItem(pairedWeaponSlotId(slotId));
-  return itemIsTwoHanded(primary) ? `${primary.name} is two-handed` : "";
+  const primarySlotId = pairedWeaponSlotId(slotId);
+  return isTwoHandedItem(equippedBuilderItem(primarySlotId)) ? primarySlotId : "";
+}
+
+function builderItemOwnerSlotId(slotId) {
+  return twoHandedOwnerSlotId(slotId) || slotId;
+}
+
+function displayedBuilderItem(slotId) {
+  return equippedBuilderItem(builderItemOwnerSlotId(slotId));
+}
+
+function weaponSlotBlockReason(slotId) {
+  const ownerSlotId = twoHandedOwnerSlotId(slotId);
+  const primary = equippedBuilderItem(ownerSlotId);
+  return primary ? `${primary.name} occupies both weapon slots` : "";
 }
 
 function slotStatsAreActive(slotId) {
@@ -1466,7 +899,7 @@ function builderClassAllowsItem(item) {
   const allowed = item?.allowedClasses || [];
   const character = selectedBuilderCharacter();
   if (!allowed.length || !character) return true;
-  return allowed.some((entry) => entry.id === character.id) || builderPerkAllowsItem(item, character, allowed);
+  return allowed.includes(character.id) || builderPerkAllowsItem(item, character, allowed);
 }
 
 function pruneBuilderEquipmentForCurrentRules() {
@@ -1477,7 +910,7 @@ function pruneBuilderEquipmentForCurrentRules() {
     const asset = state.builder.equipped[slot.id];
     const item = state.kit.itemByAsset.get(asset);
     if (!item || !slot.accepts.includes(itemSlotId(item)) || !builderClassAllowsItem(item)) return;
-    if (slot.weaponRole === "secondary" && itemIsTwoHanded(state.kit.itemByAsset.get(equipped[pairedWeaponSlotId(slot.id)]))) return;
+    if (slot.weaponRole === "secondary" && isTwoHandedItem(state.kit.itemByAsset.get(equipped[pairedWeaponSlotId(slot.id)]))) return;
     equipped[slot.id] = asset;
     if (state.builder.primaryValues[slot.id]) primaryValues[slot.id] = state.builder.primaryValues[slot.id];
     if (state.builder.bonuses[slot.id]) bonuses[slot.id] = state.builder.bonuses[slot.id];
@@ -1485,10 +918,11 @@ function pruneBuilderEquipmentForCurrentRules() {
   state.builder.equipped = equipped;
   state.builder.primaryValues = primaryValues;
   state.builder.bonuses = bonuses;
+  state.builder.selectedSlot = builderItemOwnerSlotId(state.builder.selectedSlot);
 }
 
 function classNamesText(classes) {
-  const values = (classes || []).map((entry) => entry.name).filter(Boolean);
+  const values = (classes || []).filter(Boolean);
   return values.length ? values.join(", ") : "All classes";
 }
 
@@ -1515,7 +949,7 @@ function perkIconUrl(perk) {
 function iconImage(url, className, title) {
   return `
     <span class="${escapeHtml(className)}" title="${escapeHtml(title)}" aria-hidden="true">
-      <img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.hidden=true">
+      <img src="${escapeHtml(url)}" alt="" loading="lazy">
     </span>
   `;
 }
@@ -1601,7 +1035,7 @@ function selectedPrimaryEntry(slotId, index) {
 }
 
 function statIdentity(entry) {
-  return entry?.statKey || entry?.rawKey || entry?.propertyId || "";
+  return entry?.statKey || entry?.propertyId || "";
 }
 
 function primaryStatIdentitiesForItem(item) {
@@ -1617,8 +1051,6 @@ function bonusOptionSearchText(option) {
     bonusOptionText(option),
     statRange(option),
     option?.statKey,
-    option?.rawKey,
-    option?.propertyLabel,
     option?.propertyId,
   ].filter(Boolean).join(" ");
 }
@@ -1661,7 +1093,7 @@ function secondaryOptionForItem(item, poolId, propertyId) {
 function addBuilderStat(totals, entry, source) {
   const value = Number(entry?.value ?? entry?.max ?? entry?.min ?? 0);
   if (!Number.isFinite(value) || value === 0) return;
-  const key = entry.statKey || entry.rawKey || entry.propertyId || "Unknown";
+  const key = entry.statKey || entry.propertyId || "Unknown";
   const current = totals.get(key) || { key, label: entry.label || statLabel(key), value: 0, unit: entry.unit || "", sources: [] };
   current.value += value;
   current.sources.push({ source, value, label: entry.label || statLabel(key) });
@@ -1746,15 +1178,6 @@ function itemStatTotal(slotId, statKey) {
     key: statKey,
     value: directStatValue(totals, ...keys),
   };
-}
-
-function itemExactStatValue(slotId, statKey) {
-  const resolvedSlotId = resolveBuilderSlotId(slotId);
-  const item = state.kit.itemByAsset.get(state.builder.equipped[resolvedSlotId]);
-  if (!item || !statKey) return defaultSlotStatValue(resolvedSlotId, statKey);
-  const totals = new Map();
-  addItemStats(totals, resolvedSlotId, item);
-  return directStatValue(totals, statKey);
 }
 
 function activeWeaponStatValue(slotId, statKey) {
@@ -2144,7 +1567,7 @@ function damageHandOptions() {
   const weaponSet = damageWeaponSet();
   const primary = state.kit.itemByAsset.get(state.builder.equipped[`weapon${weaponSet}Primary`]);
   const secondary = state.kit.itemByAsset.get(state.builder.equipped[`weapon${weaponSet}Secondary`]);
-  const secondaryBlocked = itemIsTwoHanded(primary);
+  const secondaryBlocked = isTwoHandedItem(primary);
   return [
     {
       value: "primary",
@@ -2278,24 +1701,44 @@ async function loadData() {
   state.manifest = await fetchJson("/data/manifest.json", `${APP_BUILD_ID}-${Date.now()}`, { cache: "no-store" });
   state.currentLuck = clampLuck(state.manifest.luck ?? 0);
   const dataVersion = dataVersionToken();
-  const [items, sources, rates] = await Promise.all([
+  const [items, sources] = await Promise.all([
     fetchJson(state.manifest.files.items, dataVersion),
     fetchJson(state.manifest.files.sources, dataVersion),
-    fetchJson(state.manifest.files.rates, dataVersion),
   ]);
   state.items = items.rows || [];
   state.sources = sources.rows || [];
-  state.rateWeights = rates.rows || {};
   state.itemSearchIndex = buildSearchIndex(state.items, itemSearchGroups);
   state.sourceSearchIndex = buildSearchIndex(state.sources, sourceSearchGroups);
   state.itemByAsset = new Map(state.items.map((row) => [row.itemAsset, row]));
   state.sourceByKey = new Map(state.sources.map((row) => [sourceKey(row.source, row.sourceKind), row]));
-  $("dataStatus").textContent = "";
-  syncLuckInputs();
+  $("dataStatus").textContent = `${state.items.length.toLocaleString()} items indexed`;
+  $("datasetSummary").textContent = `${state.sources.length.toLocaleString()} sources | Season 10`;
   $("updatedAt").textContent = formatDate(SITE_UPDATED_AT);
   fillFilters();
-  await applySharedBuilderKitFromLocation();
+  const initialRoute = readRoute();
+  applyRouteControls(initialRoute);
+  const sharedKitApplied = await applySharedBuilderKitFromLocation();
   render();
+  if (!sharedKitApplied) await openRouteDetail(initialRoute);
+  if (state.currentLuck > 0) ensureRatesData().then(renderActiveDetail).catch(console.error);
+  document.querySelector(".seo-route-summary")?.remove();
+  $("appLoading").classList.add("ready");
+}
+
+async function ensureRatesData() {
+  if (Object.keys(state.rateWeights).length) return state.rateWeights;
+  if (!state.ratesPromise) {
+    state.ratesPromise = fetchJson(state.manifest.files.rates, dataVersionToken())
+      .then((rates) => {
+        state.rateWeights = rates.rows || {};
+        return state.rateWeights;
+      })
+      .catch((error) => {
+        state.ratesPromise = null;
+        throw error;
+      });
+  }
+  return state.ratesPromise;
 }
 
 async function loadKitData() {
@@ -2311,7 +1754,6 @@ async function loadKitData() {
         items: kitItems,
         itemByAsset: new Map(kitItems.map((row) => [row.asset, row])),
         secondaryPools: kit.secondaryPools || {},
-        propertyTypes: kit.propertyTypes || {},
         curveTables: kit.curveTables || {},
         characters: kitCharacters,
         characterById: new Map(kitCharacters.map((row) => [row.id, row])),
@@ -2393,7 +1835,7 @@ function sourceDetailFiltersFromMainPage() {
 function itemSearchGroups(row) {
   return [
     [row.item, row.itemAsset, row.rarity, row.category],
-    [row.source, row.sources?.join(" "), row.sourceKind, row.sourceKinds?.join(" "), row.spawner],
+    [row.maps?.join(" "), row.diffs?.join(" ")],
   ];
 }
 
@@ -2424,8 +1866,8 @@ function itemDetailSearchGroups(row) {
 
 function builderItemSearchGroups(item) {
   return [
-    [item.name, item.asset, item.rarity, item.slot?.label, item.weaponTypes?.join(" "), item.armorType],
-    [(item.allowedClasses || []).map((entry) => entry.name).join(" ")],
+    [item.name, item.asset, item.rarity, item.slot?.label, item.hand, item.weaponTypes?.join(" "), item.armorType],
+    [(item.allowedClasses || []).join(" ")],
     (item.primary || []).map((entry) => entry.label),
   ];
 }
@@ -3014,10 +2456,6 @@ function itemDetailBestScenario(row, filters, metric = "chance") {
   return best || row;
 }
 
-function itemDetailBestBaseChanceValue(row, filters) {
-  return baseChanceValue(itemDetailBestScenario(row, filters, "base"));
-}
-
 function itemDetailBestLuckChanceValue(row, filters) {
   return chanceValue(itemDetailBestScenario(row, filters, "chance"), "chanceValue");
 }
@@ -3213,30 +2651,30 @@ function metaPill(label, value) {
   return `<span><b>${escapeHtml(label)}</b>${escapeHtml(value)}</span>`;
 }
 
-function tableMeta(rows, selectedRows) {
+function tableMeta(rows, selectedRows, list) {
   const hidden = Math.max(0, rows.length - selectedRows.length);
   const hiddenLabel = hidden > 0 ? `${hidden.toLocaleString()} more` : "none";
-  const shownLabel = hidden > 0 ? `top ${selectedRows.length.toLocaleString()}` : selectedRows.length.toLocaleString();
+  const shownLabel = selectedRows.length.toLocaleString();
   return [
     metaPill("Matches", rows.length.toLocaleString()),
     metaPill("Shown", shownLabel),
     metaPill("Not shown", hiddenLabel),
     metaPill("All items", state.items.length.toLocaleString()),
     metaPill("All sources", state.sources.length.toLocaleString()),
-    hidden > 0 ? `<span class="limit-note">Only the top ${MAX_ROWS.toLocaleString()} rows are shown right now.</span>` : "",
+    hidden > 0 ? `<button type="button" class="load-more" data-load-more="${escapeHtml(list)}">Load ${Math.min(ROW_PAGE_SIZE, hidden).toLocaleString()} more</button>` : "",
   ].join("");
 }
 
 function favoriteButton(active, type, key, label) {
-  return `<button class="favorite ${active ? "active" : ""}" data-fav-type="${type}" data-fav-key="${escapeHtml(key)}" title="${escapeHtml(label)}">&#9733;</button>`;
+  return `<button class="favorite ${active ? "active" : ""}" data-fav-type="${type}" data-fav-key="${escapeHtml(key)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" aria-pressed="${active ? "true" : "false"}">&#9733;</button>`;
 }
 
 function renderItems() {
   const mapFilter = selected("itemMap");
   const diffFilter = selected("itemDiff");
   const rows = sortedRows(filteredItems(), "items");
-  const selectedRows = rows.slice(0, MAX_ROWS);
-  $("itemTableMeta").innerHTML = tableMeta(rows, selectedRows);
+  const selectedRows = rows.slice(0, state.visibleRows.items);
+  $("itemTableMeta").innerHTML = tableMeta(rows, selectedRows, "items");
   $("itemRows").innerHTML = selectedRows.length
     ? selectedRows.map((row) => `
       <tr class="clickable-row" data-open-item="${escapeHtml(row.itemAsset)}" tabindex="0" role="button">
@@ -3257,8 +2695,8 @@ function renderSources() {
   const mapFilter = selected("sourceMap");
   const diffFilter = selected("sourceDiff");
   const rows = sortedRows(filteredSources(), "sources");
-  const selectedRows = rows.slice(0, MAX_ROWS);
-  $("sourceTableMeta").innerHTML = tableMeta(rows, selectedRows);
+  const selectedRows = rows.slice(0, state.visibleRows.sources);
+  $("sourceTableMeta").innerHTML = tableMeta(rows, selectedRows, "sources");
   $("sourceRows").innerHTML = selectedRows.length
     ? selectedRows.map((row) => `
       <tr class="clickable-row" data-open-source="${escapeHtml(sourceKey(row.source, row.sourceKind))}" tabindex="0" role="button">
@@ -3429,8 +2867,12 @@ function itemSpecialEffectSummary(item) {
     .filter(Boolean);
 }
 
-function builderSlotAriaLabel(slot, item, blockReason) {
-  if (item) return `${slot.label}: ${item.name}, ${item.rarity}, ${item.gearScore || 0} gear score`;
+function builderSlotAriaLabel(slot, item, blockReason, linkedTwoHanded = false) {
+  if (item) {
+    const handState = isTwoHandedItem(item) ? ", two-handed and occupying both weapon slots" : "";
+    const linkedState = linkedTwoHanded ? ", linked to the primary slot" : "";
+    return `${slot.label}: ${item.name}, ${item.rarity}, ${item.gearScore || 0} gear score${handState}${linkedState}`;
+  }
   return `${slot.label}: ${blockReason ? `blocked, ${blockReason}` : "empty"}`;
 }
 
@@ -3449,7 +2891,8 @@ function builderSlotTooltipElement() {
 
 function builderSlotTooltipHtml(slotId) {
   const slot = builderSlotById(slotId);
-  const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
+  const ownerSlotId = builderItemOwnerSlotId(slot.id);
+  const item = equippedBuilderItem(ownerSlotId);
   const blockReason = weaponSlotBlockReason(slot.id);
   if (!item) {
     return `
@@ -3459,8 +2902,8 @@ function builderSlotTooltipHtml(slotId) {
       </div>
     `;
   }
-  const primary = slotPrimarySummary(slot.id, item);
-  const secondary = slotSecondarySummary(slot.id, item);
+  const primary = slotPrimarySummary(ownerSlotId, item);
+  const secondary = slotSecondarySummary(ownerSlotId, item);
   const specialEffects = itemSpecialEffectSummary(item);
   return `
     <div class="builder-slot-tooltip-head">
@@ -3470,6 +2913,7 @@ function builderSlotTooltipHtml(slotId) {
         <p>${rarity(item.rarity)} <span>${escapeHtml(item.slot?.label || slot.label)}</span> <span>${escapeHtml(item.gearScore || 0)} GS</span></p>
       </div>
     </div>
+    ${isTwoHandedItem(item) ? `<div class="builder-slot-tooltip-hand">Two-handed weapon | occupies both slots</div>` : ""}
     <div class="builder-slot-tooltip-section">
       <b>Primary</b>
       ${primary.length
@@ -3556,7 +3000,9 @@ function hideBuilderSlotTooltip(force = false) {
 function renderBuilderEquipment() {
   hideBuilderSlotTooltip(true);
   $("builderEquipment").innerHTML = BUILDER_SLOTS.map((slot) => {
-    const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
+    const ownerSlotId = builderItemOwnerSlotId(slot.id);
+    const linkedTwoHanded = ownerSlotId !== slot.id;
+    const item = equippedBuilderItem(ownerSlotId);
     const blockReason = weaponSlotBlockReason(slot.id);
     const sizeClass = slot.kind === "weapon" && item ? builderWeaponSizeClass(item) : "";
     const rarityClass = slot.kind === "weapon" && item?.rarity ? `slot-rarity-${chipClass(item.rarity)}` : "";
@@ -3569,13 +3015,14 @@ function renderBuilderEquipment() {
     return `
       <button
         type="button"
-        class="builder-slot builder-slot-${escapeHtml(slot.id)} ${slot.kind || ""} ${sizeClass} ${rarityClass} ${state.builder.selectedSlot === slot.id ? "active" : ""} ${slot.weaponSet === state.builder.activeWeaponSet ? "active-set" : ""} ${item ? "filled" : ""} ${blockReason ? "blocked" : ""}"
+        class="builder-slot builder-slot-${escapeHtml(slot.id)} ${slot.kind || ""} ${sizeClass} ${rarityClass} ${state.builder.selectedSlot === ownerSlotId ? "active" : ""} ${slot.weaponSet === state.builder.activeWeaponSet ? "active-set" : ""} ${item ? "filled" : ""} ${isTwoHandedItem(item) ? "two-handed" : ""} ${linkedTwoHanded ? "two-handed-linked" : ""}"
         style="${escapeHtml(slotStyle)}"
         data-builder-slot="${escapeHtml(slot.id)}"
-        aria-pressed="${state.builder.selectedSlot === slot.id ? "true" : "false"}"
-        aria-label="${escapeHtml(builderSlotAriaLabel(slot, item, blockReason))}"
+        aria-pressed="${state.builder.selectedSlot === ownerSlotId ? "true" : "false"}"
+        aria-label="${escapeHtml(builderSlotAriaLabel(slot, item, blockReason, linkedTwoHanded))}"
         ${blockReason ? `title="${escapeHtml(blockReason)}"` : ""}>
         ${slot.marker ? `<span class="builder-slot-marker">${escapeHtml(slot.marker)}</span>` : ""}
+        ${isTwoHandedItem(item) ? `<span class="builder-slot-hand-badge" aria-hidden="true">2H</span>` : ""}
         <span class="builder-slot-art">${art}</span>
         <span class="builder-slot-label">${escapeHtml(slot.label)}</span>
       </button>
@@ -3815,7 +3262,7 @@ function renderBuilderItems() {
           ${itemThumbnail(item)}
           <div>
             <h3>${escapeHtml(item.name)}</h3>
-            <p>${rarity(item.rarity)} <span>${escapeHtml(item.slot?.label || "")}</span> <span>${escapeHtml(item.gearScore || 0)} GS</span></p>
+            <p>${rarity(item.rarity)} <span>${escapeHtml(item.slot?.label || "")}</span> ${isTwoHandedItem(item) ? `<span>Two-handed</span>` : ""} <span>${escapeHtml(item.gearScore || 0)} GS</span></p>
             <small>${escapeHtml(primary || classes)}</small>
           </div>
           <button type="button" data-equip-item="${escapeHtml(item.asset)}" ${disabled ? "disabled" : ""}>
@@ -3827,454 +3274,31 @@ function renderBuilderItems() {
     : `<div class="builder-empty">${escapeHtml(weaponSlotBlockReason(state.builder.selectedSlot) || "No kit items match these filters for this character.")}</div>`;
 }
 
-function photoItemLines(slotId, item) {
-  if (!item) return [];
-  const primary = slotPrimarySummary(slotId, item, 6).map((text) => ({ text, secondary: false }));
-  const special = itemSpecialEffectSummary(item).map((text) => ({ text, special: true }));
-  const secondary = slotSecondarySummary(slotId, item)
-    .filter((line) => !/^No secondary/i.test(line))
-    .map((text) => ({ text, secondary: true }));
-  return [...primary, ...special, ...secondary].slice(0, 7);
-}
-
-function photoLoadImage(src) {
-  return new Promise((resolve) => {
-    if (!src) {
-      resolve(null);
-      return;
-    }
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
-    image.src = src;
-  });
-}
-
-function photoDrawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 2) {
-  const words = String(text || "").split(/\s+/).filter(Boolean);
-  let line = "";
-  let lines = 0;
-  for (const word of words) {
-    const next = line ? `${line} ${word}` : word;
-    if (ctx.measureText(next).width > maxWidth && line) {
-      ctx.fillText(line, x, y);
-      y += lineHeight;
-      lines += 1;
-      line = word;
-      if (lines >= maxLines - 1) break;
-    } else {
-      line = next;
-    }
-  }
-  if (line && lines < maxLines) ctx.fillText(line, x, y);
-  return y + lineHeight;
-}
-
-function photoDrawRoundRect(ctx, x, y, width, height, radius = 10) {
-  const r = Math.min(radius, width / 2, height / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + width - r, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
-  ctx.lineTo(x + width, y + height - r);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
-  ctx.lineTo(x + r, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-}
-
-function photoSignedStatValue(entry) {
-  const value = Number(entry?.value ?? 0);
-  const text = statValue(value, entry?.unit || "");
-  return value > 0 ? `+${text}` : text;
-}
-
-function photoRarityTheme(rarityValue) {
-  const key = String(rarityValue || "").toLowerCase();
-  const themes = {
-    junk: { title: "#9d9d9d", line: "rgba(150, 150, 150, .76)", top: "rgba(55, 55, 55, .92)", bottom: "rgba(20, 20, 20, .96)" },
-    common: { title: "#d8d4c8", line: "rgba(202, 198, 185, .78)", top: "rgba(66, 64, 58, .92)", bottom: "rgba(22, 21, 19, .96)" },
-    uncommon: { title: "#57c66b", line: "rgba(87, 198, 107, .8)", top: "rgba(28, 70, 36, .92)", bottom: "rgba(12, 28, 16, .96)" },
-    rare: { title: "#5d94ff", line: "rgba(93, 148, 255, .82)", top: "rgba(28, 48, 86, .92)", bottom: "rgba(11, 19, 35, .96)" },
-    epic: { title: "#c783ff", line: "rgba(182, 117, 226, .78)", top: "rgba(78, 45, 94, .92)", bottom: "rgba(18, 13, 22, .96)" },
-    legendary: { title: "#ff8f3d", line: "rgba(255, 143, 61, .86)", top: "rgba(92, 48, 18, .92)", bottom: "rgba(32, 18, 8, .96)" },
-    unique: { title: "#ffe071", line: "rgba(255, 224, 113, .86)", top: "rgba(94, 72, 23, .92)", bottom: "rgba(32, 24, 8, .96)" },
-    artifact: { title: "#ff6666", line: "rgba(235, 91, 91, .86)", top: "rgba(92, 22, 24, .92)", bottom: "rgba(30, 8, 10, .96)" },
-  };
-  return themes[key] || themes.common;
-}
-
-function photoDrawCard(ctx, item, slotId, x, y, width) {
-  const lines = photoItemLines(slotId, item);
-  const theme = photoRarityTheme(item?.rarity);
-  const lineHeight = 15;
-  const headerHeight = 38;
-  const height = Math.max(98, 54 + (lines.length * lineHeight));
-  const gradient = ctx.createLinearGradient(x, y, x, y + headerHeight);
-  gradient.addColorStop(0, theme.top);
-  gradient.addColorStop(.56, "rgba(30, 24, 34, .94)");
-  gradient.addColorStop(1, theme.bottom);
-  ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, .64)";
-  ctx.shadowBlur = 18;
-  ctx.shadowOffsetY = 8;
-  ctx.fillStyle = "rgba(4, 5, 7, .88)";
-  ctx.fillRect(x, y, width, height);
-  ctx.restore();
-  ctx.fillStyle = "rgba(4, 5, 7, .88)";
-  ctx.fillRect(x, y, width, height);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(x, y, width, headerHeight);
-  ctx.save();
-  ctx.globalAlpha = .16;
-  ctx.strokeStyle = "#ffffff";
-  for (let offset = -height; offset < width; offset += 14) {
-    ctx.beginPath();
-    ctx.moveTo(x + offset, y + height);
-    ctx.lineTo(x + offset + height, y);
-    ctx.stroke();
-  }
-  ctx.restore();
-  ctx.strokeStyle = theme.line;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x, y, width, height);
-  ctx.beginPath();
-  ctx.moveTo(x, y + headerHeight);
-  ctx.lineTo(x + width, y + headerHeight);
-  ctx.strokeStyle = theme.line;
-  ctx.stroke();
-  ctx.font = "21px Georgia, serif";
-  ctx.fillStyle = theme.title;
-  ctx.textAlign = "center";
-  photoDrawWrappedText(ctx, item?.name || "Empty", x + width / 2, y + 26, width - 18, 21, 1);
-  ctx.font = "12px Segoe UI, Arial";
-  lines.forEach((line, index) => {
-    const lineY = y + 58 + (index * lineHeight);
-    ctx.fillStyle = "rgba(238, 241, 242, .88)";
-    ctx.fillText("-", x + 20, lineY);
-    ctx.fillText("-", x + width - 20, lineY);
-    ctx.fillStyle = line.special ? "#f0c76a" : (line.secondary ? "#18bdf4" : "#f1f3f4");
-    ctx.fillText(line.text, x + width / 2, lineY);
-  });
-  ctx.textAlign = "left";
-  return height;
-}
-
-function photoDrawPerkPanel(ctx, perkEntries, x, y, width) {
-  const rows = perkEntries.length ? perkEntries : [[null, null]];
-  const rowHeight = 118;
-  rows.slice(0, BUILDER_PERK_LIMIT).forEach(([perk, image], index) => {
-    const rowY = y + (index * (rowHeight + 14));
-    const title = perk?.name || "No perk selected";
-    const summary = perk ? builderPerkSummary(perk) : "Pick perks in Kit Builder";
-    const gradient = ctx.createLinearGradient(x, rowY, x, rowY + rowHeight);
-    gradient.addColorStop(0, "rgba(88, 75, 40, .92)");
-    gradient.addColorStop(1, "rgba(22, 22, 20, .94)");
-    ctx.save();
-    ctx.shadowColor = "rgba(0, 0, 0, .55)";
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 6;
-    ctx.fillStyle = gradient;
-    photoDrawRoundRect(ctx, x, rowY, width, rowHeight, 10);
-    ctx.fill();
-    ctx.restore();
-    ctx.strokeStyle = "rgba(255, 196, 58, .9)";
-    ctx.lineWidth = 2;
-    photoDrawRoundRect(ctx, x, rowY, width, rowHeight, 10);
-    ctx.stroke();
-
-    const iconSize = 54;
-    const iconX = x + 16;
-    const iconY = rowY + 17;
-    ctx.fillStyle = "rgba(8, 10, 12, .76)";
-    photoDrawRoundRect(ctx, iconX, iconY, iconSize, iconSize, 6);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(220, 220, 210, .35)";
-    ctx.stroke();
-    if (image) ctx.drawImage(image, iconX + 5, iconY + 5, iconSize - 10, iconSize - 10);
-
-    ctx.textAlign = "left";
-    ctx.font = "700 23px Segoe UI, Arial";
-    ctx.fillStyle = "#fff8d8";
-    photoDrawWrappedText(ctx, title, x + 82, rowY + 38, width - 96, 24, 1);
-    ctx.font = "18px Segoe UI, Arial";
-    ctx.fillStyle = "#d8dde2";
-    photoDrawWrappedText(ctx, summary, x + 16, rowY + 96, width - 28, 24, 2);
-  });
-}
-
-function photoDrawSkinPanel(ctx, skin, image, x, y, width) {
-  const stats = skin?.stats || [];
-  const imageSize = image ? 142 : 0;
-  const height = (skin ? 188 : 118) + (image ? imageSize + 14 : 0);
-  const gradient = ctx.createLinearGradient(x, y, x, y + height);
-  gradient.addColorStop(0, "rgba(58, 58, 58, .92)");
-  gradient.addColorStop(.5, "rgba(28, 28, 28, .95)");
-  gradient.addColorStop(1, "rgba(9, 9, 9, .96)");
-  ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, .58)";
-  ctx.shadowBlur = 16;
-  ctx.shadowOffsetY = 7;
-  ctx.fillStyle = gradient;
-  ctx.fillRect(x, y, width, height);
-  ctx.restore();
-  ctx.fillStyle = gradient;
-  ctx.fillRect(x, y, width, height);
-  ctx.strokeStyle = "rgba(230, 230, 230, .62)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x, y, width, height);
-  ctx.beginPath();
-  ctx.moveTo(x, y + 58);
-  ctx.lineTo(x + width, y + 58);
-  ctx.strokeStyle = "rgba(230, 230, 230, .52)";
-  ctx.stroke();
-
-  ctx.textAlign = "center";
-  ctx.font = "24px Georgia, serif";
-  ctx.fillStyle = "#f1eee9";
-  photoDrawWrappedText(ctx, skin?.name || "No Skin", x + width / 2, y + 36, width - 20, 26, 1);
-  ctx.font = "700 18px Segoe UI, Arial";
-  if (stats.length) {
-    stats.slice(0, 5).forEach((entry, index) => {
-      const lineY = y + 88 + (index * 25);
-      const value = Number(entry.value || 0);
-      ctx.fillStyle = value >= 0 ? "#ffe35a" : "#ff7a7a";
-      ctx.fillText(`${photoSignedStatValue(entry)} ${entry.label || statLabel(entry.statKey)}`, x + width / 2, lineY);
-    });
-  } else {
-    ctx.fillStyle = "#d8dde2";
-    ctx.fillText(skin ? "No skin effects" : "Select a skin in Kit Builder", x + width / 2, y + 88);
-  }
-  if (image) {
-    const imageX = x + (width - imageSize) / 2;
-    const imageY = y + height - imageSize - 10;
-    ctx.fillStyle = "rgba(22, 22, 22, .72)";
-    ctx.fillRect(imageX, imageY, imageSize, imageSize);
-    ctx.strokeStyle = "rgba(230, 230, 230, .38)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(imageX, imageY, imageSize, imageSize);
-    const scale = Math.min((imageSize - 12) / image.width, (imageSize - 12) / image.height);
-    const iw = image.width * scale;
-    const ih = image.height * scale;
-    ctx.drawImage(image, imageX + (imageSize - iw) / 2, imageY + (imageSize - ih) / 2, iw, ih);
-  }
-}
-
-function photoStatRows(rows) {
-  const byKey = new Map(rows.map((row) => [row.key, row]));
-  const physicalBonus = byKey.get("PhysicalDamageBonus");
-  const magicalBonus = byKey.get("MagicalDamageBonus");
-  const skipKeys = new Set([
-    "PhysicalDamageBonus",
-    "PhysicalDamageBonusFromPower",
-    "PhysicalDamageBonusFromBonuses",
-    "MagicalDamageBonus",
-    "MagicalDamageBonusFromPower",
-    "MagicalDamageBonusFromBonuses",
-  ]);
-  return rows
-    .map((row) => {
-      if (row.key === "PhysicalPower" && physicalBonus) {
-        return { ...physicalBonus, key: "PhotoPhysicalPowerBonus", label: "Physical Power Bonus" };
-      }
-      if (row.key === "MagicalPower" && magicalBonus) {
-        return { ...magicalBonus, key: "PhotoMagicalPowerBonus", label: "Magic Power Bonus" };
-      }
-      return row;
-    })
-    .filter((row) => !skipKeys.has(row.key));
-}
-
-function photoDrawStats(ctx, rows, character) {
-  const x = 54;
-  const y = 30;
-  const width = 430;
-  const height = 1018;
-  const lineHeight = 17;
-  const topPadding = 52;
-  ctx.fillStyle = "rgba(23, 25, 27, .86)";
-  ctx.fillRect(x, y, width, height);
-  ctx.strokeStyle = "rgba(184, 168, 148, .32)";
-  ctx.strokeRect(x, y, width, height);
-  ctx.font = "22px Georgia, serif";
-  ctx.fillStyle = "#d7a16d";
-  ctx.textAlign = "center";
-  ctx.fillText(character?.name || "Kit", x + width / 2, y + 28);
-  ctx.font = "14px Segoe UI, Arial";
-  photoStatRows(rows).forEach((row, index) => {
-    const rowY = y + topPadding + (index * lineHeight);
-    if (rowY > y + height - 12) return;
-    ctx.strokeStyle = "rgba(255,255,255,.08)";
-    ctx.beginPath();
-    ctx.moveTo(x + 8, rowY + 5);
-    ctx.lineTo(x + width - 8, rowY + 5);
-    ctx.stroke();
-    ctx.fillStyle = "#bfb8ad";
-    ctx.textAlign = "left";
-    ctx.fillText(row.label, x + 8, rowY);
-    const value = row.type === "text" ? row.value : statValue(row.value, row.unit);
-    ctx.fillStyle = Number(row.value) > 0 ? "#a7d637" : Number(row.value) < 0 ? "#dd3948" : "#d8d2c8";
-    ctx.textAlign = "right";
-    ctx.fillText(value, x + width - 10, rowY);
-  });
-  ctx.textAlign = "left";
-}
-
 async function saveBuilderPhoto() {
-  if (!state.kitReady) return;
-  closeBuilderBonusMenus();
-  hideBuilderSlotTooltip(true);
-  const canvas = document.createElement("canvas");
-  canvas.width = 1920;
-  canvas.height = 1080;
-  const ctx = canvas.getContext("2d");
-  const bg = ctx.createLinearGradient(0, 0, 1920, 1080);
-  bg.addColorStop(0, "#3b2810");
-  bg.addColorStop(.28, "#08090b");
-  bg.addColorStop(.56, "#4d0508");
-  bg.addColorStop(1, "#1e1d1b");
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, 1920, 1080);
-  ctx.filter = "blur(34px)";
-  ["#d59a32", "#a00010", "#b7b0a4", "#74210b"].forEach((color, index) => {
-    ctx.fillStyle = color;
-    ctx.globalAlpha = .45;
-    ctx.beginPath();
-    ctx.ellipse(240 + (index * 420), 170 + ((index % 2) * 560), 210, 170, 0, 0, Math.PI * 2);
-    ctx.fill();
-  });
-  ctx.globalAlpha = 1;
-  ctx.filter = "none";
-  ctx.fillStyle = "rgba(0,0,0,.34)";
-  ctx.fillRect(0, 0, 1920, 1080);
-
-  const stats = builderStatRows();
-  photoDrawStats(ctx, stats, selectedBuilderCharacter());
-
-  const equipmentRect = { x: 640, y: 210, width: 800, height: 700 };
-  const equipmentGradient = ctx.createRadialGradient(
-    equipmentRect.x + equipmentRect.width / 2,
-    equipmentRect.y + equipmentRect.height / 2,
-    40,
-    equipmentRect.x + equipmentRect.width / 2,
-    equipmentRect.y + equipmentRect.height / 2,
-    390,
-  );
-  equipmentGradient.addColorStop(0, "rgba(52, 53, 54, .96)");
-  equipmentGradient.addColorStop(.62, "rgba(22, 22, 24, .96)");
-  equipmentGradient.addColorStop(1, "rgba(10, 10, 12, .98)");
-  ctx.fillStyle = equipmentGradient;
-  ctx.fillRect(equipmentRect.x, equipmentRect.y, equipmentRect.width, equipmentRect.height);
-  ctx.strokeStyle = "rgba(202, 202, 202, .32)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(equipmentRect.x, equipmentRect.y, equipmentRect.width, equipmentRect.height);
-  ctx.save();
-  ctx.globalAlpha = .14;
-  ctx.strokeStyle = "#ffffff";
-  for (let offset = -equipmentRect.height; offset < equipmentRect.width; offset += 12) {
-    ctx.beginPath();
-    ctx.moveTo(equipmentRect.x + offset, equipmentRect.y + equipmentRect.height);
-    ctx.lineTo(equipmentRect.x + offset + equipmentRect.height, equipmentRect.y);
-    ctx.stroke();
+  if (!kitPhotoPromise) {
+    kitPhotoPromise = import("./kit-photo.js").then(({ createKitPhoto }) => createKitPhoto({
+      state,
+      slots: BUILDER_SLOTS,
+      perkLimit: BUILDER_PERK_LIMIT,
+      slotPrimarySummary,
+      slotSecondarySummary,
+      itemSpecialEffectSummary,
+      builderPerkSummary,
+      statLabel,
+      statValue,
+      closeBuilderBonusMenus,
+      hideBuilderSlotTooltip,
+      builderStatRows,
+      selectedBuilderCharacter,
+      builderItemOwnerSlotId,
+      displayedBuilderItem,
+      perkIconUrl,
+      selectedBuilderSkin,
+      currentBuilderKitName,
+    }));
   }
-  ctx.restore();
-  const grid = {
-    x: equipmentRect.x + 46,
-    y: equipmentRect.y + 42,
-    width: equipmentRect.width - 92,
-    height: equipmentRect.height - 84,
-    columns: 12,
-    rows: 9,
-    gap: 7,
-  };
-  grid.cellWidth = (grid.width - ((grid.columns - 1) * grid.gap)) / grid.columns;
-  grid.cellHeight = (grid.height - ((grid.rows - 1) * grid.gap)) / grid.rows;
-  const slotRects = {
-    weapon1Primary: [0, 0, 2, 3],
-    weapon1Secondary: [2, 0, 2, 3],
-    head: [5, 0, 2, 2],
-    weapon2Primary: [8, 0, 2, 3],
-    weapon2Secondary: [10, 0, 2, 3],
-    necklace: [7, 1, 1.15, 1.15],
-    chest: [5, 2, 2, 3],
-    cloak: [7, 2, 2, 3],
-    ring1: [4, 5, 1.15, 1.15],
-    ring2: [6.85, 5, 1.15, 1.15],
-    legs: [5, 5, 2, 4],
-    hands: [2, 7, 2, 2],
-    feet: [8, 7, 2, 2],
-  };
-  const imageEntries = await Promise.all(BUILDER_SLOTS.map(async (slot) => {
-    const item = state.kit.itemByAsset.get(state.builder.equipped[slot.id]);
-    return [slot, item, await photoLoadImage(item?.iconUrl)];
-  }));
-  const perkEntries = await Promise.all(state.builder.perks
-    .map((perkId) => state.kit.perkById.get(perkId))
-    .filter(Boolean)
-    .map(async (perk) => [perk, await photoLoadImage(perkIconUrl(perk))]));
-  const skin = selectedBuilderSkin();
-  const character = selectedBuilderCharacter();
-  const skinImage = await photoLoadImage(skin?.iconUrl || character?.portraitUrl || character?.iconUrl);
-  imageEntries.forEach(([slot, item, image]) => {
-    const rectDef = slotRects[slot.id];
-    if (!rectDef) return;
-    const [cx, cy, cw, ch] = rectDef;
-    const x = grid.x + (cx * (grid.cellWidth + grid.gap));
-    const y = grid.y + (cy * (grid.cellHeight + grid.gap));
-    const w = cw * grid.cellWidth + ((cw - 1) * grid.gap);
-    const h = ch * grid.cellHeight + ((ch - 1) * grid.gap);
-    ctx.fillStyle = "rgba(36, 36, 38, .72)";
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = item ? "rgba(185, 185, 188, .62)" : "rgba(185, 185, 188, .26)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x, y, w, h);
-    ctx.strokeStyle = "rgba(255, 255, 255, .16)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
-    if (image) {
-      const scale = Math.min((w - 16) / image.width, (h - 16) / image.height);
-      const iw = image.width * scale;
-      const ih = image.height * scale;
-      ctx.drawImage(image, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
-    }
-  });
-
-  const cardSlots = [
-    ["weapon1Primary", 560, 46, 236],
-    ["weapon2Primary", 820, 46, 236],
-    ["head", 1080, 46, 224],
-    ["weapon1Secondary", 500, 232, 232],
-    ["weapon2Secondary", 500, 402, 232],
-    ["chest", 500, 572, 232],
-    ["ring1", 500, 742, 232],
-    ["hands", 736, 866, 220],
-    ["legs", 974, 866, 220],
-    ["feet", 1212, 866, 220],
-    ["necklace", 1416, 232, 222],
-    ["cloak", 1416, 402, 222],
-    ["ring2", 1416, 572, 222],
-  ];
-  cardSlots.forEach(([slotId, x, y, w]) => {
-    const item = state.kit.itemByAsset.get(state.builder.equipped[slotId]);
-    if (item) photoDrawCard(ctx, item, slotId, x, y, w);
-  });
-  photoDrawPerkPanel(ctx, perkEntries, 1648, 44, 270);
-  photoDrawSkinPanel(ctx, skin, skinImage, 1698, 718, 186);
-  ctx.textAlign = "center";
-  ctx.font = "700 18px Segoe UI, Arial";
-  ctx.fillStyle = "rgba(255, 255, 255, .72)";
-  ctx.fillText("Generated by Darkloot.net", 960, 1060);
-
-  const link = document.createElement("a");
-  const name = currentBuilderKitName().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "darkloot-kit";
-  link.download = `${name.toLowerCase()}-${Date.now()}.png`;
-  link.href = canvas.toDataURL("image/png");
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  const savePhoto = await kitPhotoPromise;
+  return savePhoto();
 }
 
 function renderBuilderStats(stats = builderStatRows()) {
@@ -4296,7 +3320,7 @@ function renderBuilderStats(stats = builderStatRows()) {
 }
 
 function renderBuilderSummary(stats = builderStatRows()) {
-  const equippedCount = Object.values(state.builder.equipped).filter(Boolean).length;
+  const equippedCount = BUILDER_SLOTS.filter((slot) => displayedBuilderItem(slot.id)).length;
   const character = selectedBuilderCharacter();
   const statTotals = builderStatTotals(stats);
   $("builderSummary").innerHTML = [
@@ -4380,10 +3404,16 @@ function setActiveTab(tabId, options = {}) {
   if (!$(`${tabId}View`)) return;
   state.activeTab = tabId;
   if (!options.keepConfirmation) clearBuilderConfirmation();
-  document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === tabId));
+  document.querySelectorAll(".tab").forEach((tab) => {
+    const active = tab.dataset.tab === tabId;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+    tab.tabIndex = active ? 0 : -1;
+  });
   document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
   $(`${tabId}View`).classList.add("active");
   if (options.render !== false) renderActiveTab();
+  if (options.syncRoute !== false && !routeApplying) syncRoute({ replace: options.replaceRoute !== false, includeDetail: false });
 }
 
 function renderFavoriteState() {
@@ -4394,7 +3424,7 @@ function renderFavoriteState() {
 
 async function detail(path) {
   if (!state.detailCache.has(path)) {
-    state.detailCache.set(path, await fetchJson(path));
+    state.detailCache.set(path, await fetchJson(path, dataVersionToken()));
   }
   return state.detailCache.get(path);
 }
@@ -4526,7 +3556,7 @@ function renderSourceDetail(payload) {
     })
     .map((entry) => entry.row);
   const limited = rows.slice(0, MAX_DETAIL_ROWS);
-  const loadedRows = Number(payload.rowsLimited || payload.rows?.length || model.groupedRows.length);
+  const loadedRows = Number(payload.rows?.length || payload.rowsLimited || model.groupedRows.length);
   const totalRows = Number(payload.total || loadedRows);
   const loadedText = loadedRows < totalRows
     ? `Loaded top ${loadedRows.toLocaleString()} of ${totalRows.toLocaleString()} grouped rows`
@@ -4566,7 +3596,37 @@ function renderSourceDetail(payload) {
       { label: "Per Item", sortKey: "perRoll", html: (row) => escapeHtml(perRollChanceText(row)), num: true },
       { label: "Per Kill/Interaction", sortKey: "chance", html: (row) => escapeHtml(chanceText(row)), num: true },
     ])}
+    ${payload.nextPage ? `<div class="detail-paging"><button type="button" data-load-source-page>Load more drop rows</button></div>` : ""}
   `;
+}
+
+async function loadMoreSourceDetail() {
+  const payload = state.activeDetail?.type === "source" ? state.activeDetail.payload : null;
+  if (!payload?.nextPage || payload._loadingNextPage) return;
+  payload._loadingNextPage = true;
+  const button = document.querySelector("[data-load-source-page]");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Loading drop rows...";
+  }
+  try {
+    const page = await fetchJson(payload.nextPage, dataVersionToken());
+    payload.rows = [...(payload.rows || []), ...(page.rows || [])];
+    payload.nextPage = page.nextPage || null;
+    payload.rowsLimited = payload.rows.length;
+    delete payload._sourceDetailModel;
+    delete payload._sourceDetailScopedModel;
+    renderSourceDetail(payload);
+  } catch (error) {
+    console.error(error);
+    showToast("More drop rows could not be loaded");
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Try loading again";
+    }
+  } finally {
+    payload._loadingNextPage = false;
+  }
 }
 
 function renderItemDetail(payload) {
@@ -4649,41 +3709,61 @@ function closeBuilderBonusMenus() {
   });
 }
 
-async function openItem(asset) {
+async function openItem(asset, options = {}) {
   const item = state.itemByAsset.get(asset);
   if (!item) return;
+  closeGlobalSearch();
   $("detailTitle").textContent = item.item;
   $("detailMeta").textContent = "Loading item details...";
   $("detailContent").innerHTML = "";
   syncLuckInputs();
   if (!$("detailDialog").open) $("detailDialog").showModal();
-  const payload = await detail(item.detailPath);
-  state.activeDetail = {
-    type: "item",
-    payload,
-    search: "",
-    filters: itemDetailFiltersFromMainPage(),
-  };
-  renderItemDetail(payload);
+  try {
+    const payload = await detail(item.detailPath);
+    state.activeDetail = {
+      type: "item",
+      payload,
+      routeRow: item,
+      search: "",
+      filters: itemDetailFiltersFromMainPage(),
+    };
+    renderItemDetail(payload);
+    if (options.syncRoute !== false) syncRoute({ replace: false });
+    else updateDocumentMeta(currentDetailRoute());
+  } catch (error) {
+    console.error(error);
+    $("detailMeta").textContent = "Item details could not be loaded";
+    $("detailContent").innerHTML = `<div class="message-row">${escapeHtml(error.message)}</div>`;
+  }
 }
 
-async function openSource(key) {
+async function openSource(key, options = {}) {
   const row = state.sourceByKey.get(key);
   if (!row) return;
+  closeGlobalSearch();
   $("detailTitle").textContent = row.source;
   $("detailMeta").textContent = "Loading source drops...";
   $("detailContent").innerHTML = "";
   syncLuckInputs();
   if (!$("detailDialog").open) $("detailDialog").showModal();
-  const payload = await detail(row.detailPath);
-  state.activeDetail = {
-    type: "source",
-    payload,
-    search: "",
-    filters: sourceDetailFiltersFromMainPage(),
-    sort: { key: "chance", direction: "desc" },
-  };
-  renderSourceDetail(payload);
+  try {
+    const payload = await detail(row.detailPath);
+    state.activeDetail = {
+      type: "source",
+      payload,
+      routeRow: row,
+      search: "",
+      filters: sourceDetailFiltersFromMainPage(),
+      sort: { key: "chance", direction: "desc" },
+    };
+    renderSourceDetail(payload);
+    if (options.syncRoute !== false) syncRoute({ replace: false });
+    else updateDocumentMeta(currentDetailRoute());
+  } catch (error) {
+    console.error(error);
+    $("detailMeta").textContent = "Source details could not be loaded";
+    $("detailContent").innerHTML = `<div class="message-row">${escapeHtml(error.message)}</div>`;
+  }
 }
 
 function renderActiveDetail() {
@@ -4707,7 +3787,7 @@ function equipBuilderItem(asset) {
   const equipped = { ...state.builder.equipped, [slotId]: asset };
   const bonuses = { ...state.builder.bonuses, [slotId]: defaultBonusesForItem(item) };
   const primaryValues = { ...state.builder.primaryValues, [slotId]: defaultPrimaryValuesForItem(item) };
-  if (slot.weaponRole === "primary" && itemIsTwoHanded(item)) {
+  if (slot.weaponRole === "primary" && isTwoHandedItem(item)) {
     const pairedSlotId = pairedWeaponSlotId(slotId);
     delete equipped[pairedSlotId];
     delete bonuses[pairedSlotId];
@@ -4724,13 +3804,14 @@ function equipBuilderItem(asset) {
 
 function unequipBuilderSlot(slotId) {
   clearBuilderConfirmation();
-  const { [slotId]: _removed, ...equipped } = state.builder.equipped;
-  const { [slotId]: _removedPrimaryValues, ...primaryValues } = state.builder.primaryValues;
-  const { [slotId]: _removedBonuses, ...bonuses } = state.builder.bonuses;
+  const ownerSlotId = builderItemOwnerSlotId(slotId);
+  const { [ownerSlotId]: _removed, ...equipped } = state.builder.equipped;
+  const { [ownerSlotId]: _removedPrimaryValues, ...primaryValues } = state.builder.primaryValues;
+  const { [ownerSlotId]: _removedBonuses, ...bonuses } = state.builder.bonuses;
   state.builder.equipped = equipped;
   state.builder.primaryValues = primaryValues;
   state.builder.bonuses = bonuses;
-  if (state.builder.selectedSlot === slotId) state.builder.pickerMode = "items";
+  if (state.builder.selectedSlot === ownerSlotId) state.builder.pickerMode = "items";
   renderBuilder();
 }
 
@@ -4829,23 +3910,59 @@ function openClickableRow(row) {
 }
 
 function wireEvents() {
+  document.body.addEventListener("error", (event) => {
+    if (event.target instanceof HTMLImageElement) event.target.hidden = true;
+  }, true);
+
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => {
-      setActiveTab(button.dataset.tab);
+      setActiveTab(button.dataset.tab, { replaceRoute: false });
+    });
+    button.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const tabs = [...document.querySelectorAll(".tab")];
+      const direction = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
+      const next = tabs[(tabs.indexOf(button) + direction + tabs.length) % tabs.length];
+      next.focus();
+      setActiveTab(next.dataset.tab, { replaceRoute: false });
     });
   });
 
   ["itemSearch", "itemRarity", "itemCategory", "itemMap", "itemDiff"]
     .forEach((id) => $(id).addEventListener("input", () => {
       if (id === "itemDiff") syncMapSelectForDifficulty("itemMap", "itemDiff");
+      state.visibleRows.items = ROW_PAGE_SIZE;
       scheduleRender("items", renderItems);
+      scheduleRouteSync();
     }));
 
   ["sourceSearch", "sourceMap", "sourceDiff", "sourceKind"]
     .forEach((id) => $(id).addEventListener("input", () => {
       if (id === "sourceDiff") syncMapSelectForDifficulty("sourceMap", "sourceDiff");
+      state.visibleRows.sources = ROW_PAGE_SIZE;
       scheduleRender("sources", renderSources);
+      scheduleRouteSync();
     }));
+
+  $("globalSearch").addEventListener("input", () => scheduleRender("global-search", renderGlobalSearch));
+  $("globalSearch").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeGlobalSearch();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      $("globalSearchPanel").querySelector("button")?.focus();
+      return;
+    }
+    if (event.key !== "Enter") return;
+    const first = $("globalSearchPanel").querySelector("button");
+    if (first) {
+      event.preventDefault();
+      first.click();
+    }
+  });
 
   $("builderSearch").addEventListener("input", () => {
     clearBuilderConfirmation();
@@ -4880,6 +3997,14 @@ function wireEvents() {
   });
 
   document.body.addEventListener("click", (event) => {
+    const infoButton = event.target.closest("[data-info]");
+    if (infoButton) {
+      event.stopPropagation();
+      showInfoPopover(infoButton);
+      return;
+    }
+    if (!event.target.closest(".info-popover")) document.querySelector(".info-popover")?.remove();
+    if (!event.target.closest(".global-search-shell")) closeGlobalSearch();
     const button = event.target.closest("button");
     if (button?.dataset.moreValues) {
       event.stopPropagation();
@@ -4895,6 +4020,19 @@ function wireEvents() {
       return;
     }
     if (button) {
+      if (button.dataset.loadMore) {
+        const list = button.dataset.loadMore;
+        if (list === "items" || list === "sources") {
+          state.visibleRows[list] += ROW_PAGE_SIZE;
+          if (list === "items") renderItems();
+          if (list === "sources") renderSources();
+        }
+        return;
+      }
+      if (button.dataset.loadSourcePage != null) {
+        loadMoreSourceDetail();
+        return;
+      }
       if (button.dataset.builderBonusOption) {
         setBuilderBonusProperty(
           button.dataset.builderBonusOption,
@@ -4920,7 +4058,7 @@ function wireEvents() {
         return;
       }
       if (button.dataset.builderSlot) {
-        setSelectedBuilderSlot(button.dataset.builderSlot);
+        setSelectedBuilderSlot(builderItemOwnerSlotId(button.dataset.builderSlot));
         state.builder.pickerOpen = true;
         state.builder.pickerMode = equippedBuilderItem(state.builder.selectedSlot) ? "stats" : "items";
         renderBuilder();
@@ -5185,6 +4323,30 @@ function wireEvents() {
     }
   });
 
+  $("resetItemFilters").addEventListener("click", () => {
+    $("itemSearch").value = "";
+    $("itemRarity").value = "All";
+    $("itemCategory").value = "All";
+    $("itemDiff").value = DEFAULT_DIFFICULTY;
+    syncMapSelectForDifficulty("itemMap", "itemDiff");
+    $("itemMap").value = "All";
+    state.visibleRows.items = ROW_PAGE_SIZE;
+    renderItems();
+    syncRoute({ replace: true, includeDetail: false });
+  });
+  $("resetSourceFilters").addEventListener("click", () => {
+    $("sourceSearch").value = "";
+    $("sourceDiff").value = DEFAULT_DIFFICULTY;
+    syncMapSelectForDifficulty("sourceMap", "sourceDiff");
+    $("sourceMap").value = "All";
+    $("sourceKind").value = "All";
+    state.visibleRows.sources = ROW_PAGE_SIZE;
+    renderSources();
+    syncRoute({ replace: true, includeDetail: false });
+  });
+  $("copyItemView").addEventListener("click", () => copyCurrentUrl("Item view copied").catch(console.error));
+  $("copySourceView").addEventListener("click", () => copyCurrentUrl("Source view copied").catch(console.error));
+  $("shareDetail").addEventListener("click", () => copyCurrentUrl("Detail link copied").catch(console.error));
   $("closeDetail").addEventListener("click", () => $("detailDialog").close());
   $("detailDialog").addEventListener("click", (event) => {
     if (event.target === event.currentTarget) $("detailDialog").close();
@@ -5192,6 +4354,7 @@ function wireEvents() {
   $("detailDialog").addEventListener("close", () => {
     state.activeDetail = null;
     hideChipPopover(true);
+    syncRoute({ replace: true, includeDetail: false });
   });
   $("openDamageChecker").addEventListener("click", openDamageChecker);
   $("closeDamageChecker").addEventListener("click", () => $("damageDialog").close());
@@ -5219,8 +4382,15 @@ function wireEvents() {
     saveCurrentBuilderKit();
   });
   document.addEventListener("keydown", (event) => {
+    if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.target.closest("input, select, textarea, [contenteditable='true']")) {
+      event.preventDefault();
+      $("globalSearch").focus();
+      return;
+    }
     if (event.key === "Escape") {
       closeBuilderBonusMenus();
+      closeGlobalSearch();
+      document.querySelector(".info-popover")?.remove();
       hideChipPopover(true);
       hideBuilderSlotTooltip(true);
       if (state.builder.pickerOpen) closeBuilderPicker();
@@ -5234,10 +4404,26 @@ function wireEvents() {
     hideChipPopover(true);
     hideBuilderSlotTooltip(true);
   });
+  window.addEventListener("popstate", async () => {
+    const route = readRoute();
+    applyRouteControls(route);
+    renderActiveTab();
+    if (route.detailType) {
+      await openRouteDetail(route);
+    } else if ($("detailDialog").open) {
+      $("detailDialog").close();
+    }
+  });
 }
 
 wireEvents();
 loadData().catch((error) => {
   console.error(error);
   $("dataStatus").textContent = `Could not load website data: ${error.message}`;
+  $("appLoading").classList.add("ready");
+  showToast("DarkLoot data could not be loaded");
 });
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/service-worker.js").catch(() => {}));
+}

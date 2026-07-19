@@ -1107,11 +1107,6 @@ th.num .sort-button {
   text-transform: uppercase;
 }
 
-.table-meta .limit-note {
-  color: var(--gold);
-  font-weight: 700;
-}
-
 .favorites-layout {
   flex: 1 1 auto;
   display: grid;
@@ -1498,6 +1493,33 @@ th.num .sort-button {
   opacity: .56;
 }
 
+.builder-slot.two-handed {
+  border-color: rgba(240, 199, 106, .72);
+}
+
+.builder-slot.two-handed-linked {
+  background:
+    linear-gradient(135deg, rgba(240, 199, 106, .12), transparent 42%),
+    linear-gradient(180deg, rgba(40, 40, 40, .96), rgba(11, 11, 11, .96));
+}
+
+.builder-slot-hand-badge {
+  position: absolute;
+  z-index: 6;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 20px;
+  border: 1px solid rgba(240, 199, 106, .66);
+  border-radius: 3px;
+  color: #fff3cb;
+  background: rgba(17, 19, 21, .92);
+  font-size: 10px;
+  font-weight: 900;
+}
+
 .builder-slot-marker {
   position: absolute;
   z-index: 5;
@@ -1641,6 +1663,17 @@ th.num .sort-button {
   gap: 8px;
 }
 
+.builder-slot-tooltip-hand {
+  border: 1px solid rgba(240, 199, 106, .34);
+  border-radius: 4px;
+  padding: 7px 9px;
+  color: #fff3cb;
+  background: rgba(240, 199, 106, .08);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
 .builder-slot-tooltip-section b {
   color: rgba(232, 226, 211, .72);
   font-size: 11px;
@@ -1689,73 +1722,6 @@ th.num .sort-button {
 .builder-slot-tooltip-empty span {
   color: var(--muted);
   font-size: 13px;
-}
-
-.equipment-ghost {
-  content: "";
-  display: block;
-  width: 52%;
-  height: 58%;
-  min-height: 32px;
-  opacity: .22;
-  background: linear-gradient(180deg, rgba(220, 224, 226, .9), rgba(210, 210, 210, .18));
-  filter: drop-shadow(0 2px 2px #000);
-}
-
-.equipment-ghost-weapon1Primary,
-.equipment-ghost-weapon1Secondary,
-.equipment-ghost-weapon2Primary,
-.equipment-ghost-weapon2Secondary {
-  height: 86%;
-  width: 34%;
-  clip-path: polygon(46% 0, 54% 0, 60% 69%, 78% 76%, 59% 82%, 56% 100%, 44% 100%, 41% 82%, 22% 76%, 40% 69%);
-}
-
-.equipment-ghost-head {
-  width: 54%;
-  height: 48%;
-  clip-path: polygon(50% 2%, 84% 22%, 84% 62%, 65% 88%, 35% 88%, 16% 62%, 16% 22%);
-}
-
-.equipment-ghost-chest {
-  width: 58%;
-  height: 58%;
-  clip-path: polygon(28% 0, 72% 0, 88% 24%, 76% 100%, 24% 100%, 12% 24%);
-}
-
-.equipment-ghost-cloak {
-  width: 45%;
-  height: 68%;
-  clip-path: polygon(28% 0, 72% 0, 95% 100%, 5% 100%);
-}
-
-.equipment-ghost-hands {
-  width: 62%;
-  height: 46%;
-  clip-path: polygon(5% 38%, 38% 4%, 50% 22%, 62% 4%, 95% 38%, 72% 92%, 50% 70%, 28% 92%);
-}
-
-.equipment-ghost-legs {
-  width: 54%;
-  height: 68%;
-  clip-path: polygon(18% 0, 82% 0, 66% 100%, 52% 100%, 50% 44%, 48% 100%, 34% 100%);
-}
-
-.equipment-ghost-feet {
-  width: 62%;
-  height: 42%;
-  clip-path: polygon(5% 55%, 30% 20%, 58% 50%, 96% 58%, 86% 86%, 12% 86%);
-}
-
-.equipment-ghost-necklace,
-.equipment-ghost-ring1,
-.equipment-ghost-ring2 {
-  width: 46%;
-  height: 46%;
-  border: 6px solid rgba(220, 224, 226, .65);
-  border-radius: 50%;
-  background: transparent;
-  clip-path: none;
 }
 
 .builder-slot.small strong,
@@ -2592,17 +2558,6 @@ dialog::backdrop {
   .builder-slot.weapon-extra-tall .item-thumb-weapon-equipment {
     width: 60%;
     height: 100%;
-  }
-
-  .builder-slot.weapon .equipment-ghost {
-    height: 82%;
-    width: 36%;
-  }
-
-  .builder-slot.weapon-tall .equipment-ghost,
-  .builder-slot.weapon-extra-tall .equipment-ghost {
-    height: 92%;
-    width: 42%;
   }
 
   .builder-slot-label {

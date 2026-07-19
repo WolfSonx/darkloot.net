@@ -3,39 +3,53 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b0d10">
-  <title>DarkLoot</title>
-  <meta name="description" content="Search Dark and Darker loot drops, source tables, map filters, and kit stats with fast client-side lookups.">
+  <meta name="theme-color" content="#0a0b0d">
+  <title>DarkLoot - Dark and Darker Loot Database &amp; Kit Builder</title>
+  <meta name="description" content="Find Dark and Darker loot sources, compare luck-adjusted drop rates, and build complete kits with live combat stats.">
   <link rel="canonical" href="https://darkloot.net/">
-  <meta property="og:title" content="DarkLoot">
-  <meta property="og:description" content="Search loot drops, sources, maps, rarities, and kit stats for Dark and Darker.">
+  <meta property="og:title" content="DarkLoot - Find it. Farm it. Build it.">
+  <meta property="og:description" content="The fast Dark and Darker loot database, source explorer, and complete kit builder.">
   <meta property="og:type" content="website">
+  <meta property="og:site_name" content="DarkLoot">
   <meta property="og:url" content="https://darkloot.net/">
-  <meta property="og:image" content="https://darkloot.net/assets/darkloot-mark.png">
-  <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png?v=20260508-1">
-  <link rel="apple-touch-icon" href="/assets/darkloot-mark.png?v=20260508-1">
-  <link rel="stylesheet" href="/src/styles.css?v=20260717-1">
+  <meta property="og:image" content="https://darkloot.net/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="DarkLoot - Find it. Farm it. Build it.">
+  <meta name="twitter:description" content="The fast Dark and Darker loot database, source explorer, and complete kit builder.">
+  <meta name="twitter:image" content="https://darkloot.net/og.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png?v=20260719-2">
+  <link rel="apple-touch-icon" href="/assets/darkloot-icon-192.png?v=20260719-2">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/src/app.css?v=20260719-6">
 </head>
 <body>
+  <a class="skip-link" href="#mainContent">Skip to content</a>
+  <div id="appLoading" class="app-loading" aria-live="polite">
+    <img src="/assets/darkloot-mark.png?v=20260719-2" alt="" width="44" height="44">
+    <span>Preparing the dungeon index</span>
+  </div>
   <header class="app-header">
-    <div class="brand">
+    <a class="brand" href="/" aria-label="DarkLoot home">
       <div class="brand-mark" aria-hidden="true">
-        <img src="/assets/darkloot-mark.png?v=20260508-1" alt="" width="42" height="42">
+        <img src="/assets/darkloot-mark.png?v=20260719-2" alt="" width="42" height="42">
       </div>
       <div>
         <h1>DarkLoot</h1>
-        <p id="dataStatus">Loading loot data...</p>
+        <p>Dungeon intelligence</p>
       </div>
+    </a>
+    <div class="global-search-shell">
+      <label class="sr-only" for="globalSearch">Search all DarkLoot data</label>
+      <span class="global-search-icon" aria-hidden="true"></span>
+      <input id="globalSearch" type="search" autocomplete="off" placeholder="Search items and loot sources..." aria-controls="globalSearchPanel" aria-expanded="false">
+      <kbd aria-hidden="true">/</kbd>
+      <div id="globalSearchPanel" class="global-search-panel" role="listbox" hidden></div>
     </div>
-    <nav class="tabs app-nav" aria-label="Primary">
-      <button class="tab active" data-tab="items">Items</button>
-      <button class="tab" data-tab="sources">Sources</button>
-      <button class="tab" data-tab="builder">Kit Builder</button>
-      <button class="tab" data-tab="favorites">Favorites</button>
-    </nav>
     <div class="header-actions">
       <label class="header-luck">
-        <span>Luck</span>
+        <span>Loot Luck <button class="info-button" type="button" data-info="luck" aria-label="How luck affects drop rates">?</button></span>
         <input id="luckInput" type="number" min="0" max="500" step="1" value="0" aria-label="Luck">
       </label>
       <a class="header-discord" href="https://discord.gg/A6NjvABbCp" target="_blank" rel="noopener noreferrer" aria-label="Join the DarkLoot Discord server" title="Join Discord">
@@ -45,17 +59,31 @@
         <span>Discord</span>
       </a>
       <div class="header-updated" aria-label="Data updated">
-        <span>Updated</span>
-        <em>Season 10</em>
+        <span>Season 10 data</span>
         <strong id="updatedAt">-</strong>
       </div>
     </div>
   </header>
 
-  <main>
+  <div class="app-workspace">
+    <aside class="app-sidebar">
+      <nav class="tabs app-nav" aria-label="Primary" role="tablist">
+        <button class="tab active" data-tab="items" role="tab" aria-selected="true" aria-controls="itemsView"><span class="tab-icon tab-icon-items" aria-hidden="true"></span><span>Items</span></button>
+        <button class="tab" data-tab="sources" role="tab" aria-selected="false" aria-controls="sourcesView"><span class="tab-icon tab-icon-sources" aria-hidden="true"></span><span>Sources</span></button>
+        <button class="tab" data-tab="builder" role="tab" aria-selected="false" aria-controls="builderView"><span class="tab-icon tab-icon-builder" aria-hidden="true"></span><span>Kit Builder</span></button>
+        <button class="tab" data-tab="favorites" role="tab" aria-selected="false" aria-controls="favoritesView"><span class="tab-icon tab-icon-favorites" aria-hidden="true"></span><span>Favorites</span></button>
+      </nav>
+      <div class="sidebar-status">
+        <span id="dataStatus">Loading loot data...</span>
+        <strong id="datasetSummary">Season 10</strong>
+      </div>
+    </aside>
+
+  <main id="mainContent" tabindex="-1">
     <section id="itemsView" class="view active">
       <div class="view-head">
-        <h2>Item Drops</h2>
+        <div><span class="view-kicker">Loot database</span><h2>Items</h2></div>
+        <p>Find every known drop source and compare availability across maps.</p>
       </div>
       <div class="filters">
         <label class="wide">Search item
@@ -73,6 +101,10 @@
         <label>Difficulty
           <select id="itemDiff"></select>
         </label>
+        <div class="filter-actions">
+          <button id="resetItemFilters" type="button">Reset</button>
+          <button id="copyItemView" type="button">Copy view</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table>
@@ -96,7 +128,8 @@
 
     <section id="sourcesView" class="view">
       <div class="view-head">
-        <h2>Loot Sources</h2>
+        <div><span class="view-kicker">Drop tables</span><h2>Sources</h2></div>
+        <p>Inspect monsters, bosses, chests, props, and their complete loot pools.</p>
       </div>
       <div class="filters source-filters">
         <label class="wide">Search source
@@ -111,6 +144,10 @@
         <label>Kind
           <select id="sourceKind"></select>
         </label>
+        <div class="filter-actions">
+          <button id="resetSourceFilters" type="button">Reset</button>
+          <button id="copySourceView" type="button">Copy view</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table>
@@ -133,13 +170,13 @@
 
     <section id="builderView" class="view">
       <div class="view-head builder-head">
-        <h2>Kit Builder</h2>
+        <div><span class="view-kicker">Build laboratory</span><h2>Kit Builder</h2></div>
         <div id="builderSummary" class="builder-summary" aria-live="polite"></div>
       </div>
       <div class="builder-layout">
         <aside class="builder-panel builder-stats-panel">
           <div class="builder-panel-head">
-            <h3 id="builderStatsTitle">Stats</h3>
+            <h3>Stats</h3>
             <span id="builderGearScore" class="builder-count">0 GS</span>
           </div>
           <div id="builderStats" class="builder-stats"></div>
@@ -197,7 +234,7 @@
             <div id="builderSavedKits" class="builder-saved-kits"></div>
           </section>
 
-          <section id="builderCharacterPanel" class="builder-panel builder-character-panel">
+          <section class="builder-panel builder-character-panel">
             <div class="builder-panel-head builder-character-head">
               <h3>Character</h3>
             </div>
@@ -222,7 +259,7 @@
 
     <section id="favoritesView" class="view">
       <div class="view-head">
-        <h2>Favorites</h2>
+        <div><span class="view-kicker">Your collection</span><h2>Favorites</h2></div>
         <button id="clearFavorites" class="danger">Clear</button>
       </div>
       <div class="favorites-layout">
@@ -261,6 +298,7 @@
       </div>
     </section>
   </main>
+  </div>
 
   <dialog id="detailDialog">
     <div class="dialog-head">
@@ -273,7 +311,8 @@
           <span>Luck</span>
           <input id="detailLuckInput" type="number" min="0" max="500" step="1" value="0" aria-label="Luck for this popup">
         </label>
-        <button id="closeDetail" aria-label="Close">Close</button>
+        <button id="shareDetail" type="button">Copy link</button>
+        <button id="closeDetail" aria-label="Close details">Close</button>
       </div>
     </div>
     <div id="detailContent"></div>
@@ -292,6 +331,7 @@
     <div id="damageCheckerContent" class="damage-checker"></div>
   </dialog>
 
-  <script type="module" src="/src/main.js?v=20260717-1"></script>
+  <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="/src/main.js?v=20260719-6"></script>
 </body>
 </html>

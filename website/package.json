@@ -6,6 +6,9 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node scripts/dev-server.mjs",
-    "lint": "node --check scripts/build.mjs && node --check scripts/dev-server.mjs && node --check src/main.js"
+    "lint": "node --check scripts/build.mjs && node --check scripts/dev-server.mjs && node --check scripts/css.mjs && node --check scripts/prune-assets.mjs && node --check src/main.js && node --check src/config.js && node --check src/core.js && node --check src/router.js && node --check src/state.js && node --check src/kit-share.js && node --check src/kit-photo.js",
+    "prune:assets": "node scripts/prune-assets.mjs --write",
+    "check:assets": "node scripts/prune-assets.mjs",
+    "test": "node --test tests/*.test.mjs"
   }
 }
