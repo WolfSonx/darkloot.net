@@ -1508,6 +1508,7 @@ def build_kit_builder_data(generated_root: Path, output_dir: Path, public_items:
             for key, value in {
                 "id": perk.get("id"),
                 "name": perk.get("name"),
+                "stats": [public_stat_entry(entry) for entry in perk.get("stats") or []],
                 "iconUrl": perk.get("iconUrl"),
             }.items()
             if value not in (None, "", [], {})

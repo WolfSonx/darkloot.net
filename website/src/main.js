@@ -3,6 +3,7 @@ import {
   clampLuck,
   escapeHtml,
   isTwoHandedItem,
+  loreMasteryKnowledgeBonus,
   matchesSearchGroups,
   sourceKey,
   terms,
@@ -26,8 +27,10 @@ import {
   BUILDER_DEMON_ARMOR_PERK_ID,
   BUILDER_SPEAR_PROFICIENCY_PERK_ID,
   BUILDER_IRON_WILL_PERK_ID,
+  BUILDER_LORE_MASTERY_PERK_ID,
   BUILDER_SAVAGE_PERK_ID,
   BUILDER_NO_STAT_PERK_SUMMARY,
+  BUILDER_LORE_MASTERY_RESOURCEFULNESS_TO_KNOWLEDGE,
   BUILDER_PERK_STAT_OVERRIDES,
   BUILDER_PERK_SUMMARIES,
   PERK_ICON_ALIASES,
@@ -968,7 +971,7 @@ function builderPerkStatEntries(perk) {
     if (perk.id === BUILDER_SAVAGE_PERK_ID && builderChestArmorEquipped()) return [];
     return BUILDER_PERK_STAT_OVERRIDES[perk.id];
   }
-  return [];
+  return perk.stats || [];
 }
 
 function builderPerkSummary(perk) {
@@ -1141,6 +1144,19 @@ function addActiveSkinStats(totals) {
   (skin?.stats || []).forEach((entry) => addBuilderStat(totals, entry, skin.name || "Skin"));
 }
 
+function addDynamicPerkStats(totals) {
+  if (builderHasPerk(BUILDER_LORE_MASTERY_PERK_ID)) {
+    addBuilderStat(totals, {
+      statKey: "Knowledge",
+      label: "Knowledge",
+      value: loreMasteryKnowledgeBonus(
+        directStatValue(totals, "Resourcefulness"),
+        BUILDER_LORE_MASTERY_RESOURCEFULNESS_TO_KNOWLEDGE,
+      ),
+    }, "Lore Mastery");
+  }
+}
+
 function builderStatMap() {
   const totals = new Map();
   const character = selectedBuilderCharacter();
@@ -1152,6 +1168,7 @@ function builderStatMap() {
   });
   addActivePerkStats(totals);
   addActiveSkinStats(totals);
+  addDynamicPerkStats(totals);
   const armorMoveSpeedPenalty = activeArmorMoveSpeedPenalty();
   const armorMoveSpeedPenaltyReduction = directStatValue(totals, "MoveSpeedArmorPenaltyReduction");
   if (armorMoveSpeedPenalty < 0 && armorMoveSpeedPenaltyReduction > 0) {

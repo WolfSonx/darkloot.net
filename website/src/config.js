@@ -1,7 +1,7 @@
 export const FAVORITES_KEY = "darkloot:favorites:v1";
 export const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
 export const SHARED_KIT_BINARY_PREFIX = "~";
-export const APP_BUILD_ID = "20260719-6";
+export const APP_BUILD_ID = "20260720-1";
 export const SITE_UPDATED_AT = "2026-07-17T00:00:00+03:00";
 export const ROW_PAGE_SIZE = 160;
 export const MAX_BUILDER_ITEMS = 180;
@@ -14,8 +14,10 @@ export const BUILDER_WEAPON_MASTERY_PERK_ID = "Id_Perk_WeaponMastery";
 export const BUILDER_DEMON_ARMOR_PERK_ID = "Id_Perk_DemonArmor";
 export const BUILDER_SPEAR_PROFICIENCY_PERK_ID = "Id_Perk_SpearProficiency";
 export const BUILDER_IRON_WILL_PERK_ID = "Id_Perk_IronWill";
+export const BUILDER_LORE_MASTERY_PERK_ID = "Id_Perk_LoreMastery";
 export const BUILDER_SAVAGE_PERK_ID = "Id_Perk_Savage";
 export const BUILDER_NO_STAT_PERK_SUMMARY = "This perk doesnt affect stats";
+export const BUILDER_LORE_MASTERY_RESOURCEFULNESS_TO_KNOWLEDGE = 0.5;
 export const BUILDER_PERK_STAT_OVERRIDES = {
   Id_Perk_DefenseMastery: [
     { statKey: "ItemArmorRatingMod", label: "Armor Rating Bonus", value: 15, unit: "%" },
@@ -71,12 +73,8 @@ export const BUILDER_PERK_STAT_OVERRIDES = {
   Id_Perk_UndeadSlaying: [
     { statKey: "UndeadDamageBonus", label: "Undead Damage Bonus", value: 20, unit: "%" },
   ],
-  Id_Perk_Fermata: [
-    { statKey: "Resourcefulness", label: "Resourcefulness", value: 5, unit: "" },
-  ],
   Id_Perk_LoreMastery: [
     { statKey: "RegularInteractionSpeed", label: "Regular Interaction Speed", value: 30, unit: "%" },
-    { statKey: "MemoryCapacity", label: "Memory Capacity", value: 5, unit: "" },
   ],
   Id_Perk_WanderersLuck: [
     { statKey: "Luck", label: "Luck", value: 100, unit: "" },
@@ -93,7 +91,9 @@ export const BUILDER_PERK_STAT_OVERRIDES = {
   ],
 };
 export const BUILDER_PERK_SUMMARIES = {
+  Id_Perk_Fermata: "Music buff effect 1.5x",
   Id_Perk_Jokester: "All Attributes +2",
+  Id_Perk_LoreMastery: "Regular Interaction Speed +30%, Knowledge +50% of Resourcefulness",
   Id_Perk_WeaponMastery: "Allows all weapons",
   Id_Perk_DemonArmor: "Spell Casting Speed -10%, allows plate armor",
   Id_Perk_IronWill: "Magic Resistance +75, Magical Damage Reduction cap 75%",
@@ -242,4 +242,3 @@ export const GRADE4_ANCHORS = [
   [450, 1.744],
   [500, 1.752],
 ];
-

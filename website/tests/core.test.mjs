@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { clampLuck, escapeHtml, isTwoHandedItem, matchesSearchGroups, sourceKey, terms } from "../src/core.js";
+import { clampLuck, escapeHtml, isTwoHandedItem, loreMasteryKnowledgeBonus, matchesSearchGroups, sourceKey, terms } from "../src/core.js";
 import { detailSlug, queryForState, readRoute, routePath } from "../src/router.js";
 
 test("search terms split camel case and punctuation", () => {
@@ -20,6 +20,12 @@ test("two-handed item detection follows exported hand metadata", () => {
   assert.equal(isTwoHandedItem({ hand: "TwoHanded" }), true);
   assert.equal(isTwoHandedItem({ hand: "OneHanded" }), false);
   assert.equal(isTwoHandedItem(null), false);
+});
+
+test("Lore Mastery grants Knowledge from Resourcefulness", () => {
+  assert.equal(loreMasteryKnowledgeBonus(30), 15);
+  assert.equal(loreMasteryKnowledgeBonus(31), 15.5);
+  assert.equal(loreMasteryKnowledgeBonus("bad"), 0);
 });
 
 test("detail routes remain stable", () => {

@@ -55,3 +55,10 @@ export function clampLuck(value) {
 export function isTwoHandedItem(item) {
   return String(item?.hand || "").toLowerCase() === "twohanded";
 }
+
+export function loreMasteryKnowledgeBonus(resourcefulness, ratio = 0.5) {
+  const value = Number(resourcefulness || 0);
+  const multiplier = Number(ratio);
+  if (!Number.isFinite(value) || !Number.isFinite(multiplier)) return 0;
+  return value * multiplier;
+}
