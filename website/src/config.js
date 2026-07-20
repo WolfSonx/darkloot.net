@@ -1,7 +1,7 @@
 export const FAVORITES_KEY = "darkloot:favorites:v1";
 export const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
 export const SHARED_KIT_BINARY_PREFIX = "~";
-export const APP_BUILD_ID = "20260720-1";
+export const APP_BUILD_ID = "20260721-1";
 export const SITE_UPDATED_AT = "2026-07-17T00:00:00+03:00";
 export const ROW_PAGE_SIZE = 160;
 export const MAX_BUILDER_ITEMS = 180;
@@ -60,6 +60,10 @@ export const BUILDER_PERK_STAT_OVERRIDES = {
   ],
   Id_Perk_ManaSurge: [
     { statKey: "MagicalDamageBonus", label: "Magical Damage Bonus", value: 10, unit: "%" },
+  ],
+  Id_Perk_GlassCannon: [
+    { statKey: "MagicalPower", label: "Magical Power", value: 20, unit: "" },
+    { statKey: "MaxHealthBonus", label: "Max Health Bonus", value: -10, unit: "%" },
   ],
   Id_Perk_Sage: [
     { statKey: "KnowledgeMod", label: "Knowledge Bonus", value: 15, unit: "%" },
