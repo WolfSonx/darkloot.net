@@ -52,6 +52,7 @@ import {
 const state = createAppState();
 
 const $ = (id) => document.getElementById(id);
+const GRADE_RARITIES = ["", "Junk", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Unique", "Artifact"];
 let builderShareStatusTimer = 0;
 const secondaryOptionsCache = new WeakMap();
 const emptySecondaryOptions = { options: [], byId: new Map() };
@@ -279,7 +280,7 @@ function showInfoPopover(button) {
   document.querySelector(".info-popover")?.remove();
   const popover = document.createElement("div");
   popover.className = "info-popover";
-  popover.textContent = "Luck changes grade probabilities. Per Item is the chance for one roll; Per Kill/Interaction combines every roll from that source.";
+  popover.textContent = "Luck changes rarity pool odds. The main chance is for one kill, chest, or interaction; single-roll odds are shown only as the table math behind it.";
   document.body.appendChild(popover);
   const rect = button.getBoundingClientRect();
   popover.style.left = `${Math.min(window.innerWidth - popover.offsetWidth - 12, Math.max(12, rect.left - popover.offsetWidth + rect.width))}px`;
@@ -347,6 +348,94 @@ function gradeAtLeastOneValue(row) {
 
 function chanceText(row, valueKey = "dynAtLeastOneValue", textKey = "dynAtLeastOne") {
   return row.luckModel ? percent(chanceValue(row, valueKey)) : row[textKey];
+}
+
+function plural(value, label) {
+  return `${value} ${label}${Number(value) === 1 ? "" : "s"}`;
+}
+
+function gradeRarity(grade) {
+  return GRADE_RARITIES[Number(grade)] || `Grade ${grade}`;
+}
+
+function sourceActionKind(kind) {
+  const normalized = String(kind || "").toLowerCase();
+  if (normalized === "boss" || normalized === "monster") return "kill";
+  if (normalized === "prop") return "open";
+  return "interaction";
+}
+
+function sourceActionLabel(kind) {
+  return `one ${sourceActionKind(kind)}`;
+}
+
+function sourceDetailActionLabel(payload) {
+  return sourceActionLabel(payload?.sourceKind);
+}
+
+function itemDetailActionLabel(row) {
+  return sourceActionLabel(row?.sourceKind);
+}
+
+function sourceChanceHeader(payload) {
+  return `Chance from ${sourceDetailActionLabel(payload)}`;
+}
+
+function bestChanceHeader(filters) {
+  const kind = filters?.kind && filters.kind !== "All" ? filters.kind : "";
+  return kind ? `Best chance from ${sourceActionLabel(kind)}` : "Best chance from source";
+}
+
+function chanceGuide(actionLabel) {
+  return `
+    <div class="chance-guide" aria-label="Drop chance labels">
+      <div>
+        <strong>Chance from ${escapeHtml(actionLabel)}</strong>
+        <span>Main number. Combines all loot rolls for this exact item.</span>
+      </div>
+      <div>
+        <strong>Single roll chance</strong>
+        <span>Internal roll math for this exact item.</span>
+      </div>
+      <div>
+        <strong>Any rarity pool</strong>
+        <span>Chance to hit the rarity before the item is chosen.</span>
+      </div>
+    </div>
+  `;
+}
+
+function choiceCountText(choiceFraction) {
+  const value = Number(choiceFraction || 0);
+  if (value <= 0) return "item choice";
+  const inverse = 1 / value;
+  const rounded = Math.round(inverse);
+  if (Math.abs(inverse - rounded) < 0.000001) {
+    return rounded === 1 ? "only item in pool" : `1 of ${rounded} items`;
+  }
+  return `${percent(value)} of pool`;
+}
+
+function chanceBreakdownText(row, includeRolls = true) {
+  const model = row.luckModel;
+  if (!model) return "";
+  const pool = gradeChanceValue(row);
+  const rolls = Math.max(1, Number(model.rolls || row.rolls || 1));
+  const poolLabel = `${percent(pool)} ${gradeRarity(model.grade)} pool`;
+  return [
+    poolLabel,
+    choiceCountText(model.choiceFraction),
+    includeRolls ? plural(rolls, "roll") : "",
+  ].filter(Boolean).join(" / ");
+}
+
+function chanceCell(row, label, breakdown = chanceBreakdownText(row)) {
+  return `
+    <span class="chance-cell">
+      <strong>${escapeHtml(label)}</strong>
+      ${breakdown ? `<small>${escapeHtml(breakdown)}</small>` : ""}
+    </span>
+  `;
 }
 
 function baseChanceValue(row) {
@@ -3528,22 +3617,23 @@ function sourceRollSummaryRows(rows) {
     }));
 }
 
-function sourceRollSummaryTable(rows) {
+function sourceRollSummaryTable(rows, payload) {
   const summaryRows = sourceRollSummaryRows(rows);
   if (!summaryRows.length) return "";
+  const action = sourceDetailActionLabel(payload);
   return `
     <div class="roll-summary">
       <div class="roll-summary-head">
-        <strong>Loot Roll Chances</strong>
-        <span class="muted">Grade chance before the individual item is selected.</span>
+        <strong>Rarity Pool Chances</strong>
+        <span class="muted">Chance to hit a rarity pool before one item is chosen.</span>
       </div>
       ${detailTable(summaryRows, [
-        { label: "Grade", html: (row) => escapeHtml(`G${row.grade}`), num: true },
-        { label: "Rolls", html: (row) => escapeHtml(row.rolls), num: true },
+        { label: "Pool", html: (row) => rarity(gradeRarity(row.grade)) },
+        { label: "Internal Rolls", html: (row) => escapeHtml(row.rolls), num: true },
         { label: "Loot Table", html: (row) => escapeHtml(row.lootTable || "") },
         { label: "Rate Table", html: (row) => escapeHtml(row.rateTable || "") },
-        { label: "Grade Per Roll", html: (row) => escapeHtml(percent(row.gradePerRoll)), num: true },
-        { label: "Grade Per Kill/Interaction", html: (row) => escapeHtml(percent(row.gradeAtLeastOne)), num: true },
+      { label: "Pool per Roll", html: (row) => chanceCell(row, percent(row.gradePerRoll), `${gradeRarity(row.grade)} pool`), num: true },
+      { label: `Pool chance from ${action}`, html: (row) => chanceCell(row, percent(row.gradeAtLeastOne), plural(row.rolls, "roll")), num: true },
       ])}
     </div>
   `;
@@ -3601,7 +3691,8 @@ function renderSourceDetail(payload) {
         ${isFavoriteSource(payload.source, payload.sourceKind) ? "Remove Favorite" : "Favorite Source"}
       </button>
     </div>
-    ${sourceRollSummaryTable(rows)}
+    ${chanceGuide(sourceDetailActionLabel(payload))}
+    ${sourceRollSummaryTable(rows, payload)}
     ${detailTable(limited, [
       { label: "Item", sortKey: "item", html: (row) => itemNameCell(row) },
       { label: "Amount", sortKey: "amount", html: (row) => amountCell(row), num: true },
@@ -3609,9 +3700,9 @@ function renderSourceDetail(payload) {
       { label: "Category", sortKey: "category", html: (row) => categoryChip(row.category) },
       { label: "Maps", sortKey: "maps", html: (row) => chips(mapChipValues(row.maps || row.map, filters.map, filters.diff), "map-chip") },
       { label: "Difficulties", sortKey: "difficulties", html: (row) => chips(scopedChipValues(row.diffs || row.diff, filters.diff), "diff-chip") },
-      { label: "Rolls", sortKey: "rolls", html: (row) => escapeHtml(row.rolls), num: true },
-      { label: "Per Item", sortKey: "perRoll", html: (row) => escapeHtml(perRollChanceText(row)), num: true },
-      { label: "Per Kill/Interaction", sortKey: "chance", html: (row) => escapeHtml(chanceText(row)), num: true },
+      { label: "Internal Rolls", sortKey: "rolls", html: (row) => escapeHtml(row.rolls), num: true },
+      { label: "Single Roll Chance", sortKey: "perRoll", html: (row) => chanceCell(row, perRollChanceText(row), chanceBreakdownText(row, false)), num: true },
+      { label: sourceChanceHeader(payload), sortKey: "chance", html: (row) => chanceCell(row, chanceText(row), chanceBreakdownText(row)), num: true },
     ])}
     ${payload.nextPage ? `<div class="detail-paging"><button type="button" data-load-source-page>Load more drop rows</button></div>` : ""}
   `;
@@ -3685,15 +3776,16 @@ function renderItemDetail(payload) {
         ${isFavoriteItem(payload.item?.itemAsset) ? "Remove Favorite" : "Favorite Item"}
       </button>
     </div>
+    ${chanceGuide(filters.kind && filters.kind !== "All" ? sourceActionLabel(filters.kind) : "one source")}
     ${detailTable(limited, [
       { label: "Source", key: "source" },
       { label: "Kind", html: (row) => kindChip(row.sourceKind) },
       { label: "Maps", html: (row) => chips(mapChipValues(row.mapValues || row.maps, filters.map, filters.diff), "map-chip") },
       { label: "Difficulties", html: (row) => chips(scopedChipValues(row.diffValues || row.diffs, filters.diff), "diff-chip") },
-      { label: "Rolls", html: (row) => escapeHtml(row.luckModel?.rolls || row.bestRolls || ""), num: true },
+      { label: "Internal Rolls", html: (row) => escapeHtml(row.luckModel?.rolls || row.bestRolls || ""), num: true },
       { label: "Amount", html: (row) => amountCell(row), num: true },
-      { label: "Best Per Item", html: (row) => escapeHtml(percent(itemDetailBestPerRollChanceValue(row, filters))), num: true },
-      { label: "Best Per Kill/Interaction", html: (row) => escapeHtml(percent(itemDetailBestLuckChanceValue(row, filters))), num: true },
+      { label: "Best Single Roll", html: (row) => chanceCell(row, percent(itemDetailBestPerRollChanceValue(row, filters))), num: true },
+      { label: bestChanceHeader(filters), html: (row) => chanceCell(row, percent(itemDetailBestLuckChanceValue(row, filters))), num: true },
       { label: "Open", className: "detail-action-cell", html: (row) => `<button data-open-source="${escapeHtml(sourceLookupKey(row))}">Open</button>` },
     ], (row) => `class="clickable-row" data-open-source="${escapeHtml(sourceLookupKey(row))}" tabindex="0" role="button"`)}
   `;

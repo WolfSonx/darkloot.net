@@ -540,6 +540,42 @@ label select {
   max-height: none;
 }
 
+.chance-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.chance-guide div {
+  min-width: 0;
+  min-height: 74px;
+  border: 1px solid rgba(83, 105, 128, .48);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(75, 214, 188, .06), transparent),
+    rgba(13, 20, 29, .74);
+  padding: 10px 11px;
+}
+
+.chance-guide strong,
+.chance-guide span {
+  display: block;
+}
+
+.chance-guide strong {
+  color: #f4f8fb;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.chance-guide span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .roll-summary {
   margin: 0 0 12px;
 }
@@ -598,6 +634,28 @@ th {
 
 td {
   color: #edf2f6;
+}
+
+.chance-cell {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  min-width: 0;
+}
+
+.chance-cell strong {
+  color: #f7fbff;
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.chance-cell small {
+  max-width: 210px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 tbody tr:nth-child(even) td {
@@ -2415,6 +2473,7 @@ dialog::backdrop {
   .filters,
   .source-filters,
   .detail-filters,
+  .chance-guide,
   .favorites-layout,
   .builder-layout,
   .builder-playfield,
