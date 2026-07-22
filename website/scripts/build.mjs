@@ -8,18 +8,49 @@ import { minifyCss } from "./css.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
+const sourceDir = path.join(root, "src");
+const configSource = await readFile(path.join(sourceDir, "config.js"), "utf8");
+const appBuildId = configSource.match(/export const APP_BUILD_ID = "([^"]+)";/)?.[1];
+
+if (!appBuildId) throw new Error("Could not read APP_BUILD_ID from src/config.js");
+
+function versionModuleImports(source) {
+  return source.replace(
+    /((?:from\s+|import\(\s*)["'])(\.\/[^"'?]+\.js)(["'])/g,
+    `$1$2?v=${appBuildId}$3`,
+  );
+}
+
+function versionEntryAssets(source) {
+  return source.replace(
+    /(\/src\/(?:app\.css|main\.js))(?:\?v=[^"'\s<>]+)?/g,
+    `$1?v=${appBuildId}`,
+  );
+}
+
+function versionServiceWorker(source) {
+  return source
+    .replace(/darkloot-shell-[^"']+/g, `darkloot-shell-${appBuildId}`)
+    .replace(
+      /(\/src\/[^"'?]+\.(?:css|js))(?:\?v=[^"'\s]+)?/g,
+      `$1?v=${appBuildId}`,
+    );
+}
 
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
-await cp(path.join(root, "index.html"), path.join(dist, "index.html"));
+const template = versionEntryAssets(await readFile(path.join(root, "index.html"), "utf8"));
+await writeFile(path.join(dist, "index.html"), template);
 await cp(path.join(root, "public"), dist, { recursive: true });
+const serviceWorkerPath = path.join(dist, "service-worker.js");
+await writeFile(serviceWorkerPath, versionServiceWorker(await readFile(serviceWorkerPath, "utf8")));
 
-const sourceDir = path.join(root, "src");
 const clientSourceDir = path.join(dist, "src");
 await mkdir(clientSourceDir, { recursive: true });
 for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
   if (entry.isFile() && path.extname(entry.name) === ".js") {
-    await cp(path.join(sourceDir, entry.name), path.join(clientSourceDir, entry.name));
+    const source = await readFile(path.join(sourceDir, entry.name), "utf8");
+    await writeFile(path.join(clientSourceDir, entry.name), versionModuleImports(source));
   }
 }
 const css = await Promise.all([
@@ -28,7 +59,6 @@ const css = await Promise.all([
 ]);
 await writeFile(path.join(clientSourceDir, "app.css"), minifyCss(css.join("\n")));
 
-const template = await readFile(path.join(root, "index.html"), "utf8");
 const items = JSON.parse(await readFile(path.join(root, "public", "data", "items-index.json"), "utf8")).rows || [];
 const sources = JSON.parse(await readFile(path.join(root, "public", "data", "sources-index.json"), "utf8")).rows || [];
 const sitemapUrls = ["https://darkloot.net/"];
