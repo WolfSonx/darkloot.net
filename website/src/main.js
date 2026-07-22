@@ -2,10 +2,15 @@ import {
   buildSearchIndex,
   clampLuck,
   escapeHtml,
+  finalHealth,
+  interpolateCurve,
   isTwoHandedItem,
   loreMasteryKnowledgeBonus,
+  maxHealthRating,
   matchesSearchGroups,
+  slotContributesStats,
   sourceKey,
+  sumEquippedGearScore,
   terms,
 } from "./core.js";
 import { detailSlug, readRoute, urlForState } from "./router.js";
@@ -35,7 +40,6 @@ import {
   BUILDER_PERK_SUMMARIES,
   PERK_ICON_ALIASES,
   BUILDER_DEFAULTS,
-  BUILDER_MAX_HEALTH_BASE_RATING,
   DAMAGE_TARGET_DEFAULTS,
   DAMAGE_HIT_LOCATIONS,
   BUILDER_SLOTS,
@@ -937,7 +941,7 @@ function weaponSlotBlockReason(slotId) {
 
 function slotStatsAreActive(slotId) {
   const slot = builderSlotById(slotId);
-  return !slot.weaponSet;
+  return slotContributesStats(slot, state.builder.activeWeaponSet);
 }
 
 function itemFitsBuilderSlot(item, slotId) {
@@ -1337,24 +1341,7 @@ function curveKeys(tableName, rowName) {
 }
 
 function curveValue(tableName, rowName, input, fallback = 0) {
-  const keys = curveKeys(tableName, rowName);
-  const x = Number(input || 0);
-  if (!keys.length || !Number.isFinite(x)) return fallback;
-  if (x <= Number(keys[0][0])) return Number(keys[0][1] || 0);
-  for (let index = 1; index < keys.length; index += 1) {
-    const previous = keys[index - 1];
-    const next = keys[index];
-    const x1 = Number(previous[0]);
-    const y1 = Number(previous[1]);
-    const x2 = Number(next[0]);
-    const y2 = Number(next[1]);
-    if (x <= x2) {
-      if (Math.abs(x2 - x1) < 0.0001) return y2;
-      const ratio = (x - x1) / (x2 - x1);
-      return y1 + ((y2 - y1) * ratio);
-    }
-  }
-  return Number(keys[keys.length - 1][1] || 0);
+  return interpolateCurve(curveKeys(tableName, rowName), input, fallback);
 }
 
 function curvePercent(tableName, rowName, input) {
@@ -1377,15 +1364,19 @@ function builderDerivedStatValues(totals, character) {
   values.set("Will", will);
   values.set("Knowledge", knowledge);
 
-  const maxHealthRating = BUILDER_MAX_HEALTH_BASE_RATING + (strength * 0.25) + (vigor * 0.75);
+  const healthRating = maxHealthRating(strength, vigor);
   const baseHealth = curveValue(
     "CT_MaxHealthBase",
     "MaxHealthBase",
-    maxHealthRating,
-    character ? 80 : 0,
+    healthRating,
+    character ? 70 : 0,
   );
-  const health = (baseHealth * (1 + (directStatValue(totals, "MaxHealthBonus") / 100))) + directStatValue(totals, "Health");
-  values.set("Health", Math.ceil(health));
+  values.set("Health", finalHealth(
+    baseHealth,
+    directStatValue(totals, "MaxHealthBaseAdd"),
+    directStatValue(totals, "MaxHealthBonus"),
+    directStatValue(totals, "Health"),
+  ));
   const magicalHealing = directStatValue(totals, "MagicalHealing") * (1 + (directStatValue(totals, "MagicalHealingBonus", "MagicalHealMod") / 100));
   values.set("MagicalHealing", magicalHealing);
 
@@ -3408,10 +3399,7 @@ async function saveBuilderPhoto() {
 }
 
 function renderBuilderStats(stats = builderStatRows()) {
-  const gearScore = Object.entries(state.builder.equipped)
-    .filter(([slotId]) => slotStatsAreActive(slotId))
-    .map(([, asset]) => Number(state.kit.itemByAsset.get(asset)?.gearScore || 0))
-    .reduce((sum, value) => sum + value, 0);
+  const gearScore = sumEquippedGearScore(state.builder.equipped, state.kit.itemByAsset);
   $("builderGearScore").textContent = `${gearScore.toLocaleString()} GS`;
   $("builderStats").innerHTML = stats.map((row) => {
     const numeric = row.type !== "text";

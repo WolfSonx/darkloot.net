@@ -62,3 +62,42 @@ export function loreMasteryKnowledgeBonus(resourcefulness, ratio = 0.5) {
   if (!Number.isFinite(value) || !Number.isFinite(multiplier)) return 0;
   return value * multiplier;
 }
+
+export function interpolateCurve(keys, input, fallback = 0) {
+  const points = Array.isArray(keys) ? keys : [];
+  const x = Number(input || 0);
+  if (!points.length || !Number.isFinite(x)) return fallback;
+  if (x <= Number(points[0][0])) return Number(points[0][1] || 0);
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const next = points[index];
+    const x1 = Number(previous[0]);
+    const y1 = Number(previous[1]);
+    const x2 = Number(next[0]);
+    const y2 = Number(next[1]);
+    if (x <= x2) {
+      if (Math.abs(x2 - x1) < 0.0001) return y2;
+      return y1 + ((y2 - y1) * ((x - x1) / (x2 - x1)));
+    }
+  }
+  return Number(points[points.length - 1][1] || 0);
+}
+
+export function maxHealthRating(strength, vigor) {
+  return (Number(strength || 0) * 0.25) + (Number(vigor || 0) * 0.75);
+}
+
+export function finalHealth(curveBaseHealth, baseHealthAdd = 0, maxHealthBonus = 0, maxHealthAdd = 0) {
+  const baseHealth = Number(curveBaseHealth || 0) + Number(baseHealthAdd || 0);
+  return Math.ceil((baseHealth * (1 + (Number(maxHealthBonus || 0) / 100))) + Number(maxHealthAdd || 0));
+}
+
+export function slotContributesStats(slot, activeWeaponSet = "1") {
+  return !slot?.weaponSet || String(slot.weaponSet) === String(activeWeaponSet || "1");
+}
+
+export function sumEquippedGearScore(equipped, itemByAsset) {
+  return Object.values(equipped || {})
+    .map((asset) => Number(itemByAsset?.get(asset)?.gearScore || 0))
+    .reduce((sum, value) => sum + value, 0);
+}

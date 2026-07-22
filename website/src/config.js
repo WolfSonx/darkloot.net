@@ -1,7 +1,7 @@
 export const FAVORITES_KEY = "darkloot:favorites:v1";
 export const SAVED_KITS_KEY = "darkloot:builder-kits:v1";
 export const SHARED_KIT_BINARY_PREFIX = "~";
-export const APP_BUILD_ID = "20260722-1";
+export const APP_BUILD_ID = "20260722-2";
 export const SITE_UPDATED_AT = "2026-07-17T00:00:00+03:00";
 export const ROW_PAGE_SIZE = 160;
 export const MAX_BUILDER_ITEMS = 180;
@@ -113,7 +113,6 @@ export const BUILDER_DEFAULTS = {
   primaryUnarmedDamage: 8,
   primaryUnarmedImpactPower: 1,
 };
-export const BUILDER_MAX_HEALTH_BASE_RATING = 15;
 export const DAMAGE_TARGET_DEFAULTS = {
   name: "Training Dummy",
   weaponSet: "1",

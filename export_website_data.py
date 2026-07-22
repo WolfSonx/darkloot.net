@@ -1393,7 +1393,30 @@ def public_art(art: dict | None) -> dict:
     return {"iconSize": icon_size} if icon_size else {}
 
 
-def load_kit_items(generated_root: Path, public_items: list[dict], property_assets: dict, requirements: dict, item_art: dict) -> list[dict]:
+def load_gear_score_socket_bonuses(generated_root: Path) -> dict[str, int]:
+    bonuses = {}
+    constant_dir = generated_root / "Constant" / "Constant"
+    prefix = "Id_Constant_GearScoreSocketBonus_"
+    for path in constant_dir.glob(f"{prefix}*.json") if constant_dir.exists() else []:
+        asset = read_asset(path)
+        if not asset:
+            continue
+        name = str(asset.get("Name") or path.stem)
+        rarity = normalize_rarity(name.removeprefix(prefix))
+        value = (asset.get("Properties") or {}).get("Int32Value")
+        if rarity and isinstance(value, int):
+            bonuses[rarity] = value
+    return bonuses
+
+
+def load_kit_items(
+    generated_root: Path,
+    public_items: list[dict],
+    property_assets: dict,
+    requirements: dict,
+    item_art: dict,
+    gear_score_socket_bonuses: dict[str, int],
+) -> list[dict]:
     public_by_asset = {row.get("itemAsset"): row for row in public_items}
     kit_items = []
     item_dir = generated_root / "Item" / "Item"
@@ -1415,6 +1438,8 @@ def load_kit_items(generated_root: Path, public_items: list[dict], property_asse
         allowed_classes = requirements.get(requirement_id, [])
         rarity_value = normalize_rarity(props.get("RarityType")) or public_row.get("rarity") or "Unknown"
         item_type = str(props.get("ItemType") or "").split("::")[-1]
+        base_gear_score = props.get("GearScore", 0)
+        socket_gear_score = gear_score_socket_bonuses.get(rarity_value, 0) if secondary_ids else 0
         kit_item = {
             "asset": name,
             "name": localized_text(props.get("Name"), public_row.get("item") or humanize_identifier(name)),
@@ -1424,7 +1449,7 @@ def load_kit_items(generated_root: Path, public_items: list[dict], property_asse
             "hand": tag_leaf(props.get("HandType")),
             "armorType": tag_leaf(props.get("ArmorType")),
             "weaponTypes": [tag_leaf(row) for row in props.get("WeaponTypes") or [] if tag_leaf(row)],
-            "gearScore": props.get("GearScore", 0),
+            "gearScore": base_gear_score + socket_gear_score,
             "inventory": {
                 "width": props.get("InventoryWidth", 1),
                 "height": props.get("InventoryHeight", 1),
@@ -1466,7 +1491,15 @@ def build_kit_builder_data(generated_root: Path, output_dir: Path, public_items:
     curve_tables = load_curve_tables(generated_root)
     perks = load_perks(generated_root, output_dir, status_effects)
     characters = load_characters(generated_root, output_dir, perks, character_effects)
-    kit_items = load_kit_items(generated_root, public_items, property_assets, requirements, item_art)
+    gear_score_socket_bonuses = load_gear_score_socket_bonuses(generated_root)
+    kit_items = load_kit_items(
+        generated_root,
+        public_items,
+        property_assets,
+        requirements,
+        item_art,
+        gear_score_socket_bonuses,
+    )
     secondary_pool_ids = sorted({pool_id for item in kit_items for pool_id in item.get("secondaryPoolIds", [])})
     secondary_pools = {
         pool_id: {
