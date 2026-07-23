@@ -3,11 +3,13 @@ import {
   clampLuck,
   escapeHtml,
   finalHealth,
+  finalMemoryCapacity,
   interpolateCurve,
   isTwoHandedItem,
   loreMasteryKnowledgeBonus,
   maxHealthRating,
   matchesSearchGroups,
+  normalizedStatEntryValue,
   slotContributesStats,
   sourceKey,
   sumEquippedGearScore,
@@ -1108,11 +1110,7 @@ function statStep(entry) {
 }
 
 function clampStatEntryValue(entry, value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return Number(entry?.max ?? entry?.min ?? 0);
-  const min = Number(entry?.min ?? parsed);
-  const max = Number(entry?.max ?? parsed);
-  return Math.max(min, Math.min(max, parsed));
+  return normalizedStatEntryValue(entry, value);
 }
 
 function defaultPrimaryValuesForItem(item) {
@@ -1393,7 +1391,11 @@ function builderDerivedStatValues(totals, character) {
   values.set("MagicalInteractionSpeed", curvePercent("CT_Will", "MagicalInteractionSpeed", will) + directStatValue(totals, "MagicalInteractionSpeed", "MagicalInteractionSpeedBonus"));
   values.set("HealthRecoveryBonus", curvePercent("CT_RecoveryMod", "HealthRecoveryMod", vigor) + directStatValue(totals, "HealthRecoveryBonus"));
   values.set("SpellRecoveryBonus", curvePercent("CT_RecoveryMod", "MemoryRecoveryMod", knowledge) + directStatValue(totals, "SpellRecoveryBonus"));
-  values.set("MemoryCapacity", curveValue("CT_Knowledge", "MemoryCapacity", knowledge) + directStatValue(totals, "MemoryCapacity"));
+  values.set("MemoryCapacity", finalMemoryCapacity(
+    curveValue("CT_Knowledge", "MemoryCapacity", knowledge),
+    directStatValue(totals, "MemoryCapacityBonus"),
+    directStatValue(totals, "MemoryCapacity"),
+  ));
   values.set("Persuasiveness", curveValue("CT_Resourcefulness", "Persuasiveness", resourcefulness) + directStatValue(totals, "Persuasiveness"));
   values.set("BuffDurationBonus", curvePercent("CT_Will", "BuffDurationMod", will) + directStatValue(totals, "BuffDurationBonus"));
   values.set("DebuffDurationBonus", curvePercent("CT_Will", "DebuffDurationMod", will) + directStatValue(totals, "DebuffDurationBonus"));
@@ -1809,7 +1811,7 @@ async function loadData() {
   state.itemByAsset = new Map(state.items.map((row) => [row.itemAsset, row]));
   state.sourceByKey = new Map(state.sources.map((row) => [sourceKey(row.source, row.sourceKind), row]));
   $("dataStatus").textContent = `${state.items.length.toLocaleString()} items indexed`;
-  $("datasetSummary").textContent = `${state.sources.length.toLocaleString()} sources | Season 10`;
+  $("datasetSummary").textContent = `${state.sources.length.toLocaleString()} sources | Hotfix #120`;
   $("updatedAt").textContent = formatDate(SITE_UPDATED_AT);
   fillFilters();
   const initialRoute = readRoute();

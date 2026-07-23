@@ -92,6 +92,26 @@ export function finalHealth(curveBaseHealth, baseHealthAdd = 0, maxHealthBonus =
   return Math.ceil((baseHealth * (1 + (Number(maxHealthBonus || 0) / 100))) + Number(maxHealthAdd || 0));
 }
 
+export function finalMemoryCapacity(knowledgeCapacity, memoryCapacityBonus = 0, additionalMemoryCapacity = 0) {
+  const baseCapacity = Number(knowledgeCapacity || 0);
+  const bonus = Number(memoryCapacityBonus || 0);
+  const additional = Number(additionalMemoryCapacity || 0);
+  return Math.ceil(baseCapacity * (1 + (bonus / 100))) + additional;
+}
+
+export function normalizedStatEntryValue(entry, value) {
+  let parsed = Number(value);
+  const fallback = Number(entry?.max ?? entry?.min ?? 0);
+  if (!Number.isFinite(parsed)) return fallback;
+  const min = Number(entry?.min ?? parsed);
+  const max = Number(entry?.max ?? parsed);
+  if (entry?.statKey === "MemoryCapacityBonus" && parsed > max) {
+    const migrated = parsed / 10;
+    if (migrated >= min && migrated <= max) parsed = migrated;
+  }
+  return Math.max(min, Math.min(max, parsed));
+}
+
 export function slotContributesStats(slot, activeWeaponSet = "1") {
   return !slot?.weaponSet || String(slot.weaponSet) === String(activeWeaponSet || "1");
 }

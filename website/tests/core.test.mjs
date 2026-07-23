@@ -5,11 +5,13 @@ import {
   clampLuck,
   escapeHtml,
   finalHealth,
+  finalMemoryCapacity,
   interpolateCurve,
   isTwoHandedItem,
   loreMasteryKnowledgeBonus,
   matchesSearchGroups,
   maxHealthRating,
+  normalizedStatEntryValue,
   slotContributesStats,
   sourceKey,
   sumEquippedGearScore,
@@ -49,16 +51,37 @@ test("health uses the fractional Strength and Vigor rating before the class base
   assert.equal(finalHealth(interpolateCurve(maxHealthCurve, rating), 25, 5, 0), 133);
 });
 
+test("memory capacity applies its percentage bonus before flat additional capacity", () => {
+  assert.equal(finalMemoryCapacity(9, 6, 0), 10);
+  assert.equal(finalMemoryCapacity(12, 7.7, 8), 21);
+});
+
+test("legacy memory capacity bonus rolls migrate from raw tenths", () => {
+  const entry = { statKey: "MemoryCapacityBonus", min: 6, max: 12.5 };
+  assert.equal(normalizedStatEntryValue(entry, 60), 6);
+  assert.equal(normalizedStatEntryValue(entry, 7.5), 7.5);
+});
+
 test("active weapons contribute stats while gear score includes both weapon sets", () => {
   assert.equal(slotContributesStats({ weaponSet: "1" }, "1"), true);
   assert.equal(slotContributesStats({ weaponSet: "2" }, "1"), false);
   assert.equal(slotContributesStats({ id: "chest" }, "1"), true);
   const items = new Map([
     ["fine-cuirass", { gearScore: 36 }],
-    ["halberd", { gearScore: 45 }],
+    ["halberd", { gearScore: 40 }],
     ["lantern", { gearScore: 1 }],
+    ["epic-head", { gearScore: 30 }],
+    ["epic-hands", { gearScore: 30 }],
+    ["epic-feet", { gearScore: 30 }],
   ]);
-  assert.equal(sumEquippedGearScore({ chest: "fine-cuirass", weapon1Primary: "halberd", weapon2Secondary: "lantern" }, items), 82);
+  assert.equal(sumEquippedGearScore({
+    chest: "fine-cuirass",
+    head: "epic-head",
+    hands: "epic-hands",
+    feet: "epic-feet",
+    weapon1Primary: "halberd",
+    weapon2Secondary: "lantern",
+  }, items), 167);
 });
 
 test("detail routes remain stable", () => {

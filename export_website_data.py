@@ -59,7 +59,7 @@ STAT_KEY_ALIASES = {
     "MaxHealthAdd": "Health",
     "MaxHealthMod": "MaxHealthBonus",
     "MemoryCapacityAdd": "MemoryCapacity",
-    "MemoryCapacityMod": "MemoryCapacity",
+    "MemoryCapacityMod": "MemoryCapacityBonus",
     "MemoryRecoveryMod": "SpellRecoveryBonus",
     "MoveSpeedAdd": "MoveSpeed",
     "MoveSpeedBase": "MoveSpeed",
@@ -273,6 +273,10 @@ FALLBACK_CHARACTER_SKINS = (
 ITEM_PROPERTY_EXCLUDED_STAT_KEYS = {"Primitive"}
 ITEM_PROPERTY_STAT_KEY_OVERRIDES = {
     "Id_ItemPropertyType_Effect_PhysicalWeaponDamageAdd": "AdditionalWeaponDamage",
+}
+ITEM_PROPERTY_LABEL_OVERRIDES = {
+    "Id_ItemPropertyType_Effect_MemoryCapacityAdd": "Additional Memory Capacity",
+    "Id_ItemPropertyType_Effect_MemoryCapacityBonus": "Memory Capacity Bonus",
 }
 ITEM_PROPERTY_VALUE_SCALE_OVERRIDES = {
     "ArmorPenetration": lambda value: value * 0.1,
@@ -959,7 +963,7 @@ def property_item_entry(row: dict, property_types: dict) -> dict | None:
     return {
         "propertyId": type_id,
         "statKey": type_info["statKey"],
-        "label": type_info["label"],
+        "label": ITEM_PROPERTY_LABEL_OVERRIDES.get(type_id, type_info["label"]),
         "propertyLabel": type_info.get("propertyLabel") or type_info["label"],
         "min": round(min_display, 4),
         "max": round(max_display, 4),
@@ -1439,7 +1443,13 @@ def load_kit_items(
         rarity_value = normalize_rarity(props.get("RarityType")) or public_row.get("rarity") or "Unknown"
         item_type = str(props.get("ItemType") or "").split("::")[-1]
         base_gear_score = props.get("GearScore", 0)
-        socket_gear_score = gear_score_socket_bonuses.get(rarity_value, 0) if secondary_ids else 0
+        # The extracted GearScore value is already final for weapons and every
+        # armor slot except chest. Chest armor receives the rarity socket bonus.
+        socket_gear_score = (
+            gear_score_socket_bonuses.get(rarity_value, 0)
+            if slot["id"] == "Chest" and secondary_ids
+            else 0
+        )
         kit_item = {
             "asset": name,
             "name": localized_text(props.get("Name"), public_row.get("item") or humanize_identifier(name)),
