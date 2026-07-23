@@ -270,6 +270,14 @@ FALLBACK_CHARACTER_SKINS = (
     ("Seawalker", "Seawalker"),
     ("SkeletonMage", "Skeleton Mage"),
 )
+CHARACTER_SKIN_STAT_OVERRIDES = {
+    "Ifrit": [
+        {"statKey": "Strength", "label": "Strength", "value": 1},
+        {"statKey": "Vigor", "label": "Vigor", "value": 1},
+        {"statKey": "Agility", "label": "Agility", "value": -1},
+        {"statKey": "Dexterity", "label": "Dexterity", "value": -1},
+    ],
+}
 ITEM_PROPERTY_EXCLUDED_STAT_KEYS = {"Primitive"}
 ITEM_PROPERTY_STAT_KEY_OVERRIDES = {
     "Id_ItemPropertyType_Effect_PhysicalWeaponDamageAdd": "AdditionalWeaponDamage",
@@ -1194,7 +1202,7 @@ def load_character_skins(generated_root: Path, output_dir: Path, status_effects:
             "name": humanize_identifier(token),
             "skin": folder or token,
             "effectId": effect_id,
-            "stats": effect.get("stats", []),
+            "stats": CHARACTER_SKIN_STAT_OVERRIDES.get(token, effect.get("stats", [])),
             "grantedTags": effect.get("grantedTags", []),
             "iconUrl": skin_icon_url(generated_root, output_dir, token, folder),
         })
@@ -1215,7 +1223,7 @@ def load_character_skins(generated_root: Path, output_dir: Path, status_effects:
             "name": display_name,
             "skin": folder,
             "effectId": effect_id,
-            "stats": [],
+            "stats": CHARACTER_SKIN_STAT_OVERRIDES.get(token, []),
             "grantedTags": [],
             "iconUrl": skin_icon_url(generated_root, output_dir, token, folder)
             or (skin_icon_url(generated_root, output_dir, "Mummy", "Mummy") if token == "NightmareMummy" else ""),
